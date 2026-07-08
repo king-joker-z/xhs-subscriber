@@ -26,9 +26,14 @@ async def _startup() -> None:
     db_path = os.path.join(config.download_dir, ".db", "xhs.db")
     db = await init_db(db_path=db_path)
 
-    # 初始化并启动调度器
+    # 初始化调度器
     scheduler = XHSScheduler(config=config, db=db)
     set_scheduler(scheduler)
+
+    # F-2 联动：启动共享 XHS 实例（Chromium），必须在 scheduler.start() 之前完成
+    await scheduler.startup()
+
+    # 启动定时调度（内部会 create_task 触发首次全量检查）
     scheduler.start()
 
     # 将 scheduler 和 db 挂载到 app.state，方便后续访问
@@ -42,6 +47,8 @@ async def _shutdown() -> None:
     """应用关闭钩子"""
     if hasattr(app.state, "scheduler"):
         app.state.scheduler.stop()
+        # F-2 联动：关闭共享 XHS 实例（Chromium）
+        await app.state.scheduler.shutdown()
     if hasattr(app.state, "db"):
         await app.state.db.close()
     logger.info("应用已关闭")

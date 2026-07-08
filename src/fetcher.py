@@ -183,10 +183,16 @@ class XHSFetcher:
     """
     小红书内容爬取器（基于 XHS-Downloader）
 
+    F-2 修复：类级别维护单个共享 XHS 实例 + asyncio.Semaphore(1) 串行化所有爬取请求。
+    原先每次调用都独立 `async with XHS(...) as xhs`，N 个订阅并发 = N 个 Chromium 进程，
+    容器 OOM 风险极高。现在所有订阅共享同一个浏览器实例，串行复用，内存占用恒定。
+
     使用方式：
         fetcher = XHSFetcher(cookie="your_cookie")
-        metas = await fetcher.fetch_user_videos("5f1234567890abcdef123456")
-        meta  = await fetcher.fetch_single_video("https://www.xiaohongshu.com/explore/...")
+        await fetcher.start()                          # 启动共享 XHS 实例
+        metas = await fetcher.fetch_user_videos("...")
+        meta  = await fetcher.fetch_single_video("...")
+        await fetcher.stop()                           # 关闭浏览器
     """
 
     # 单次批量获取上限
@@ -200,31 +206,61 @@ class XHSFetcher:
                 f"原始错误：{_XHS_IMPORT_ERROR}"
             )
         self._cookie = cookie
+        # 共享 XHS 实例（由 start/stop 管理生命周期）
+        self._xhs_instance: Any = None
+        self._xhs_ctx: Any = None
+        # Semaphore(1)：确保同一时刻只有一个协程在使用 Chromium，彻底消除并发 OOM 风险
+        self._browser_sem: asyncio.Semaphore = asyncio.Semaphore(1)
 
-    def _make_xhs_instance(self) -> Any:
-        """
-        创建 XHS 实例（async context manager）。
-
-        关键参数说明：
-          cookie         : 小红书网页版 Cookie
-          download_record: False → 不写本地下载记录（去重由我们自己的 database.py 管理）
-          image_download : False → 只关心视频，不下载图文
-          video_download : False → 我们只用 extract() 获取元数据，不让 XHS-Downloader 自己下载
-        """
-        return _XHS(
+    def _make_xhs_kwargs(self) -> dict:
+        """XHS 构造参数（集中管理，方便后续调整）"""
+        return dict(
             cookie=self._cookie,
-            download_record=False,
-            image_download=False,
-            video_download=False,
+            download_record=False,   # 去重由 database.py 管理
+            image_download=False,    # 只关心视频
+            video_download=False,    # 只获取元数据，不让 XHS-Downloader 自己下载
             language="zh_CN",
         )
+
+    async def start(self) -> None:
+        """
+        启动共享 XHS 实例（进入 async context manager）。
+        应在 scheduler 启动时调用一次，整个进程生命周期内复用。
+        """
+        if self._xhs_instance is not None:
+            return
+        self._xhs_ctx = _XHS(**self._make_xhs_kwargs())
+        self._xhs_instance = await self._xhs_ctx.__aenter__()
+        logger.info("XHS 共享实例已启动（Chromium 已就绪）")
+
+    async def stop(self) -> None:
+        """关闭共享 XHS 实例（退出 async context manager）"""
+        if self._xhs_ctx is not None:
+            try:
+                await self._xhs_ctx.__aexit__(None, None, None)
+            except Exception as exc:
+                logger.warning("关闭 XHS 实例时出错：%s", exc)
+            finally:
+                self._xhs_instance = None
+                self._xhs_ctx = None
+                logger.info("XHS 共享实例已关闭")
+
+    async def _extract(self, url: str) -> Any:
+        """
+        通过共享实例调用 extract()，由 Semaphore(1) 保证串行执行。
+        若共享实例未启动（降级场景），临时创建一次性实例。
+        """
+        async with self._browser_sem:
+            if self._xhs_instance is not None:
+                return await self._xhs_instance.extract(url, False)
+            # 降级：共享实例未就绪时，临时创建（保持向后兼容）
+            logger.warning("共享 XHS 实例未就绪，临时创建一次性实例（url=%s）", url)
+            async with _XHS(**self._make_xhs_kwargs()) as xhs:
+                return await xhs.extract(url, False)
 
     async def fetch_user_videos(self, user_id: str) -> list[VideoMeta]:
         """
         获取博主主页所有视频（最多 MAX_BATCH 条）。
-
-        XHS-Downloader 的 extract() 支持传入博主主页 URL，
-        会自动爬取该博主发布的作品列表。
 
         :param user_id: 小红书用户 ID（24位十六进制字符串）
         :return: VideoMeta 列表
@@ -233,29 +269,22 @@ class XHSFetcher:
         logger.info("开始爬取博主主页：user_id=%s url=%s", user_id, home_url)
 
         results: list[VideoMeta] = []
-
         try:
-            async with self._make_xhs_instance() as xhs:
-                # extract() 传入主页 URL，download=False 只获取元数据
-                # XHS-Downloader 内部会分页爬取，返回作品列表
-                raw_result = await xhs.extract(
-                    home_url,
-                    False,   # download=False
-                )
+            raw_result = await self._extract(home_url)
 
-                # extract() 返回值：单作品时为 dict，多作品时为 list[dict]
-                if isinstance(raw_result, dict):
-                    raw_list = [raw_result] if raw_result else []
-                elif isinstance(raw_result, list):
-                    raw_list = raw_result
-                else:
-                    raw_list = []
+            # extract() 返回值：单作品时为 dict，多作品时为 list[dict]
+            if isinstance(raw_result, dict):
+                raw_list = [raw_result] if raw_result else []
+            elif isinstance(raw_result, list):
+                raw_list = raw_result
+            else:
+                raw_list = []
 
-                for raw in raw_list[: self.MAX_BATCH]:
-                    meta = _parse_extract_result(raw)
-                    if meta and meta.video_url:
-                        results.append(meta)
-                    await _random_delay()
+            for raw in raw_list[: self.MAX_BATCH]:
+                meta = _parse_extract_result(raw)
+                if meta and meta.video_url:
+                    results.append(meta)
+                await _random_delay()
 
         except Exception as exc:
             logger.error("爬取博主主页失败 user_id=%s：%s", user_id, exc, exc_info=True)
@@ -271,27 +300,22 @@ class XHSFetcher:
         :return: VideoMeta 或 None
         """
         logger.info("开始爬取单视频：%s", video_url)
-
         try:
-            async with self._make_xhs_instance() as xhs:
-                raw_result = await xhs.extract(
-                    video_url,
-                    False,   # download=False
-                )
+            raw_result = await self._extract(video_url)
 
-                if isinstance(raw_result, list):
-                    raw = raw_result[0] if raw_result else {}
-                elif isinstance(raw_result, dict):
-                    raw = raw_result
-                else:
-                    raw = {}
+            if isinstance(raw_result, list):
+                raw = raw_result[0] if raw_result else {}
+            elif isinstance(raw_result, dict):
+                raw = raw_result
+            else:
+                raw = {}
 
-                meta = _parse_extract_result(raw)
-                if meta:
-                    logger.info("单视频爬取成功：video_id=%s title=%s", meta.video_id, meta.title)
-                else:
-                    logger.warning("单视频爬取结果为空：%s", video_url)
-                return meta
+            meta = _parse_extract_result(raw)
+            if meta:
+                logger.info("单视频爬取成功：video_id=%s title=%s", meta.video_id, meta.title)
+            else:
+                logger.warning("单视频爬取结果为空：%s", video_url)
+            return meta
 
         except Exception as exc:
             logger.error("爬取单视频失败 url=%s：%s", video_url, exc, exc_info=True)

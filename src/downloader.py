@@ -77,12 +77,14 @@ class Downloader:
         下载单个视频及封面、描述文件。
         :return: True=成功下载，False=跳过或失败
         """
-        # 去重检查
-        if await self._db.is_downloaded(meta.video_id):
-            logger.debug("已跳过（已下载）：%s", meta.video_id)
-            return False
-
+        # D-1 修复：去重检查移入 semaphore 内部。
+        # 原先在 semaphore 外检查，并发时多个协程可能同时通过检查，导致重复下载。
+        # 移入 semaphore 后，同一时刻只有一个协程持有锁并执行检查+下载，消除竞态。
         async with self._semaphore:
+            # 进入临界区后再次检查，确保串行去重
+            if await self._db.is_downloaded(meta.video_id):
+                logger.debug("已跳过（已下载）：%s", meta.video_id)
+                return False
             return await self._do_download(meta, user_id)
 
     async def _do_download(self, meta: VideoMeta, user_id: str) -> bool:
@@ -101,10 +103,15 @@ class Downloader:
             "Cookie": self._cookie,
         }
 
+        # D-3 修复：分步跟踪已成功创建的文件，失败时只清理本次新建的文件。
+        # 原先 cleanup 会把已成功下载的视频文件一起删掉，导致下次重复下载视频。
+        created_files: list[Path] = []
+
         try:
             # 1. 下载视频
             if meta.video_url:
                 await self._stream_download(meta.video_url, video_path, headers)
+                created_files.append(video_path)
                 logger.info("视频下载完成：%s -> %s", meta.video_id, video_path)
             else:
                 logger.warning("视频 URL 为空，跳过视频下载：%s", meta.video_id)
@@ -112,6 +119,7 @@ class Downloader:
             # 2. 下载封面
             if meta.cover_url:
                 await self._stream_download(meta.cover_url, thumb_path, headers)
+                created_files.append(thumb_path)
                 logger.debug("封面下载完成：%s", thumb_path)
 
             # 3. 写描述文件
@@ -119,6 +127,7 @@ class Downloader:
                 f"{meta.title}\n\n{meta.desc}\n",
                 encoding="utf-8",
             )
+            created_files.append(desc_path)
 
             # 4. 标记已下载
             await self._db.mark_downloaded(meta.video_id)
@@ -126,13 +135,14 @@ class Downloader:
 
         except Exception as exc:
             logger.error("下载失败 video_id=%s：%s", meta.video_id, exc)
-            # 清理不完整文件
-            for p in (video_path, thumb_path, desc_path):
+            # 只清理本次新创建的文件，不触碰之前已存在的文件
+            for p in created_files:
                 if p.exists():
                     try:
                         p.unlink()
-                    except OSError:
-                        pass
+                        logger.debug("已清理不完整文件：%s", p)
+                    except OSError as oe:
+                        logger.warning("清理文件失败：%s，错误：%s", p, oe)
             return False
 
     @_make_retry()

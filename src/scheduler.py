@@ -40,6 +40,14 @@ class XHSScheduler:
         self._scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
         self._running = False
 
+    async def startup(self) -> None:
+        """启动 fetcher 共享 XHS 实例（Chromium），应在 FastAPI startup 事件中调用"""
+        await self._fetcher.start()
+
+    async def shutdown(self) -> None:
+        """关闭 fetcher 共享 XHS 实例，应在 FastAPI shutdown 事件中调用"""
+        await self._fetcher.stop()
+
     async def run_once(self) -> None:
         """立即执行一次全量检查（所有订阅）"""
         logger.info("开始全量检查，共 %d 个订阅", len(self._config.subscriptions))
@@ -132,10 +140,10 @@ class XHSScheduler:
         self._running = True
         logger.info("调度器已启动")
 
-        # 启动时立即执行一次（在事件循环中异步触发）
-        asyncio.get_event_loop().call_soon(
-            lambda: asyncio.ensure_future(self._initial_run())
-        )
+        # SC-1 修复：使用 get_running_loop().create_task() 替代 get_event_loop()
+        # Python 3.12 + uvicorn 环境下 get_event_loop() 行为不确定，
+        # get_running_loop() 明确获取当前正在运行的事件循环，不会静默失败。
+        asyncio.get_running_loop().create_task(self._initial_run())
 
     async def _initial_run(self) -> None:
         """启动后立即执行一次全量检查"""
