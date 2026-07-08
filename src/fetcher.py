@@ -45,7 +45,7 @@ def _ensure_vendor_path() -> None:
 _ensure_vendor_path()
 
 try:
-    from source import XHS as _XHS  # type: ignore[import]
+    from source.application import XHS as _XHS  # type: ignore[import]
     _XHS_AVAILABLE = True
     _XHS_IMPORT_ERROR = ""
 except ImportError as _import_err:

@@ -21,8 +21,10 @@ async def _startup() -> None:
     """应用启动钩子：初始化数据库和调度器"""
     config = get_config()
 
-    # 初始化数据库
-    db = await init_db()
+    # 初始化数据库（路径从配置读取）
+    import os
+    db_path = os.path.join(config.download_dir, ".db", "xhs.db")
+    db = await init_db(db_path=db_path)
 
     # 初始化并启动调度器
     scheduler = XHSScheduler(config=config, db=db)
