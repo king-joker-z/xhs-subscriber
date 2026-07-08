@@ -152,7 +152,7 @@ class XHSScheduler:
 
     def trigger_now(self) -> None:
         """立即触发一次调度（供 API /run 调用）"""
-        asyncio.ensure_future(self.run_once())
+        asyncio.get_running_loop().create_task(self.run_once())
         logger.info("已触发立即执行")
 
     def stop(self) -> None:
