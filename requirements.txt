@@ -1,9 +1,35 @@
-httpx>=0.27.0
-APScheduler>=3.10.0
+# Python >= 3.12 required (XHS-Downloader requirement)
+# XHS-Downloader is included as a git submodule at vendor/XHS-Downloader/
+# Install submodule deps separately: pip install -r vendor/XHS-Downloader/requirements.txt
+
+# ---- Web framework & server ----
 fastapi>=0.111.0
 uvicorn>=0.30.0
+
+# ---- Async HTTP client ----
+httpx>=0.27.0
+
+# ---- Scheduler ----
+APScheduler>=3.10.0
+
+# ---- Config ----
 pydantic-settings>=2.0.0
-aiosqlite>=0.20.0
-tenacity>=8.0.0
-lxml>=5.0.0
 PyYAML>=6.0
+
+# ---- Database ----
+aiosqlite>=0.20.0
+
+# ---- Retry ----
+tenacity>=8.0.0
+
+# ---- XML / NFO generation ----
+lxml>=5.0.0
+
+# ---- Playwright (required by XHS-Downloader for JS signature generation) ----
+# After pip install, run: playwright install chromium --with-deps
+playwright>=1.40.0
+
+# ---- XHS-Downloader transitive deps (subset needed at runtime) ----
+# Full list: see vendor/XHS-Downloader/requirements.txt
+# Key deps that XHS-Downloader relies on:
+websockets>=12.0

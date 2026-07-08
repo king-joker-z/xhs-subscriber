@@ -1,22 +1,62 @@
 """
-M3 - 小红书爬取模块
-支持：user_id（博主主页视频列表）和 video_url（单视频详情）
-签名方案：参考 XHS-Downloader 的 X-s / X-t 生成逻辑
+M3 - 小红书爬取模块（重写版）
+底层：JoeanAmier/XHS-Downloader（git submodule，位于 vendor/XHS-Downloader）
+调用方式：from vendor.XHS_Downloader.source import XHS
+核心 API：async with XHS(cookie=...) as xhs: result = await xhs.extract(url, download=False)
+
+设计说明：
+- XHS-Downloader 内部使用 Playwright 执行真实 JS 生成 x-s/x-t/x-s-common 签名
+- 自动处理 xsec_token，无需手动拼接
+- 支持 user_id（博主主页）和 video_url（单视频）两种输入
+- 对外接口保持不变：输出 List[VideoMeta]
+
+Python 版本要求：>= 3.12（XHS-Downloader 要求）
 """
 from __future__ import annotations
 
-import hashlib
-import json
+import asyncio
 import logging
+import random
 import re
-import time
+import sys
 from dataclasses import dataclass, field
-from typing import List, Optional
-from urllib.parse import urlparse, parse_qs
-
-import httpx
+from pathlib import Path
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# ------------------------------------------------------------------ #
+#  vendor 路径注入
+#  XHS-Downloader 以 git submodule 形式存放在 vendor/XHS-Downloader/
+#  需要把它的根目录加入 sys.path，才能 from source import XHS
+# ------------------------------------------------------------------ #
+
+_VENDOR_DIR = Path(__file__).parent.parent / "vendor" / "XHS-Downloader"
+
+
+def _ensure_vendor_path() -> None:
+    """将 XHS-Downloader 根目录注入 sys.path（幂等）"""
+    vendor_str = str(_VENDOR_DIR.resolve())
+    if vendor_str not in sys.path:
+        sys.path.insert(0, vendor_str)
+        logger.debug("已注入 vendor 路径：%s", vendor_str)
+
+
+_ensure_vendor_path()
+
+try:
+    from source import XHS as _XHS  # type: ignore[import]
+    _XHS_AVAILABLE = True
+    _XHS_IMPORT_ERROR = ""
+except ImportError as _import_err:
+    _XHS_AVAILABLE = False
+    _XHS_IMPORT_ERROR = str(_import_err)
+    logger.warning(
+        "XHS-Downloader 未找到（%s）。"
+        "请确认已执行：git submodule update --init --recursive",
+        _import_err,
+    )
+
 
 # ------------------------------------------------------------------ #
 #  数据结构
@@ -30,177 +70,109 @@ class VideoMeta:
     cover_url: str
     video_url: str
     author: str
-    publish_time: str          # ISO-8601 或 YYYY-MM-DD
-    tags: List[str] = field(default_factory=list)
+    publish_time: str          # YYYY-MM-DD
+    tags: list[str] = field(default_factory=list)
 
 
 # ------------------------------------------------------------------ #
-#  签名工具
-#  参考：https://github.com/JoeanAmier/XHS-Downloader 的签名实现
+#  XHS-Downloader extract() 返回值解析
 #
-#  小红书 Web 端使用两个自定义请求头来防爬：
-#    X-t  : 当前 Unix 时间戳（毫秒，字符串）
-#    X-s  : 对 "X-t + api_path + body_md5" 做 MD5 后的摘要
-#
-#  注意：小红书会不定期更新签名算法，此处实现为当前已知的简化版本。
-#  若接口返回 -3 / 300012 等签名错误码，需要更新签名逻辑。
+#  extract() 返回一个字典，结构（基于源码和社区文档）：
+#  {
+#    "作品ID": "...",
+#    "作品标题": "...",
+#    "作品描述": "...",
+#    "发布时间": "YYYY-MM-DD HH:MM:SS",
+#    "作者昵称": "...",
+#    "作品标签": ["tag1", "tag2"],
+#    "下载地址": ["https://...mp4"],   # 视频
+#    "封面地址": ["https://...jpg"],
+#    # 图文作品时 "下载地址" 为图片列表
+#  }
+#  失败时返回空字典 {}
 # ------------------------------------------------------------------ #
 
-def _md5(text: str) -> str:
-    return hashlib.md5(text.encode("utf-8")).hexdigest()
-
-
-def _generate_xs_xt(api_path: str, body: str = "") -> tuple[str, str]:
-    """
-    生成 X-s 和 X-t 请求头。
-
-    算法（简化版，基于公开逆向分析）：
-      x_t  = str(int(time.time() * 1000))
-      body_md5 = md5(body) if body else md5("")
-      x_s  = md5(x_t + api_path + body_md5)
-
-    风险说明：
-      - 小红书真实签名包含更复杂的 JS 混淆逻辑（a1/webId/deviceId 等字段）
-      - 此处为降级实现，部分接口可能需要完整 JS 执行环境（如 execjs）
-      - 若签名失败，可考虑接入 execjs + 本地 JS 文件方案
-    """
-    x_t = str(int(time.time() * 1000))
-    body_md5 = _md5(body) if body else _md5("")
-    x_s = _md5(x_t + api_path + body_md5)
-    return x_s, x_t
-
-
-def _build_headers(cookie: str, api_path: str, body: str = "") -> dict:
-    """构建完整请求头"""
-    x_s, x_t = _generate_xs_xt(api_path, body)
-    return {
-        "User-Agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
-        "Referer": "https://www.xiaohongshu.com",
-        "Origin": "https://www.xiaohongshu.com",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "zh-CN,zh;q=0.9",
-        "Content-Type": "application/json;charset=UTF-8",
-        "Cookie": cookie,
-        "X-s": x_s,
-        "X-t": x_t,
-    }
-
-
-# ------------------------------------------------------------------ #
-#  API 端点
-# ------------------------------------------------------------------ #
-
-_BASE = "https://www.xiaohongshu.com"
-_USER_POSTED_PATH = "/api/sns/web/v1/user_posted"
-_FEED_PATH = "/api/sns/web/v1/feed"
-
-
-# ------------------------------------------------------------------ #
-#  解析工具
-# ------------------------------------------------------------------ #
-
-def _extract_video_id_from_url(url: str) -> Optional[str]:
-    """
-    从小红书视频 URL 中提取 note_id。
-    支持格式：
-      https://www.xiaohongshu.com/explore/{note_id}
-      https://www.xiaohongshu.com/discovery/item/{note_id}
-      https://xhslink.com/xxxxx（短链，需先 follow redirect）
-    """
-    patterns = [
-        r"xiaohongshu\.com/explore/([a-f0-9]{24})",
-        r"xiaohongshu\.com/discovery/item/([a-f0-9]{24})",
-        r"/([a-f0-9]{24})(?:[/?]|$)",
-    ]
-    for pat in patterns:
-        m = re.search(pat, url)
-        if m:
-            return m.group(1)
-    return None
-
-
-def _parse_note(note: dict) -> Optional[VideoMeta]:
-    """从 API 返回的 note 对象解析 VideoMeta"""
-    try:
-        note_id = note.get("id") or note.get("note_id", "")
-        if not note_id:
-            return None
-
-        # 基础信息
-        title = note.get("title") or note.get("display_title", "")
-        desc = note.get("desc", "")
-
-        # 作者
-        author_info = note.get("user") or note.get("author") or {}
-        author = author_info.get("nickname", "unknown")
-
-        # 发布时间
-        ts = note.get("time") or note.get("create_time", 0)
-        if ts:
-            import datetime
-            publish_time = datetime.datetime.fromtimestamp(
-                ts / 1000 if ts > 1e10 else ts
-            ).strftime("%Y-%m-%d")
-        else:
-            publish_time = ""
-
-        # 封面
-        cover_info = note.get("cover") or {}
-        cover_url = cover_info.get("url_default") or cover_info.get("url", "")
-
-        # 视频 URL（优先取 originVideoKey 对应的流地址）
-        video_url = _extract_video_url(note)
-
-        # 标签
-        tag_list = note.get("tag_list") or []
-        tags = [t.get("name", "") for t in tag_list if t.get("name")]
-
-        return VideoMeta(
-            video_id=note_id,
-            title=title,
-            desc=desc,
-            cover_url=cover_url,
-            video_url=video_url,
-            author=author,
-            publish_time=publish_time,
-            tags=tags,
-        )
-    except Exception as exc:
-        logger.warning("解析 note 失败：%s，原始数据：%s", exc, str(note)[:200])
+def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
+    """将 XHS-Downloader extract() 返回的字典转换为 VideoMeta"""
+    if not raw:
         return None
 
+    video_id = str(raw.get("作品ID") or raw.get("id") or "")
+    if not video_id:
+        logger.warning("extract 结果缺少作品ID，跳过：%s", list(raw.keys())[:5])
+        return None
 
-def _extract_video_url(note: dict) -> str:
-    """
-    从 note 对象中提取可下载的视频流 URL。
-    小红书视频数据结构层级较深，尝试多个路径。
-    """
-    # 路径1：video.media.stream.h264[0].master_url
-    try:
-        streams = note["video"]["media"]["stream"]
-        for quality in ("h264", "h265", "av1"):
-            items = streams.get(quality, [])
-            if items:
-                url = items[0].get("master_url") or items[0].get("backup_urls", [""])[0]
-                if url:
-                    return url
-    except (KeyError, TypeError, IndexError):
-        pass
+    title = str(raw.get("作品标题") or raw.get("title") or "")
+    desc = str(raw.get("作品描述") or raw.get("desc") or "")
+    author = str(raw.get("作者昵称") or raw.get("author") or "unknown")
 
-    # 路径2：video.consumer.origin_video_key（需要拼接 CDN 域名）
-    try:
-        key = note["video"]["consumer"]["origin_video_key"]
-        if key:
-            return f"https://sns-video-bd.xhscdn.com/{key}"
-    except (KeyError, TypeError):
-        pass
+    # 发布时间：取日期部分
+    raw_time = str(raw.get("发布时间") or raw.get("publish_time") or "")
+    publish_time = raw_time[:10] if raw_time else ""
 
-    # 路径3：直接 video_url 字段
-    return note.get("video_url", "")
+    # 封面
+    cover_list = raw.get("封面地址") or raw.get("cover") or []
+    cover_url = cover_list[0] if isinstance(cover_list, list) and cover_list else str(cover_list)
+
+    # 视频 URL（只取第一个，视频作品）
+    dl_list = raw.get("下载地址") or raw.get("video_url") or []
+    if isinstance(dl_list, list):
+        # 过滤出 .mp4 或视频流地址
+        video_candidates = [u for u in dl_list if isinstance(u, str) and (
+            ".mp4" in u or "xhscdn" in u or "sns-video" in u
+        )]
+        video_url = video_candidates[0] if video_candidates else (dl_list[0] if dl_list else "")
+    else:
+        video_url = str(dl_list)
+
+    # 标签
+    tags_raw = raw.get("作品标签") or raw.get("tags") or []
+    if isinstance(tags_raw, list):
+        tags = [str(t) for t in tags_raw if t]
+    else:
+        tags = [str(tags_raw)] if tags_raw else []
+
+    return VideoMeta(
+        video_id=video_id,
+        title=title,
+        desc=desc,
+        cover_url=cover_url,
+        video_url=video_url,
+        author=author,
+        publish_time=publish_time,
+        tags=tags,
+    )
+
+
+# ------------------------------------------------------------------ #
+#  URL 工具
+# ------------------------------------------------------------------ #
+
+_NOTE_URL_PATTERNS = [
+    r"xiaohongshu\.com/explore/([a-f0-9]{24})",
+    r"xiaohongshu\.com/discovery/item/([a-f0-9]{24})",
+]
+
+# 博主主页 URL 模板（XHS-Downloader 支持直接传入主页 URL）
+_USER_HOME_URL = "https://www.xiaohongshu.com/user/profile/{user_id}"
+
+
+def _build_user_home_url(user_id: str) -> str:
+    return _USER_HOME_URL.format(user_id=user_id)
+
+
+def _is_note_url(url: str) -> bool:
+    return any(re.search(p, url) for p in _NOTE_URL_PATTERNS)
+
+
+# ------------------------------------------------------------------ #
+#  随机延迟（防频率风控）
+# ------------------------------------------------------------------ #
+
+async def _random_delay(min_s: float = 2.0, max_s: float = 5.0) -> None:
+    delay = random.uniform(min_s, max_s)
+    logger.debug("请求间随机延迟 %.1f 秒", delay)
+    await asyncio.sleep(delay)
 
 
 # ------------------------------------------------------------------ #
@@ -208,133 +180,119 @@ def _extract_video_url(note: dict) -> str:
 # ------------------------------------------------------------------ #
 
 class XHSFetcher:
-    """小红书内容爬取器"""
+    """
+    小红书内容爬取器（基于 XHS-Downloader）
 
-    def __init__(self, cookie: str, timeout: float = 30.0):
+    使用方式：
+        fetcher = XHSFetcher(cookie="your_cookie")
+        metas = await fetcher.fetch_user_videos("5f1234567890abcdef123456")
+        meta  = await fetcher.fetch_single_video("https://www.xiaohongshu.com/explore/...")
+    """
+
+    # 单次批量获取上限
+    MAX_BATCH = 30
+
+    def __init__(self, cookie: str):
+        if not _XHS_AVAILABLE:
+            raise RuntimeError(
+                f"XHS-Downloader 未安装，无法初始化 XHSFetcher。\n"
+                f"请执行：git submodule update --init --recursive\n"
+                f"原始错误：{_XHS_IMPORT_ERROR}"
+            )
         self._cookie = cookie
-        self._timeout = timeout
 
-    async def fetch_user_videos(self, user_id: str) -> List[VideoMeta]:
+    def _make_xhs_instance(self) -> Any:
         """
-        获取博主主页所有视频（自动翻页）。
-        :param user_id: 小红书用户 ID（数字字符串）
+        创建 XHS 实例（async context manager）。
+
+        关键参数说明：
+          cookie         : 小红书网页版 Cookie
+          download_record: False → 不写本地下载记录（去重由我们自己的 database.py 管理）
+          image_download : False → 只关心视频，不下载图文
+          video_download : False → 我们只用 extract() 获取元数据，不让 XHS-Downloader 自己下载
+        """
+        return _XHS(
+            cookie=self._cookie,
+            download_record=False,
+            image_download=False,
+            video_download=False,
+            language="zh_CN",
+        )
+
+    async def fetch_user_videos(self, user_id: str) -> list[VideoMeta]:
+        """
+        获取博主主页所有视频（最多 MAX_BATCH 条）。
+
+        XHS-Downloader 的 extract() 支持传入博主主页 URL，
+        会自动爬取该博主发布的作品列表。
+
+        :param user_id: 小红书用户 ID（24位十六进制字符串）
         :return: VideoMeta 列表
         """
-        results: List[VideoMeta] = []
-        cursor = ""
+        home_url = _build_user_home_url(user_id)
+        logger.info("开始爬取博主主页：user_id=%s url=%s", user_id, home_url)
 
-        async with httpx.AsyncClient(
-            timeout=self._timeout,
-            follow_redirects=True,
-        ) as client:
-            while True:
-                params = {
-                    "user_id": user_id,
-                    "cursor": cursor,
-                    "num": "30",
-                    "image_formats": "jpg,webp,avif",
-                }
-                api_path = _USER_POSTED_PATH
-                headers = _build_headers(self._cookie, api_path)
+        results: list[VideoMeta] = []
 
-                try:
-                    resp = await client.get(
-                        _BASE + api_path,
-                        params=params,
-                        headers=headers,
-                    )
-                    resp.raise_for_status()
-                    data = resp.json()
-                except httpx.HTTPStatusError as exc:
-                    logger.error("HTTP 错误 user_id=%s：%s", user_id, exc)
-                    break
-                except Exception as exc:
-                    logger.error("请求失败 user_id=%s：%s", user_id, exc)
-                    break
+        try:
+            async with self._make_xhs_instance() as xhs:
+                # extract() 传入主页 URL，download=False 只获取元数据
+                # XHS-Downloader 内部会分页爬取，返回作品列表
+                raw_result = await xhs.extract(
+                    home_url,
+                    False,   # download=False
+                )
 
-                # 检查业务状态码
-                code = data.get("code", -1)
-                if code != 0:
-                    logger.warning(
-                        "API 返回非 0 code=%s msg=%s（可能是签名失效或 Cookie 过期）",
-                        code, data.get("msg", ""),
-                    )
-                    break
+                # extract() 返回值：单作品时为 dict，多作品时为 list[dict]
+                if isinstance(raw_result, dict):
+                    raw_list = [raw_result] if raw_result else []
+                elif isinstance(raw_result, list):
+                    raw_list = raw_result
+                else:
+                    raw_list = []
 
-                notes = data.get("data", {}).get("notes", [])
-                for note in notes:
-                    meta = _parse_note(note)
+                for raw in raw_list[: self.MAX_BATCH]:
+                    meta = _parse_extract_result(raw)
                     if meta and meta.video_url:
                         results.append(meta)
+                    await _random_delay()
 
-                # 翻页
-                has_more = data.get("data", {}).get("has_more", False)
-                cursor = data.get("data", {}).get("cursor", "")
-                if not has_more or not cursor:
-                    break
+        except Exception as exc:
+            logger.error("爬取博主主页失败 user_id=%s：%s", user_id, exc, exc_info=True)
 
-        logger.info("用户 %s 共获取 %d 条视频", user_id, len(results))
+        logger.info("博主 %s 共获取 %d 条视频元数据", user_id, len(results))
         return results
 
     async def fetch_single_video(self, video_url: str) -> Optional[VideoMeta]:
         """
         获取单个视频详情。
-        :param video_url: 视频页面 URL
+
+        :param video_url: 视频页面 URL（支持完整 URL 或短链）
         :return: VideoMeta 或 None
         """
-        note_id = _extract_video_id_from_url(video_url)
-        if not note_id:
-            # 尝试 follow redirect（处理短链）
-            async with httpx.AsyncClient(
-                timeout=self._timeout,
-                follow_redirects=True,
-            ) as client:
-                try:
-                    resp = await client.head(video_url)
-                    note_id = _extract_video_id_from_url(str(resp.url))
-                except Exception as exc:
-                    logger.error("解析视频 URL 失败：%s，错误：%s", video_url, exc)
-                    return None
+        logger.info("开始爬取单视频：%s", video_url)
 
-        if not note_id:
-            logger.error("无法从 URL 提取 note_id：%s", video_url)
-            return None
-
-        body_dict = {
-            "source_note_id": note_id,
-            "image_formats": ["jpg", "webp", "avif"],
-            "extra": {"need_body_topic": "1"},
-        }
-        body_str = json.dumps(body_dict, separators=(",", ":"))
-        headers = _build_headers(self._cookie, _FEED_PATH, body_str)
-
-        async with httpx.AsyncClient(
-            timeout=self._timeout,
-            follow_redirects=True,
-        ) as client:
-            try:
-                resp = await client.post(
-                    _BASE + _FEED_PATH,
-                    content=body_str,
-                    headers=headers,
+        try:
+            async with self._make_xhs_instance() as xhs:
+                raw_result = await xhs.extract(
+                    video_url,
+                    False,   # download=False
                 )
-                resp.raise_for_status()
-                data = resp.json()
-            except Exception as exc:
-                logger.error("获取视频详情失败 note_id=%s：%s", note_id, exc)
-                return None
 
-        code = data.get("code", -1)
-        if code != 0:
-            logger.warning(
-                "feed API 返回 code=%s msg=%s", code, data.get("msg", "")
-            )
+                if isinstance(raw_result, list):
+                    raw = raw_result[0] if raw_result else {}
+                elif isinstance(raw_result, dict):
+                    raw = raw_result
+                else:
+                    raw = {}
+
+                meta = _parse_extract_result(raw)
+                if meta:
+                    logger.info("单视频爬取成功：video_id=%s title=%s", meta.video_id, meta.title)
+                else:
+                    logger.warning("单视频爬取结果为空：%s", video_url)
+                return meta
+
+        except Exception as exc:
+            logger.error("爬取单视频失败 url=%s：%s", video_url, exc, exc_info=True)
             return None
-
-        items = data.get("data", {}).get("items", [])
-        if not items:
-            return None
-
-        note = items[0].get("note_card") or items[0]
-        note["id"] = note_id
-        return _parse_note(note)

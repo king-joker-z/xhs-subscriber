@@ -1,6 +1,8 @@
 """
 M1 - 配置加载模块
 使用 pydantic-settings 加载 YAML + 环境变量
+
+Python 版本要求：>= 3.12（XHS-Downloader 要求）
 """
 from __future__ import annotations
 
@@ -15,6 +17,15 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+# Python 版本检查（XHS-Downloader 要求 >= 3.12）
+if sys.version_info < (3, 12):
+    print(
+        f"\n[FATAL] Python >= 3.12 is required (XHS-Downloader dependency).\n"
+        f"Current version: {sys.version}\n",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 class SubscriptionConfig:
@@ -63,9 +74,11 @@ class AppConfig(BaseSettings):
     @classmethod
     def validate_cookie(cls, v: str) -> str:
         if not v or not v.strip():
-            _fatal("环境变量 XHS_COOKIE 未设置或为空，程序无法启动。\n"
-                   "请在 docker-compose.yml 或运行环境中设置：\n"
-                   "  XHS_COOKIE=<从浏览器开发者工具复制的 Cookie 字符串>")
+            _fatal(
+                "环境变量 XHS_COOKIE 未设置或为空，程序无法启动。\n"
+                "请在 docker-compose.yml 或运行环境中设置：\n"
+                "  XHS_COOKIE=<从浏览器开发者工具复制的 Cookie 字符串>"
+            )
         return v.strip()
 
     @field_validator("log_level", mode="before")
@@ -112,7 +125,9 @@ class AppConfig(BaseSettings):
 
         # 解析订阅列表
         subs_raw = data.get("subscriptions", [])
-        self.subscriptions = [SubscriptionConfig(s) for s in subs_raw if s.get("enabled", True)]
+        self.subscriptions = [
+            SubscriptionConfig(s) for s in subs_raw if s.get("enabled", True)
+        ]
 
         return self
 
