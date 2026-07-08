@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  xhs-subscriber:
+    image: jokermelove/xhs-subscriber:latest
+    container_name: xhs-subscriber
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # 必填：小红书 Cookie（从浏览器开发者工具复制）
+      XHS_COOKIE: "${XHS_COOKIE}"
+      CONFIG_PATH: /config/config.yaml
+      LOG_LEVEL: INFO
+      HTTP_PORT: "8080"
+    volumes:
+      - ./data/downloads:/data/downloads
+      - ./data/logs:/data/logs
+      - ./config/config.yaml:/config/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

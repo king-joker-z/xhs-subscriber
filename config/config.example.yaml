@@ -1,0 +1,28 @@
+# xhs-subscriber 配置示例
+# 复制此文件为 config.yaml 并按需修改
+# 环境变量 XHS_COOKIE 必须单独设置（不在此文件中存储）
+
+scheduler:
+  # 轮询间隔（小时），支持小数，如 0.5 表示 30 分钟
+  interval_hours: 6
+
+downloader:
+  # 并发下载数
+  concurrency: 3
+  # 下载根目录（容器内路径，通过 volume 挂载到宿主机）
+  download_dir: /data/downloads
+
+logging:
+  level: INFO
+  dir: /data/logs
+
+subscriptions:
+  # 示例1：订阅博主主页（user_id 从小红书个人主页 URL 获取）
+  - name: "示例博主"
+    user_id: "5f1234567890abcdef123456"
+    enabled: true
+
+  # 示例2：单个视频 URL
+  - name: "单视频示例"
+    video_url: "https://www.xiaohongshu.com/explore/64abcdef1234567890abcdef"
+    enabled: false
