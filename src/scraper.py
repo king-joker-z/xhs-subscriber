@@ -3,10 +3,27 @@ M5 - NFO 刮削器
 使用 lxml 生成 Jellyfin/Kodi 兼容的 Movie NFO XML 文件
 输出：/data/downloads/{user_id}/{video_id}.nfo
 封面：{video_id}-thumb.jpg（与 NFO 同目录，downloader 已负责下载）
+
+Jellyfin NFO 字段说明（Movie 类型）：
+  title / originaltitle  → 标题
+  sorttitle              → 排序标题（用发布时间前缀，便于按时间排序）
+  plot / outline         → 简介（plot 完整，outline 摘要）
+  premiered / year       → 首播日期 / 年份
+  dateadded              → 入库时间（ISO 8601）
+  studio                 → 制作方（博主名）
+  director               → 导演（博主名）
+  actor                  → 演员（博主名 + 角色 = 博主）
+  tag / genre            → 标签 / 分类
+  uniqueid               → 唯一 ID（type="xhs"）
+  thumb / fanart         → 封面图片
+  website                → 原始作品链接
+  country                → 国家
+  source                 → 来源标识
 """
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
 
@@ -24,17 +41,25 @@ def _text_elem(parent: etree._Element, tag: str, text: str) -> etree._Element:
     return el
 
 
+def _build_note_url(video_id: str) -> str:
+    """构造小红书作品页面 URL"""
+    return f"https://www.xiaohongshu.com/explore/{video_id}"
+
+
 def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downloads") -> Path:
     """
-    为视频生成 Movie NFO 文件。
+    为视频生成 Jellyfin/Kodi 兼容的 Movie NFO 文件。
 
     字段映射：
-      title       → <title>
-      desc        → <plot>
-      publish_time→ <premiered>
-      author      → <studio>
-      tags        → <tag>（多个）
-      video_id    → <uniqueid type="xhs">
+      title        → <title> / <originaltitle>
+      publish_time → <sorttitle>（前缀排序）/ <premiered> / <year>
+      desc         → <plot> / <outline>
+      author       → <studio> / <director> / <actor>
+      tags         → <tag> / <genre>
+      video_id     → <uniqueid type="xhs">
+      cover_url    → <thumb aspect="poster"> / <fanart>
+      video_id URL → <website>
+      now()        → <dateadded>
 
     :param meta: 视频元数据
     :param user_id: 博主 user_id（用于确定目录）
@@ -45,32 +70,66 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     nfo_dir.mkdir(parents=True, exist_ok=True)
     nfo_path = nfo_dir / f"{meta.video_id}.nfo"
 
+    # 入库时间（UTC → ISO 8601）
+    dateadded = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    # 排序标题：发布时间前缀 + 标题，便于 Jellyfin 按时间排序
+    sorttitle = f"{meta.publish_time} {meta.title}" if meta.publish_time else (meta.title or meta.video_id)
+
     # 构建 XML 树
     root = etree.Element("movie")
 
+    # ---- 基础标题 ----
     _text_elem(root, "title", meta.title or meta.video_id)
     _text_elem(root, "originaltitle", meta.title or meta.video_id)
+    _text_elem(root, "sorttitle", sorttitle)
+
+    # ---- 简介 ----
     _text_elem(root, "plot", meta.desc)
+    _text_elem(root, "outline", (meta.desc[:200] + "…") if len(meta.desc) > 200 else meta.desc)
+
+    # ---- 时间 ----
     _text_elem(root, "premiered", meta.publish_time)
     _text_elem(root, "year", meta.publish_time[:4] if meta.publish_time else "")
+    _text_elem(root, "dateadded", dateadded)
+
+    # ---- 制作方 / 导演 ----
     _text_elem(root, "studio", meta.author)
+    _text_elem(root, "director", meta.author)
 
-    # 封面文件名（与 NFO 同目录，Jellyfin 约定）
-    _text_elem(root, "thumb", f"{meta.video_id}-thumb.jpg")
-    _text_elem(root, "fanart", f"{meta.video_id}-thumb.jpg")
+    # ---- 演员（博主本人）----
+    actor_el = etree.SubElement(root, "actor")
+    _text_elem(actor_el, "name", meta.author)
+    _text_elem(actor_el, "role", "博主")
+    _text_elem(actor_el, "type", "Actor")
+    _text_elem(actor_el, "sortorder", "0")
 
-    # 唯一 ID
+    # ---- 封面（本地文件名 + 原始 URL 双写，Jellyfin 优先读本地）----
+    local_thumb = f"{meta.video_id}-thumb.jpg"
+    thumb_el = etree.SubElement(root, "thumb", aspect="poster")
+    thumb_el.text = local_thumb
+    fanart_el = etree.SubElement(root, "fanart")
+    thumb2 = etree.SubElement(fanart_el, "thumb")
+    thumb2.text = meta.cover_url if meta.cover_url else local_thumb
+
+    # ---- 唯一 ID ----
     uid_el = etree.SubElement(root, "uniqueid", type="xhs", default="true")
     uid_el.text = meta.video_id
 
-    # 标签
+    # ---- 标签 / 分类 ----
     for tag in meta.tags:
         if tag:
             _text_elem(root, "tag", tag)
             _text_elem(root, "genre", tag)
+    # 固定分类：小红书
+    _text_elem(root, "genre", "小红书")
 
-    # 来源信息
+    # ---- 地区 ----
+    _text_elem(root, "country", "中国")
+
+    # ---- 来源 / 链接 ----
     _text_elem(root, "source", "xiaohongshu")
+    _text_elem(root, "website", _build_note_url(meta.video_id))
 
     # 序列化为带声明的 XML
     tree = etree.ElementTree(root)
