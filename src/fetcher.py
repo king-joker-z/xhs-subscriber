@@ -158,12 +158,23 @@ _NOTE_URL_TPL = (
     "?xsec_token={xsec_token}&xsec_source=pc_user"
 )
 
-# 通用浏览器 UA
-_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/143.0.0.0 Safari/537.36"
-)
+# UA 轮换池（降低被识别为爬虫的风险）
+_UA_POOL = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+]
+
+# 兼容旧引用（保留单一 UA 常量，值取池中第一个）
+_UA = _UA_POOL[0]
+
+
+def _random_ua() -> str:
+    """从 UA 池中随机选取一个 User-Agent"""
+    return random.choice(_UA_POOL)
 
 
 # ------------------------------------------------------------------ #
@@ -296,9 +307,16 @@ class XHSFetcher:
             return []
 
         encipher = Xhshow()
-        # 生成访客设备 ID（无需登录）
-        a1 = encipher.generate_a1()
-        cookie_str = self._cookie if self._cookie else f"a1={a1};"
+
+        # Cookie 检查：xhshow 签名需要有效的 a1/web_session，无 Cookie 无法请求博主主页 API
+        if not self._cookie or not self._cookie.strip():
+            logger.error(
+                "XHS_COOKIE 未设置，无法爬取博主主页 user_id=%s。"
+                "请在环境变量中设置有效的 Cookie。",
+                user_id,
+            )
+            return []
+        cookie_str = self._cookie
 
         # 分页获取作品列表
         all_notes: list[dict] = []
@@ -320,7 +338,7 @@ class XHSFetcher:
                 params=params,
             )
             base_headers = {
-                "user-agent": _UA,
+                "user-agent": _random_ua(),
                 "referer": "https://www.xiaohongshu.com/",
                 "cookie": cookie_str,
             }
