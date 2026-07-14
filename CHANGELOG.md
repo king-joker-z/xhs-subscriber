@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-07-14 16:xx — 迭代 #3
+
+### 迭代目标
+完善 NFO 刮削字段，提升 Jellyfin 媒体库识别质量
+
+### 完成内容
+- **feat: 新增 NFO 字段**（`src/scraper.py` +74 行）
+  - `<sorttitle>`：发布时间前缀 + 标题，Jellyfin 按时间排序
+  - `<outline>`：简介摘要（超 200 字自动截断加省略号）
+  - `<dateadded>`：入库时间（UTC ISO 8601），Jellyfin 最近添加功能依赖此字段
+  - `<director>`：博主名作为导演
+  - `<actor>`：博主名作为演员，含 `<role>博主</role>` / `<type>Actor</type>` / `<sortorder>0</sortorder>`
+  - `<thumb aspect="poster">`：本地封面文件名（Jellyfin 标准 poster 格式）
+  - `<fanart><thumb>`：封面原始 URL（降级回退）
+  - `<country>`：固定为"中国"
+  - `<website>`：原始小红书作品链接（`https://www.xiaohongshu.com/explore/{video_id}`）
+  - `<genre>小红书</genre>`：固定分类，便于 Jellyfin 筛选
+- **改动文件**：`src/scraper.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 运行时测试：沙箱网络受限，待用户本地验证
+- git commit: `dd11c83`，已 push 到 `origin/main`
+
+### 下次迭代建议（19:xx 执行）
+- **请求间隔动态调整**：根据 API 响应 429/403 自动延长等待时间（退避策略）
+- **完善博主主页订阅验证**：待用户提供有效 Cookie 后验证 xhshow 签名全链路
+- **下载器 UA 同步轮换**：`downloader.py` 中的 UA 目前仍为固定值，与 fetcher 保持一致
+
+---
+
 ## 2026-07-14 13:xx — 迭代 #2
 
 ### 迭代目标
