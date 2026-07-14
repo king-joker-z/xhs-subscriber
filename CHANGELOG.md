@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-14 19:xx — 迭代 #4
+
+### 迭代目标
+下载器 UA 同步轮换 + API 请求 429/403 动态退避策略
+
+### 完成内容
+- **fix: `downloader.py` UA 轮换同步**
+  - 从 `fetcher._random_ua()` 复用 UA 池，每次下载请求随机选取 UA
+  - 移除硬编码的固定 UA 字符串，与 fetcher 保持一致
+- **fix: `fetcher.py` 429/403 动态退避**
+  - API 返回 429（限流）：自动退避 30s 后 `continue` 重试当前分页
+  - API 返回 403（封禁）：自动退避 60s 后 `continue` 重试当前分页
+  - 退避期间输出 WARNING 日志，便于排查风控触发情况
+- **改动文件**：`src/downloader.py`、`src/fetcher.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 运行时测试：沙箱网络受限，待用户本地验证（待用户提供 Cookie 后验证）
+- git commit: `aa1c5c5`，已 push 到 `origin/main`
+
+### 下次迭代建议（今日工作时间已结束，下次 20:xx 非工作时间迭代）
+- **完善博主主页订阅验证**：待用户提供有效 Cookie 后验证 xhshow 签名全链路
+- **config.yaml 示例文件**：补充完整的配置示例，降低用户上手门槛
+- **README 更新**：补充 Web UI 使用说明、Cookie 获取方式、NFO 字段说明
+
+---
+
 ## 2026-07-14 16:xx — 迭代 #3
 
 ### 迭代目标
