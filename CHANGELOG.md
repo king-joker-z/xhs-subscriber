@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-07-14 13:xx — 迭代 #2
+
+### 迭代目标
+修复 `generate_a1()` 潜在运行时 bug + 添加 UA 轮换池（风控优化）
+
+### 完成内容
+- **fix: 移除 `generate_a1()` 调用**
+  - 原代码在无 Cookie 时调用 `encipher.generate_a1()`，但 xhshow 0.2.0 并无此方法，会在运行时抛 `AttributeError` 导致所有博主主页订阅失败
+  - 修复为：无 Cookie 时直接 `logger.error` 并返回空列表，明确提示用户设置 `XHS_COOKIE`
+- **feat: 添加 UA 轮换池 `_UA_POOL`**
+  - 6 条主流 Chrome/Safari/Firefox UA，覆盖 Windows/macOS/Linux
+  - 每次 API 请求随机选取，降低被识别为爬虫的风险
+  - 保留 `_UA` 常量兼容旧引用
+- **chore: 同步 PR#1 合并带入的上游改动**（注释清理、移除 playwright 残留）
+- **改动文件**：`src/fetcher.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 运行时测试：沙箱网络受限，待用户本地验证（待用户提供 Cookie 后验证）
+- git commit: `79cd68e`，已 push 到 `origin/main`
+
+### 下次迭代建议（16:xx 执行）
+- **完善博主主页订阅**：xhshow 签名调通验证（需用户提供有效 Cookie）
+- **完善 NFO 刮削字段**：补充 `studio`、`genre`、`rating` 等 Jellyfin 字段
+- **请求间隔抖动优化**：当前 `_random_delay` 固定 2-5s，可根据响应状态动态调整
+
+---
+
 ## 2026-07-14 10:xx — 迭代 #1
 
 ### 迭代目标
