@@ -356,6 +356,23 @@ class XHSFetcher:
                         params=params,
                         headers=request_headers,
                     )
+
+                # 风控退避：429 限流 / 403 封禁，延长等待后重试一次
+                if resp.status_code == 429:
+                    logger.warning(
+                        "博主主页 API 触发限流（429）user_id=%s，退避 30s 后重试",
+                        user_id,
+                    )
+                    await asyncio.sleep(30)
+                    continue
+                if resp.status_code == 403:
+                    logger.warning(
+                        "博主主页 API 返回 403 user_id=%s，退避 60s 后重试",
+                        user_id,
+                    )
+                    await asyncio.sleep(60)
+                    continue
+
                 data = resp.json()
             except Exception as exc:
                 logger.error("博主主页 API 请求失败 user_id=%s：%s", user_id, exc)

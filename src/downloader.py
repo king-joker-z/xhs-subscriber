@@ -23,7 +23,7 @@ from tenacity import (
 )
 
 from .database import Database
-from .fetcher import VideoMeta
+from .fetcher import VideoMeta, _random_ua
 
 logger = logging.getLogger(__name__)
 
@@ -94,11 +94,7 @@ class Downloader:
         desc_path = self._desc_path(user_id, meta.video_id)
 
         headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
+            "User-Agent": _random_ua(),
             "Referer": "https://www.xiaohongshu.com",
             "Cookie": self._cookie,
         }
