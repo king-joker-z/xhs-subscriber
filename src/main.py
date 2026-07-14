@@ -30,7 +30,7 @@ async def _startup() -> None:
     scheduler = XHSScheduler(config=config, db=db)
     set_scheduler(scheduler)
 
-    # F-2 联动：启动共享 XHS 实例（Chromium），必须在 scheduler.start() 之前完成
+    # 启动共享 XHS 实例（必须在 scheduler.start() 之前完成）
     await scheduler.startup()
 
     # 启动定时调度（内部会 create_task 触发首次全量检查）
@@ -47,7 +47,7 @@ async def _shutdown() -> None:
     """应用关闭钩子"""
     if hasattr(app.state, "scheduler"):
         app.state.scheduler.stop()
-        # F-2 联动：关闭共享 XHS 实例（Chromium）
+        # 关闭共享 XHS 实例
         await app.state.scheduler.shutdown()
     if hasattr(app.state, "db"):
         await app.state.db.close()

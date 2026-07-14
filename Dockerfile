@@ -26,7 +26,7 @@ LABEL org.opencontainers.image.source="https://github.com/king-joker-z/xhs-subsc
 # 安装运行时系统依赖：
 #   - libxml2 / libxslt1.1：lxml 运行时需要
 #   - git：vendor submodule 可能需要
-#   - Chromium 系统依赖由下方 playwright install --with-deps 自动处理
+# 签名由 xhshow 库完成（纯 Python，无需浏览器）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2 \
     libxslt1.1 \
@@ -35,14 +35,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 从 builder 阶段复制已安装的 Python 包
 COPY --from=builder /install /usr/local
-
-# DK-1 修复：在 runtime 阶段直接执行 playwright install chromium --with-deps
-# 这样可以确保 Chromium 所需的所有系统库完整安装，避免手动列举遗漏导致的
-# "error while loading shared libraries" 问题。
-# 代价是镜像构建时间稍长，但运行时稳定性有保障。
-RUN pip install --no-cache-dir playwright \
-    && playwright install chromium --with-deps \
-    && rm -rf /root/.cache/pip
 
 WORKDIR /app
 
@@ -57,20 +49,14 @@ COPY vendor/ ./vendor/
 RUN mkdir -p /data/downloads /data/logs /config
 
 # 非 root 用户（安全）
-# Playwright 浏览器缓存在 /root/.cache/ms-playwright，
-# 切换到 appuser 后通过 PLAYWRIGHT_BROWSERS_PATH 指向复制后的路径
 RUN useradd -r -u 1000 -g root appuser \
-    && chown -R appuser:root /app /data /config \
-    && mkdir -p /home/appuser/.cache \
-    && cp -r /root/.cache/ms-playwright /home/appuser/.cache/ms-playwright \
-    && chown -R appuser:root /home/appuser/.cache
+    && chown -R appuser:root /app /data /config
 USER appuser
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     CONFIG_PATH=/config/config.yaml \
-    HTTP_PORT=8080 \
-    PLAYWRIGHT_BROWSERS_PATH=/home/appuser/.cache/ms-playwright
+    HTTP_PORT=8080
 
 EXPOSE 8080
 

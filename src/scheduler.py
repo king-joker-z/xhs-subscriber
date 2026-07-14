@@ -41,7 +41,7 @@ class XHSScheduler:
         self._running = False
 
     async def startup(self) -> None:
-        """启动 fetcher 共享 XHS 实例（Chromium），应在 FastAPI startup 事件中调用"""
+        """启动 fetcher 共享 XHS 实例，应在 FastAPI startup 事件中调用"""
         await self._fetcher.start()
 
     async def shutdown(self) -> None:

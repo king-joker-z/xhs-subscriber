@@ -1,14 +1,14 @@
 """
-M3 - 小红书爬取模块（重写版）
+M3 - 小红书爬取模块
 底层：JoeanAmier/XHS-Downloader（git submodule，位于 vendor/XHS-Downloader）
-调用方式：from vendor.XHS_Downloader.source import XHS
-核心 API：async with XHS(cookie=...) as xhs: result = await xhs.extract(url, download=False)
+签名：xhshow 库（纯 Python HTTP 签名，无需浏览器）
 
 设计说明：
-- XHS-Downloader 内部使用 Playwright 执行真实 JS 生成 x-s/x-t/x-s-common 签名
-- 自动处理 xsec_token，无需手动拼接
-- 支持 user_id（博主主页）和 video_url（单视频）两种输入
-- 对外接口保持不变：输出 List[VideoMeta]
+- fetch_user_videos()：用 xhshow 对博主主页 API 签名，获取作品列表（每条自带 xsec_token），
+  再逐条调用 XHS-Downloader 的 extract() 获取完整元数据
+- fetch_single_video()：直接调用 XHS-Downloader 的 extract()，传入含 xsec_token 的完整 URL
+- XHS 单例问题：start() 时强制清除 __INSTANCE，确保每次都用最新 Cookie 初始化
+- 所有爬取请求通过 Semaphore(1) 串行化，避免并发问题
 
 Python 版本要求：>= 3.12（XHS-Downloader 要求）
 """
@@ -22,6 +22,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +79,7 @@ class VideoMeta:
 # ------------------------------------------------------------------ #
 #  XHS-Downloader extract() 返回值解析
 #
-#  extract() 返回一个字典，结构（基于源码和社区文档）：
+#  extract() 返回一个字典，结构：
 #  {
 #    "作品ID": "...",
 #    "作品标题": "...",
@@ -117,7 +119,6 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
     # 视频 URL（只取第一个，视频作品）
     dl_list = raw.get("下载地址") or raw.get("video_url") or []
     if isinstance(dl_list, list):
-        # 过滤出 .mp4 或视频流地址
         video_candidates = [u for u in dl_list if isinstance(u, str) and (
             ".mp4" in u or "xhscdn" in u or "sns-video" in u
         )]
@@ -145,24 +146,24 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
 
 
 # ------------------------------------------------------------------ #
-#  URL 工具
+#  常量
 # ------------------------------------------------------------------ #
 
-_NOTE_URL_PATTERNS = [
-    r"xiaohongshu\.com/explore/([a-f0-9]{24})",
-    r"xiaohongshu\.com/discovery/item/([a-f0-9]{24})",
-]
+# 博主主页作品列表 API
+_USER_POSTED_API = "https://www.xiaohongshu.com/api/sns/web/v1/user_posted"
 
-# 博主主页 URL 模板（XHS-Downloader 支持直接传入主页 URL）
-_USER_HOME_URL = "https://www.xiaohongshu.com/user/profile/{user_id}"
+# 作品详情页 URL 模板（含 xsec_token，供 extract() 使用）
+_NOTE_URL_TPL = (
+    "https://www.xiaohongshu.com/explore/{note_id}"
+    "?xsec_token={xsec_token}&xsec_source=pc_user"
+)
 
-
-def _build_user_home_url(user_id: str) -> str:
-    return _USER_HOME_URL.format(user_id=user_id)
-
-
-def _is_note_url(url: str) -> bool:
-    return any(re.search(p, url) for p in _NOTE_URL_PATTERNS)
+# 通用浏览器 UA
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/143.0.0.0 Safari/537.36"
+)
 
 
 # ------------------------------------------------------------------ #
@@ -181,21 +182,21 @@ async def _random_delay(min_s: float = 2.0, max_s: float = 5.0) -> None:
 
 class XHSFetcher:
     """
-    小红书内容爬取器（基于 XHS-Downloader）
+    小红书内容爬取器（基于 XHS-Downloader + xhshow 签名）
 
-    F-2 修复：类级别维护单个共享 XHS 实例 + asyncio.Semaphore(1) 串行化所有爬取请求。
-    原先每次调用都独立 `async with XHS(...) as xhs`，N 个订阅并发 = N 个 Chromium 进程，
-    容器 OOM 风险极高。现在所有订阅共享同一个浏览器实例，串行复用，内存占用恒定。
+    架构：
+    - fetch_user_videos()：xhshow 签名 → 博主主页 API → 逐条 extract()
+    - fetch_single_video()：直接调用 extract()（URL 需含 xsec_token）
+    - 共享单个 XHS 实例，Semaphore(1) 串行化所有 extract() 调用
 
     使用方式：
         fetcher = XHSFetcher(cookie="your_cookie")
-        await fetcher.start()                          # 启动共享 XHS 实例
-        metas = await fetcher.fetch_user_videos("...")
-        meta  = await fetcher.fetch_single_video("...")
-        await fetcher.stop()                           # 关闭浏览器
+        await fetcher.start()
+        metas = await fetcher.fetch_user_videos("5f1234567890abcdef123456")
+        meta  = await fetcher.fetch_single_video("https://...?xsec_token=...")
+        await fetcher.stop()
     """
 
-    # 单次批量获取上限
     MAX_BATCH = 30
 
     def __init__(self, cookie: str):
@@ -206,14 +207,13 @@ class XHSFetcher:
                 f"原始错误：{_XHS_IMPORT_ERROR}"
             )
         self._cookie = cookie
-        # 共享 XHS 实例（由 start/stop 管理生命周期）
         self._xhs_instance: Any = None
         self._xhs_ctx: Any = None
-        # Semaphore(1)：确保同一时刻只有一个协程在使用 Chromium，彻底消除并发 OOM 风险
-        self._browser_sem: asyncio.Semaphore = asyncio.Semaphore(1)
+        # Semaphore(1)：所有 extract() 调用串行执行，避免并发问题
+        self._extract_sem: asyncio.Semaphore = asyncio.Semaphore(1)
 
     def _make_xhs_kwargs(self) -> dict:
-        """XHS 构造参数（集中管理，方便后续调整）"""
+        """XHS 构造参数"""
         return dict(
             cookie=self._cookie,
             download_record=False,   # 去重由 database.py 管理
@@ -224,17 +224,28 @@ class XHSFetcher:
 
     async def start(self) -> None:
         """
-        启动共享 XHS 实例（进入 async context manager）。
-        应在 scheduler 启动时调用一次，整个进程生命周期内复用。
+        启动共享 XHS 实例。
+        问题三修复：强制清除 XHS 单例（__INSTANCE），确保每次都用最新 Cookie 初始化。
+        XHS 类内部有 __INSTANCE 单例，若不清除，第一次 XHS(cookie="") 后，
+        后续所有 XHS(cookie="真实cookie") 都返回同一个旧实例，Cookie 不会更新。
         """
         if self._xhs_instance is not None:
             return
+
+        # 强制清除单例
+        try:
+            _XHS._XHS__INSTANCE = None  # type: ignore[attr-defined]
+            logger.debug("已清除 XHS 单例缓存")
+        except AttributeError:
+            # 若单例属性名不同（版本差异），忽略，继续初始化
+            logger.debug("XHS 单例属性不存在，跳过清除")
+
         self._xhs_ctx = _XHS(**self._make_xhs_kwargs())
         self._xhs_instance = await self._xhs_ctx.__aenter__()
-        logger.info("XHS 共享实例已启动（Chromium 已就绪）")
+        logger.info("XHS 实例启动成功")
 
     async def stop(self) -> None:
-        """关闭共享 XHS 实例（退出 async context manager）"""
+        """关闭共享 XHS 实例"""
         if self._xhs_ctx is not None:
             try:
                 await self._xhs_ctx.__aexit__(None, None, None)
@@ -243,51 +254,129 @@ class XHSFetcher:
             finally:
                 self._xhs_instance = None
                 self._xhs_ctx = None
-                logger.info("XHS 共享实例已关闭")
+                logger.info("XHS 实例已关闭")
 
     async def _extract(self, url: str) -> Any:
         """
-        通过共享实例调用 extract()，由 Semaphore(1) 保证串行执行。
-        若共享实例未启动（降级场景），临时创建一次性实例。
+        通过共享实例调用 extract()，Semaphore(1) 保证串行执行。
+        若共享实例未就绪，临时创建一次性实例（降级兼容）。
         """
-        async with self._browser_sem:
+        async with self._extract_sem:
             if self._xhs_instance is not None:
                 return await self._xhs_instance.extract(url, False)
-            # 降级：共享实例未就绪时，临时创建（保持向后兼容）
+            # 降级：共享实例未就绪时临时创建
             logger.warning("共享 XHS 实例未就绪，临时创建一次性实例（url=%s）", url)
+            # 临时实例也需要清除单例
+            try:
+                _XHS._XHS__INSTANCE = None  # type: ignore[attr-defined]
+            except AttributeError:
+                pass
             async with _XHS(**self._make_xhs_kwargs()) as xhs:
                 return await xhs.extract(url, False)
 
     async def fetch_user_videos(self, user_id: str) -> list[VideoMeta]:
         """
-        获取博主主页所有视频（最多 MAX_BATCH 条）。
+        自动爬取博主主页所有视频（最多 MAX_BATCH 条）。
+
+        流程：
+        1. 用 xhshow 对博主主页 API 签名（纯 Python，无需浏览器）
+        2. 调用 API 获取作品列表（每条自带 xsec_token）
+        3. 拼成完整 URL 逐条传给 XHS-Downloader 的 extract() 获取完整元数据
 
         :param user_id: 小红书用户 ID（24位十六进制字符串）
         :return: VideoMeta 列表
         """
-        home_url = _build_user_home_url(user_id)
-        logger.info("开始爬取博主主页：user_id=%s url=%s", user_id, home_url)
+        logger.info("开始爬取博主主页：user_id=%s", user_id)
 
-        results: list[VideoMeta] = []
+        # 导入 xhshow 签名库
         try:
-            raw_result = await self._extract(home_url)
+            from xhshow import Xhshow  # type: ignore[import]
+        except ImportError:
+            logger.error("xhshow 未安装，无法爬取博主主页。请执行：pip install xhshow>=0.2.0")
+            return []
 
-            # extract() 返回值：单作品时为 dict，多作品时为 list[dict]
-            if isinstance(raw_result, dict):
-                raw_list = [raw_result] if raw_result else []
-            elif isinstance(raw_result, list):
-                raw_list = raw_result
-            else:
-                raw_list = []
+        encipher = Xhshow()
+        # 生成访客设备 ID（无需登录）
+        a1 = encipher.generate_a1()
+        cookie_str = self._cookie if self._cookie else f"a1={a1};"
 
-            for raw in raw_list[: self.MAX_BATCH]:
-                meta = _parse_extract_result(raw)
-                if meta and meta.video_url:
-                    results.append(meta)
-                await _random_delay()
+        # 分页获取作品列表
+        all_notes: list[dict] = []
+        cursor = ""
 
-        except Exception as exc:
-            logger.error("爬取博主主页失败 user_id=%s：%s", user_id, exc, exc_info=True)
+        while len(all_notes) < self.MAX_BATCH:
+            params: dict[str, str] = {
+                "num": "30",
+                "cursor": cursor,
+                "user_id": user_id,
+                "image_formats": "jpg,webp,avif",
+                "xsec_token": "",
+                "xsec_source": "pc_user",
+            }
+            # xhshow 签名
+            signed_headers = encipher.sign_headers_get(
+                uri=_USER_POSTED_API,
+                cookies=cookie_str,
+                params=params,
+            )
+            base_headers = {
+                "user-agent": _UA,
+                "referer": "https://www.xiaohongshu.com/",
+                "cookie": cookie_str,
+            }
+            request_headers = base_headers | signed_headers
+
+            try:
+                async with httpx.AsyncClient(
+                    http2=True,
+                    verify=False,
+                    follow_redirects=True,
+                    timeout=15,
+                ) as client:
+                    resp = await client.get(
+                        _USER_POSTED_API,
+                        params=params,
+                        headers=request_headers,
+                    )
+                data = resp.json()
+            except Exception as exc:
+                logger.error("博主主页 API 请求失败 user_id=%s：%s", user_id, exc)
+                break
+
+            code = data.get("code")
+            if code != 0:
+                logger.error(
+                    "博主主页 API 返回错误 user_id=%s：code=%s msg=%s",
+                    user_id, code, data.get("msg"),
+                )
+                break
+
+            notes: list[dict] = data.get("data", {}).get("notes", [])
+            if not notes:
+                break
+
+            all_notes.extend(notes)
+            cursor = data.get("data", {}).get("cursor", "")
+            if not data.get("data", {}).get("has_more"):
+                break
+
+            await _random_delay()
+
+        logger.info("博主 %s API 返回 %d 条作品，开始逐条获取元数据", user_id, len(all_notes))
+
+        # 逐条调用 extract() 获取完整元数据
+        results: list[VideoMeta] = []
+        for note in all_notes[: self.MAX_BATCH]:
+            note_id = note.get("note_id") or note.get("id")
+            xsec_token = note.get("xsec_token", "")
+            if not note_id:
+                continue
+
+            url = _NOTE_URL_TPL.format(note_id=note_id, xsec_token=xsec_token)
+            meta = await self.fetch_single_video(url)
+            if meta:
+                results.append(meta)
+            await _random_delay()
 
         logger.info("博主 %s 共获取 %d 条视频元数据", user_id, len(results))
         return results
@@ -295,8 +384,9 @@ class XHSFetcher:
     async def fetch_single_video(self, video_url: str) -> Optional[VideoMeta]:
         """
         获取单个视频详情。
+        URL 需包含 xsec_token（博主主页流程自动拼接，单视频订阅由用户提供完整 URL）。
 
-        :param video_url: 视频页面 URL（支持完整 URL 或短链）
+        :param video_url: 视频页面 URL（含 xsec_token）
         :return: VideoMeta 或 None
         """
         logger.info("开始爬取单视频：%s", video_url)

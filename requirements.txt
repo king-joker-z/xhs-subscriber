@@ -1,13 +1,14 @@
 # Python >= 3.12 required (XHS-Downloader requirement)
 # XHS-Downloader is included as a git submodule at vendor/XHS-Downloader/
 # Install submodule deps separately: pip install -r vendor/XHS-Downloader/requirements.txt
+# 签名由 xhshow 库完成（纯 Python HTTP 签名，无需浏览器/Playwright）
 
 # ---- Web framework & server ----
 fastapi>=0.111.0
 uvicorn>=0.30.0
 
 # ---- Async HTTP client ----
-httpx>=0.27.0
+httpx[http2]>=0.27.0
 
 # ---- Scheduler ----
 APScheduler>=3.10.0
@@ -25,11 +26,5 @@ tenacity>=8.0.0
 # ---- XML / NFO generation ----
 lxml>=5.0.0
 
-# ---- Playwright (required by XHS-Downloader for JS signature generation) ----
-# After pip install, run: playwright install chromium --with-deps
-playwright>=1.40.0
-
-# ---- XHS-Downloader transitive deps (subset needed at runtime) ----
-# Full list: see vendor/XHS-Downloader/requirements.txt
-# Key deps that XHS-Downloader relies on:
-websockets>=12.0
+# ---- XHS API 签名（替代 Playwright，纯 Python 实现） ----
+xhshow>=0.2.0
