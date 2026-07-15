@@ -80,6 +80,7 @@ class StatusResponse(BaseModel):
     downloaded_total: int
     last_check_at: str | None  # ISO 8601 UTC，None 表示尚未执行过
     cookie_status: str  # unknown / ok / expired / error
+    cookie_nickname: str  # Cookie 有效时的登录用户昵称，其他状态为空字符串
 
 
 # ------------------------------------------------------------------ #
@@ -179,6 +180,7 @@ async def api_status() -> StatusResponse:
         downloaded_total=downloaded_total,
         last_check_at=last_check_at,
         cookie_status=_scheduler.cookie_status if _scheduler is not None else "unknown",
+        cookie_nickname=_scheduler.cookie_nickname if _scheduler is not None else "",
     )
 
 
@@ -319,6 +321,12 @@ _UI_HTML = """\
   <!-- 订阅列表 -->
   <div class="card">
     <h2>订阅列表</h2>
+    <div style="margin-bottom:8px;display:flex;align-items:center;gap:10px;">
+      <span style="font-weight:600;font-size:0.95em;">订阅列表</span>
+      <label style="font-size:0.85em;color:#555;cursor:pointer;">
+        <input type="checkbox" id="filter-enabled-only" style="margin-right:4px;">仅显示启用
+      </label>
+    </div>
     <div id="sub-table-wrap">
       <div class="empty">加载中…</div>
     </div>
@@ -346,6 +354,7 @@ async function loadStatus() {
   try {
     const r = await fetch('/api/status');
     const d = await r.json();
+    window._lastStatus = d;
 
     const ok = d.scheduler_ready;
     document.getElementById('stat-status').innerHTML =
@@ -363,7 +372,11 @@ async function loadStatus() {
         error:   '<span class="dot red"></span>异常',
         unknown: '<span class="dot" style="background:#aaa"></span>未知',
       };
-      cookieEl.innerHTML = cookieMap[cs] || cookieMap['unknown'];
+      var cookieLabel = cookieMap[cs] || cookieMap['unknown'];
+      if (cs === 'ok' && d.cookie_nickname) {
+        cookieLabel += ' <span style="font-size:0.75em;color:#888">(' + d.cookie_nickname + ')</span>';
+      }
+      cookieEl.innerHTML = cookieLabel;
     }
     document.getElementById('stat-interval').textContent = d.interval_hours;
     document.getElementById('stat-downloaded').textContent = d.downloaded_total ?? '—';
@@ -375,13 +388,27 @@ async function loadStatus() {
     var vbadge = document.getElementById('ui-version');
     if (vbadge && d.version) vbadge.textContent = 'v' + d.version;
 
+    // 订阅列表筛选
+    var filterEl = document.getElementById('filter-enabled-only');
+    if (filterEl) {
+      filterEl.onchange = function() { renderSubTable(window._lastStatus); };
+    }
+    renderSubTable(d);
+  }
+
+  function renderSubTable(d) {
+    if (!d) return;
+    var filterEl = document.getElementById('filter-enabled-only');
+    var enabledOnly = filterEl ? filterEl.checked : false;
+    var subs = d.subscriptions || [];
+    if (enabledOnly) subs = subs.filter(function(s) { return s.enabled; });
     const wrap = document.getElementById('sub-table-wrap');
     if (!d.subscriptions || d.subscriptions.length === 0) {
       wrap.innerHTML = '<div class="empty">暂无订阅，请在 config/config.yaml 中添加</div>';
       return;
     }
 
-    let rows = d.subscriptions.map(s => {
+    let rows = subs.map(s => {
       const target = s.user_id
         ? '<a class="link" href="https://www.xiaohongshu.com/user/profile/' + s.user_id + '" target="_blank">' + s.user_id + '</a>'
         : (s.video_url ? '<a class="link" href="' + s.video_url + '" target="_blank">单视频</a>' : '—');

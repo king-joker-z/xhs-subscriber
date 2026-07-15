@@ -76,6 +76,11 @@ class VideoMeta:
     tags: list[str] = field(default_factory=list)
     image_urls: list[str] = field(default_factory=list)  # 图文作品图片列表（视频作品为空）
 
+    @property
+    def post_type(self) -> str:
+        """作品类型：'video' 或 'image'"""
+        return "image" if self.image_urls else "video"
+
 
 # ------------------------------------------------------------------ #
 #  XHS-Downloader extract() 返回值解析

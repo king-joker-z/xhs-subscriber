@@ -48,7 +48,12 @@ def _build_note_url(video_id: str) -> str:
 
 def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downloads") -> Path:
     """
-    为视频生成 Jellyfin/Kodi 兼容的 Movie NFO 文件。
+    为视频/图文作品生成 Jellyfin/Kodi 兼容的 Movie NFO 文件。
+
+    路径规则：
+      - 视频作品：{download_dir}/{user_id}/{video_id}.nfo
+      - 图文作品：{download_dir}/{user_id}/{video_id}/movie.nfo
+        （图文作品图片下载到 {video_id}/ 子目录，NFO 需与图片同目录）
 
     字段映射：
       title        → <title> / <originaltitle>
@@ -66,9 +71,19 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     :param download_dir: 下载根目录
     :return: 生成的 NFO 文件路径
     """
-    nfo_dir = Path(download_dir) / user_id
-    nfo_dir.mkdir(parents=True, exist_ok=True)
-    nfo_path = nfo_dir / f"{meta.video_id}.nfo"
+    is_image_post = bool(meta.image_urls)
+    if is_image_post:
+        # 图文作品：NFO 写入 {video_id}/ 子目录，与图片同目录
+        nfo_dir = Path(download_dir) / user_id / meta.video_id
+        nfo_dir.mkdir(parents=True, exist_ok=True)
+        nfo_path = nfo_dir / "movie.nfo"
+        local_thumb = "thumb.jpg"  # 图文作品封面放在子目录内
+    else:
+        # 视频作品：NFO 写在 {user_id}/ 目录下
+        nfo_dir = Path(download_dir) / user_id
+        nfo_dir.mkdir(parents=True, exist_ok=True)
+        nfo_path = nfo_dir / f"{meta.video_id}.nfo"
+        local_thumb = f"{meta.video_id}-thumb.jpg"
 
     # 入库时间（UTC → ISO 8601）
     dateadded = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -105,7 +120,7 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     _text_elem(actor_el, "sortorder", "0")
 
     # ---- 封面（本地文件名 + 原始 URL 双写，Jellyfin 优先读本地）----
-    local_thumb = f"{meta.video_id}-thumb.jpg"
+    # local_thumb 已在路径分支中定义（视频作品：{video_id}-thumb.jpg；图文作品：thumb.jpg）
     thumb_el = etree.SubElement(root, "thumb", aspect="poster")
     thumb_el.text = local_thumb
     fanart_el = etree.SubElement(root, "fanart")

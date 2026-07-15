@@ -90,9 +90,17 @@ class Downloader:
 
     async def _do_download(self, meta: VideoMeta, user_id: str) -> bool:
         """实际执行下载（在 semaphore 内）"""
+        is_image_post = bool(meta.image_urls)
         video_path = self._video_path(user_id, meta.video_id)
-        thumb_path = self._thumb_path(user_id, meta.video_id)
-        desc_path = self._desc_path(user_id, meta.video_id)
+        # 图文作品：封面放在 {video_id}/ 子目录内，与图片同目录
+        if is_image_post:
+            img_dir = self._user_dir(user_id) / meta.video_id
+            img_dir.mkdir(parents=True, exist_ok=True)
+            thumb_path = img_dir / "thumb.jpg"
+            desc_path = img_dir / "description.txt"
+        else:
+            thumb_path = self._thumb_path(user_id, meta.video_id)
+            desc_path = self._desc_path(user_id, meta.video_id)
 
         headers = {
             "User-Agent": _random_ua(),
@@ -111,9 +119,7 @@ class Downloader:
                 created_files.append(video_path)
                 logger.info("视频下载完成：%s -> %s", meta.video_id, video_path)
             elif meta.image_urls:
-                # 图文作品：批量下载图片到 {video_id}/ 子目录
-                img_dir = self._user_dir(user_id) / meta.video_id
-                img_dir.mkdir(parents=True, exist_ok=True)
+                # 图文作品：批量下载图片到 {video_id}/ 子目录（img_dir 已在上方创建）
                 for idx, img_url in enumerate(meta.image_urls, start=1):
                     # 尝试从 URL 推断扩展名，默认 .jpg
                     ext = ".jpg"
@@ -155,6 +161,15 @@ class Downloader:
                         logger.debug("已清理不完整文件：%s", p)
                     except OSError as oe:
                         logger.warning("清理文件失败：%s，错误：%s", p, oe)
+            # 图文作品：若子目录为空则一并清理，避免留下脏目录
+            if is_image_post:
+                img_dir = self._user_dir(user_id) / meta.video_id
+                try:
+                    if img_dir.exists() and not any(img_dir.iterdir()):
+                        img_dir.rmdir()
+                        logger.debug("已清理空图文子目录：%s", img_dir)
+                except OSError as oe:
+                    logger.warning("清理图文子目录失败：%s，错误：%s", img_dir, oe)
             return False
 
     async def _stream_download(

@@ -45,6 +45,8 @@ class XHSScheduler:
         self.last_check_at: Optional[datetime] = None
         # Cookie 预检状态：unknown / ok / expired / error
         self.cookie_status: str = "unknown"
+        # Cookie 有效时的登录用户昵称，unknown/expired/error 时为空字符串
+        self.cookie_nickname: str = ""
 
     async def startup(self) -> None:
         """
@@ -94,6 +96,7 @@ class XHSScheduler:
                     nickname = data.get("data", {}).get("nickname", "未知")
                     logger.info("✅ Cookie 预检通过，当前登录用户：%s", nickname)
                     self.cookie_status = "ok"
+                    self.cookie_nickname = nickname
                 elif code in (-3, 300012):
                     logger.warning(
                         "⚠️  Cookie 预检失败（code=%s）：Cookie 已过期或无效！"
