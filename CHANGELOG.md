@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-15 19:xx — 迭代 #26
+
+### 迭代目标
+趋势图表图例、last_check_at ISO 格式统一、顶部导航栏
+
+### 完成内容
+- **fix: `api.py` `last_check_at` 格式统一为 ISO 8601（LOW）**
+  - 改为 `_scheduler.last_check_at.isoformat()`
+  - 与 `last_run_at` 格式一致，前端可统一用 `new Date()` 解析
+- **feat: `api.py` 趋势图表添加图例说明（LOW）**
+  - 图表下方添加图例：🔴 视频（`#ff2d55`）、🔵 图文（`#0a84ff`）
+  - 用户可直观理解堆叠柱状图颜色含义
+- **feat: `api.py` Web UI 添加顶部导航栏（LOW）**
+  - `<header>` 下方新增 `<nav>` 导航栏
+  - 包含 5 个锚点链接：📊 状态、▶ 操作、📋 订阅、📈 趋势、🕐 最近
+  - hover 变红色，支持通过 URL hash 快速跳转各卡片
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter26.py`）：15 项检查全部 PASS
+- git commit: `e925cb1`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 19:xx — 迭代 #25
 
 ### 迭代目标
