@@ -147,20 +147,21 @@ class Database:
 
     async def get_download_stats_by_date(self, days: int = 14) -> list[dict]:
         """
-        按日期统计最近 N 天的下载数量（UTC 日期）。
+        按本地日期（UTC+8）统计最近 N 天的下载数量。
         :param days: 统计天数，默认 14 天
         :return: [{"date": "YYYY-MM-DD", "count": int, "video": int, "image": int}, ...]，按日期升序
         """
         assert self._conn, "数据库未初始化，请先调用 init()"
+        # SQLite datetime() 默认 UTC；通过 '+8 hours' 偏移转换为 UTC+8 本地日期
         async with self._conn.execute(
             """
             SELECT
-                substr(downloaded_at, 1, 10) AS date,
+                substr(datetime(downloaded_at, '+8 hours'), 1, 10) AS date,
                 COUNT(*) AS total,
                 SUM(CASE WHEN post_type = 'video' THEN 1 ELSE 0 END) AS video_cnt,
                 SUM(CASE WHEN post_type = 'image' THEN 1 ELSE 0 END) AS image_cnt
             FROM downloads
-            WHERE downloaded_at >= datetime('now', ? || ' days')
+            WHERE datetime(downloaded_at, '+8 hours') >= datetime('now', '+8 hours', ? || ' days')
             GROUP BY date
             ORDER BY date ASC
             """,

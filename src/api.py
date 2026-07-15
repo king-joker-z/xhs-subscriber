@@ -358,7 +358,7 @@ _UI_HTML = """\
 <div class="container">
 
   <!-- 状态卡片 -->
-  <div class="card">
+  <div class="card" id="section-status">
     <h2>服务状态</h2>
     <div class="stat-row">
       <div class="stat">
@@ -398,7 +398,7 @@ _UI_HTML = """\
   </div>
 
   <!-- 操作卡片 -->
-  <div class="card">
+  <div class="card" id="section-actions">
     <h2>操作</h2>
     <div class="actions">
       <button class="btn btn-primary" id="btn-run" onclick="triggerRun()">
@@ -424,7 +424,7 @@ _UI_HTML = """\
   </div>
 
   <!-- 订阅列表 -->
-  <div class="card">
+  <div class="card" id="section-subs">
     <h2>订阅列表</h2>
     <div style="margin-bottom:8px;display:flex;align-items:center;gap:10px;">
       <span style="font-weight:600;font-size:0.95em;">订阅列表</span>
@@ -438,15 +438,23 @@ _UI_HTML = """\
   </div>
 
   <!-- 下载趋势 -->
-  <div class="card">
-    <h2>下载趋势 <span style="font-size:0.75em;color:#aaa;font-weight:400;">近 14 天 · 今日: <span id="stat-today">—</span></span></h2>
-    <div id="stats-chart-wrap" style="height:80px;display:flex;align-items:flex-end;gap:3px;padding:4px 0;">
+  <div class="card" id="section-stats">
+    <h2 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      下载趋势
+      <span style="font-size:0.75em;color:#aaa;font-weight:400;">今日: <span id="stat-today">—</span></span>
+      <span style="margin-left:auto;display:flex;gap:4px;">
+        <button class="btn" id="stats-tab-7"  onclick="setStatsDays(7)"  style="padding:2px 8px;font-size:0.78em;background:#888;color:#fff;">7天</button>
+        <button class="btn" id="stats-tab-14" onclick="setStatsDays(14)" style="padding:2px 8px;font-size:0.78em;background:#555;color:#fff;">14天</button>
+        <button class="btn" id="stats-tab-30" onclick="setStatsDays(30)" style="padding:2px 8px;font-size:0.78em;background:#888;color:#fff;">30天</button>
+      </span>
+    </h2>
+    <div id="stats-chart-wrap" style="height:80px;display:flex;align-items:flex-end;gap:2px;padding:4px 0;">
       <div class="empty" style="align-self:center;">加载中…</div>
     </div>
   </div>
 
   <!-- 最近下载记录 -->
-  <div class="card">
+  <div class="card" id="section-recent">
     <h2>最近下载</h2>
     <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <button class="btn" id="recent-tab-all" onclick="setRecentFilter('all')" style="padding:3px 10px;font-size:0.85em;background:#555;color:#fff;">全部</button>
@@ -694,9 +702,19 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 't' || e.key === 'T') { triggerRun(); }
 });
 
+var _statsDays = 14;
+function setStatsDays(n) {
+  _statsDays = n;
+  [7, 14, 30].forEach(function(d) {
+    var btn = document.getElementById('stats-tab-' + d);
+    if (btn) btn.style.background = (d === n) ? '#555' : '#888';
+  });
+  loadStats();
+}
+
 async function loadStats() {
   try {
-    const r = await fetch('/api/stats?days=14');
+    const r = await fetch('/api/stats?days=' + _statsDays);
     const data = await r.json();
     const wrap = document.getElementById('stats-chart-wrap');
     if (!wrap) return;
@@ -705,19 +723,27 @@ async function loadStats() {
       return;
     }
     const maxCount = Math.max(...data.map(d => d.count), 1);
-    // 今日统计
-    const today = new Date().toISOString().slice(0, 10);
+    // 今日统计（本地日期 YYYY-MM-DD）
+    const now = new Date();
+    const today = now.getFullYear() + '-'
+      + String(now.getMonth() + 1).padStart(2, '0') + '-'
+      + String(now.getDate()).padStart(2, '0');
     const todayRow = data.find(d => d.date === today);
     const todayEl = document.getElementById('stat-today');
     if (todayEl) todayEl.textContent = todayRow ? todayRow.count + ' 个' : '0 个';
-    // 迷你柱状图
+    // 迷你堆叠柱状图（红=视频，蓝=图文）
     const bars = data.map(d => {
-      const pct = Math.max(Math.round((d.count / maxCount) * 100), 2);
+      const videoPct = Math.max(Math.round((d.video / maxCount) * 100), d.video > 0 ? 2 : 0);
+      const imagePct = Math.max(Math.round((d.image / maxCount) * 100), d.image > 0 ? 2 : 0);
       const label = d.date.slice(5);  // MM-DD
-      const tip = d.date + '\\n视频: ' + d.video + '  图文: ' + d.image + '  合计: ' + d.count;
-      return '<div title="' + tip + '" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">'
-        + '<div style="width:100%;background:#ff2d55;border-radius:3px 3px 0 0;height:' + pct + '%;min-height:2px;"></div>'
-        + '<div style="font-size:9px;color:#aaa;writing-mode:vertical-rl;transform:rotate(180deg);line-height:1;">' + label + '</div>'
+      const tip = d.date + '\n视频: ' + d.video + '  图文: ' + d.image + '  合计: ' + d.count;
+      return '<div title="' + tip + '" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;">'
+        + '<div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:64px;">'
+        + (d.image > 0 ? '<div style="width:100%;background:#0a84ff;height:' + imagePct + '%;min-height:2px;border-radius:2px 2px 0 0;"></div>' : '')
+        + (d.video > 0 ? '<div style="width:100%;background:#ff2d55;height:' + videoPct + '%;min-height:2px;"></div>' : '')
+        + (d.count === 0 ? '<div style="width:100%;background:#e0e0e0;height:2px;"></div>' : '')
+        + '</div>'
+        + '<div style="font-size:9px;color:#aaa;writing-mode:vertical-rl;transform:rotate(180deg);line-height:1;margin-top:2px;">' + label + '</div>'
         + '</div>';
     }).join('');
     wrap.innerHTML = bars;
