@@ -200,12 +200,12 @@ async def api_status() -> StatusResponse:
     summary="最近下载记录",
     tags=["system"],
 )
-async def api_recent(limit: int = 10) -> list[RecentDownloadItem]:
-    """返回最近下载的视频记录，按下载时间倒序，默认 10 条"""
+async def api_recent(limit: int = 10, post_type: str | None = None) -> list[RecentDownloadItem]:
+    """返回最近下载的作品记录，按下载时间倒序，默认 10 条；post_type 可选 'video'/'image' 筛选"""
     if _scheduler is None:
         return []
     try:
-        rows = await _scheduler._db.get_recent_downloads(limit=limit)
+        rows = await _scheduler._db.get_recent_downloads(limit=limit, post_type=post_type)
         return [RecentDownloadItem(
             video_id=r["video_id"],
             downloaded_at=r["downloaded_at"],
@@ -358,6 +358,11 @@ _UI_HTML = """\
   <!-- 最近下载记录 -->
   <div class="card">
     <h2>最近下载</h2>
+    <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+      <button class="btn" id="recent-tab-all" onclick="setRecentFilter('all')" style="padding:3px 10px;font-size:0.85em;background:#555;color:#fff;">全部</button>
+      <button class="btn" id="recent-tab-video" onclick="setRecentFilter('video')" style="padding:3px 10px;font-size:0.85em;background:#888;color:#fff;">🎬 视频</button>
+      <button class="btn" id="recent-tab-image" onclick="setRecentFilter('image')" style="padding:3px 10px;font-size:0.85em;background:#888;color:#fff;">📷 图文</button>
+    </div>
     <div id="recent-table-wrap">
       <div class="empty">加载中…</div>
     </div>
@@ -449,9 +454,20 @@ async function loadStatus() {
   }
 }
 
+var _recentFilter = 'all';
+function setRecentFilter(type) {
+  _recentFilter = type;
+  ['all','video','image'].forEach(function(t) {
+    var btn = document.getElementById('recent-tab-' + t);
+    if (btn) btn.style.background = (t === type) ? '#555' : '#888';
+  });
+  loadRecent();
+}
+
 async function loadRecent() {
   try {
-    const r = await fetch('/api/recent?limit=10');
+    const url = '/api/recent?limit=10' + (_recentFilter !== 'all' ? '&post_type=' + _recentFilter : '');
+    const r = await fetch(url);
     const items = await r.json();
     const wrap = document.getElementById('recent-table-wrap');
     if (!items || items.length === 0) {

@@ -69,6 +69,7 @@ class AppConfig(BaseSettings):
     download_dir: str = "/data/downloads"
     log_dir: str = "/data/logs"
     subscriptions: List[SubscriptionConfig] = []
+    max_batch: int = 30  # 每次抓取博主作品的最大条数（对应 fetcher MAX_BATCH）
 
     @field_validator("xhs_cookie", mode="before")
     @classmethod
@@ -115,6 +116,8 @@ class AppConfig(BaseSettings):
             self.download_concurrency = int(downloader["concurrency"])
         if "download_dir" in downloader:
             self.download_dir = downloader["download_dir"]
+        if "max_batch" in downloader:
+            self.max_batch = int(downloader["max_batch"])
 
         logging_cfg = data.get("logging", {})
         if "dir" in logging_cfg:

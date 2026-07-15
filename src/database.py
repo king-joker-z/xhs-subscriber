@@ -108,19 +108,27 @@ class Database:
         counts["total"] = counts["video"] + counts["image"]
         return counts
 
-    async def get_recent_downloads(self, limit: int = 10) -> list[dict]:
+    async def get_recent_downloads(self, limit: int = 10, post_type: str | None = None) -> list[dict]:
         """
         返回最近下载的视频/图文记录列表，按下载时间倒序。
         :param limit: 最多返回条数，默认 10
+        :param post_type: 可选筛选，'video' 或 'image'，None 表示全部
         :return: [{"video_id": str, "downloaded_at": str, "post_type": str}, ...]
         """
         assert self._conn, "数据库未初始化，请先调用 init()"
-        async with self._conn.execute(
-            "SELECT video_id, downloaded_at, post_type FROM downloads ORDER BY downloaded_at DESC LIMIT ?",
-            (limit,),
-        ) as cursor:
-            rows = await cursor.fetchall()
-            return [{"video_id": row[0], "downloaded_at": row[1], "post_type": row[2]} for row in rows]
+        if post_type:
+            async with self._conn.execute(
+                "SELECT video_id, downloaded_at, post_type FROM downloads WHERE post_type = ? ORDER BY downloaded_at DESC LIMIT ?",
+                (post_type, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+        else:
+            async with self._conn.execute(
+                "SELECT video_id, downloaded_at, post_type FROM downloads ORDER BY downloaded_at DESC LIMIT ?",
+                (limit,),
+            ) as cursor:
+                rows = await cursor.fetchall()
+        return [{"video_id": row[0], "downloaded_at": row[1], "post_type": row[2]} for row in rows]
 
 
 # 全局单例

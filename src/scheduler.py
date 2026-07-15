@@ -152,7 +152,7 @@ class XHSScheduler:
 
             # M3 爬取
             if sub.user_id:
-                metas = await self._fetcher.fetch_user_videos(sub.user_id)
+                metas = await self._fetcher.fetch_user_videos(sub.user_id, max_batch=self._config.max_batch)
                 user_id = sub.user_id
             elif sub.video_url:
                 meta = await self._fetcher.fetch_single_video(sub.video_url)

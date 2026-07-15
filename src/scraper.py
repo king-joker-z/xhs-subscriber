@@ -1,8 +1,14 @@
 """
 M5 - NFO 刮削器
 使用 lxml 生成 Jellyfin/Kodi 兼容的 Movie NFO XML 文件
-输出：/data/downloads/{user_id}/{video_id}.nfo
-封面：{video_id}-thumb.jpg（与 NFO 同目录，downloader 已负责下载）
+
+输出路径规则：
+  - 视频作品：/data/downloads/{user_id}/{video_id}.nfo
+  - 图文作品：/data/downloads/{user_id}/{video_id}/movie.nfo
+    （图文作品图片下载到 {video_id}/ 子目录，NFO 与图片同目录）
+封面：
+  - 视频作品：{video_id}-thumb.jpg（与 NFO 同目录）
+  - 图文作品：{video_id}/thumb.jpg（子目录内）
 
 Jellyfin NFO 字段说明（Movie 类型）：
   title / originaltitle  → 标题
@@ -13,7 +19,7 @@ Jellyfin NFO 字段说明（Movie 类型）：
   studio                 → 制作方（博主名）
   director               → 导演（博主名）
   actor                  → 演员（博主名 + 角色 = 博主）
-  tag / genre            → 标签 / 分类
+  tag / genre            → 标签 / 分类（图文作品额外加「图文」分类）
   uniqueid               → 唯一 ID（type="xhs"）
   thumb / fanart         → 封面图片
   website                → 原始作品链接

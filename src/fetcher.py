@@ -306,9 +306,9 @@ class XHSFetcher:
             async with _XHS(**self._make_xhs_kwargs()) as xhs:
                 return await xhs.extract(url, False)
 
-    async def fetch_user_videos(self, user_id: str) -> list[VideoMeta]:
+    async def fetch_user_videos(self, user_id: str, max_batch: int | None = None) -> list[VideoMeta]:
         """
-        自动爬取博主主页所有视频（最多 MAX_BATCH 条）。
+        自动爬取博主主页所有视频（最多 max_batch 条，默认使用 MAX_BATCH=30）。
 
         流程：
         1. 用 xhshow 对博主主页 API 签名（纯 Python，无需浏览器）
@@ -316,9 +316,11 @@ class XHSFetcher:
         3. 拼成完整 URL 逐条传给 XHS-Downloader 的 extract() 获取完整元数据
 
         :param user_id: 小红书用户 ID（24位十六进制字符串）
+        :param max_batch: 最大抓取条数，None 时使用 MAX_BATCH 类常量
         :return: VideoMeta 列表
         """
-        logger.info("开始爬取博主主页：user_id=%s", user_id)
+        limit = max_batch if max_batch is not None else self.MAX_BATCH
+        logger.info("开始爬取博主主页：user_id=%s，最大抓取 %d 条", user_id, limit)
 
         # 导入 xhshow 签名库
         try:
@@ -346,7 +348,7 @@ class XHSFetcher:
         _MAX_BACKOFF = 3
         _backoff_count = 0
 
-        while len(all_notes) < self.MAX_BATCH:
+        while len(all_notes) < limit:
             params: dict[str, str] = {
                 "num": "30",
                 "cursor": cursor,
@@ -450,7 +452,7 @@ class XHSFetcher:
 
         # 逐条调用 extract() 获取完整元数据
         results: list[VideoMeta] = []
-        for note in all_notes[: self.MAX_BATCH]:
+        for note in all_notes[: limit]:
             note_id = note.get("note_id") or note.get("id")
             xsec_token = note.get("xsec_token", "")
             if not note_id:
