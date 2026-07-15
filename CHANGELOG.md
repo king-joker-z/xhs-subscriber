@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-15 19:xx — 迭代 #30
+
+### 迭代目标
+为 api.py 裸 except Exception: 补充 logger.warning 日志，提升可观测性
+
+### 完成内容
+- **fix: `api.py` 4 处裸 `except Exception:` 补充 `logger.warning`（LOW）**
+  - `get_download_count_by_user` 失败时记录警告
+  - `get_download_count_by_type` 失败时记录警告
+  - `api_recent` 查询失败时记录警告
+  - `api_stats` 查询失败时记录警告
+  - 降级逻辑不变，仅增加可观测性
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter30.py`）：4 项检查全部 PASS
+- git commit: `b6701a6`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 19:xx — 迭代 #29
 
 ### 迭代目标
