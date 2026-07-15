@@ -173,12 +173,17 @@ class XHSScheduler:
             success, skipped = await self._downloader.download_batch(metas, user_id)
 
             # M5 刮削（对本次实际下载的内容生成 NFO）
-            # 判断依据：mp4 存在（视频作品）或 description 文件存在（图文作品）
-            # 图文作品无 video_url，不会下载 mp4，但 description 文件会写入
+            # 判断依据：
+            #   视频作品：{video_id}.mp4 存在
+            #   图文作品：{video_id}/description.txt 存在（图文下载到子目录）
             downloaded_metas = []
             for meta in metas:
                 video_path = Path(self._config.download_dir) / user_id / f"{meta.video_id}.mp4"
-                desc_path = Path(self._config.download_dir) / user_id / f"{meta.video_id}.description"
+                # 图文作品 description 路径已改为子目录
+                if meta.image_urls:
+                    desc_path = Path(self._config.download_dir) / user_id / meta.video_id / "description.txt"
+                else:
+                    desc_path = Path(self._config.download_dir) / user_id / f"{meta.video_id}.description"
                 if video_path.exists() or desc_path.exists():
                     downloaded_metas.append(meta)
 

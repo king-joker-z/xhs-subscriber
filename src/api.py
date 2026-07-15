@@ -79,6 +79,8 @@ class StatusResponse(BaseModel):
     subscriptions: list[SubscriptionInfo]
     interval_hours: float
     downloaded_total: int
+    video_count: int = 0   # 已下载视频作品数
+    image_count: int = 0   # 已下载图文作品数
     last_check_at: str | None  # ISO 8601 UTC，None 表示尚未执行过
     cookie_status: str  # unknown / ok / expired / error
     cookie_nickname: str  # Cookie 有效时的登录用户昵称，其他状态为空字符串
@@ -160,11 +162,16 @@ async def api_status() -> StatusResponse:
                 video_url=s.video_url,
                 enabled=s.enabled,
             ))
-        # 从数据库读取已下载总数
+        # 从数据库读取已下载总数及分类统计
         try:
-            downloaded_total = await _scheduler._db.get_download_count()
+            counts = await _scheduler._db.get_download_count_by_type()
+            downloaded_total = counts["total"]
+            video_count = counts["video"]
+            image_count = counts["image"]
         except Exception:
             downloaded_total = 0
+            video_count = 0
+            image_count = 0
         # 上次检查时间（UTC ISO 8601）
         if _scheduler.last_check_at is not None:
             last_check_at = _scheduler.last_check_at.strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -179,6 +186,8 @@ async def api_status() -> StatusResponse:
         subscriptions=subs,
         interval_hours=interval_hours,
         downloaded_total=downloaded_total,
+        video_count=video_count if _scheduler is not None else 0,
+        image_count=image_count if _scheduler is not None else 0,
         last_check_at=last_check_at,
         cookie_status=_scheduler.cookie_status if _scheduler is not None else "unknown",
         cookie_nickname=_scheduler.cookie_nickname if _scheduler is not None else "",
@@ -299,7 +308,7 @@ _UI_HTML = """\
       </div>
       <div class="stat">
         <div class="val" id="stat-downloaded">—</div>
-        <div class="lbl">已下载视频</div>
+        <div class="lbl">已下载（视频/图文）</div>
       </div>
       <div class="stat">
         <div class="val uptime" id="stat-uptime">—</div>
@@ -319,6 +328,15 @@ _UI_HTML = """\
       <button class="btn btn-primary" onclick="loadStatus()" style="background:#555">
         ↻ 刷新状态
       </button>
+      <label style="font-size:0.85em;color:#555;margin-left:8px;">
+        自动刷新：
+        <select onchange="setRefreshInterval(+this.value)" style="font-size:0.9em;padding:2px 4px;">
+          <option value="15">15s</option>
+          <option value="30" selected>30s</option>
+          <option value="60">60s</option>
+          <option value="0">关闭</option>
+        </select>
+      </label>
       <span id="msg"></span>
     </div>
   </div>
@@ -384,7 +402,8 @@ async function loadStatus() {
       cookieEl.innerHTML = cookieLabel;
     }
     document.getElementById('stat-interval').textContent = d.interval_hours;
-    document.getElementById('stat-downloaded').textContent = d.downloaded_total ?? '—';
+    document.getElementById('stat-downloaded').textContent =
+      (d.downloaded_total ?? '—') + ' 🎬' + (d.video_count ?? 0) + '/📷' + (d.image_count ?? 0);
     document.getElementById('stat-uptime').textContent = fmtUptime(d.uptime_seconds);
     // 上次检查时间
     var lastCheck = document.getElementById('stat-last-check');
@@ -485,8 +504,17 @@ async function triggerRun() {
 // 初始加载 + 每 30 秒自动刷新
 loadStatus();
 loadRecent();
-setInterval(loadStatus, 30000);
-setInterval(loadRecent, 60000);
+var _statusTimer = setInterval(loadStatus, 30000);
+var _recentTimer = setInterval(loadRecent, 60000);
+
+function setRefreshInterval(sec) {
+  clearInterval(_statusTimer);
+  clearInterval(_recentTimer);
+  if (sec > 0) {
+    _statusTimer = setInterval(loadStatus, sec * 1000);
+    _recentTimer = setInterval(loadRecent, sec * 2000);
+  }
+}
 </script>
 </body>
 </html>

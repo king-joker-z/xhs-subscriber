@@ -85,11 +85,28 @@ class Database:
         logger.debug("已标记下载：video_id=%s post_type=%s at %s", video_id, post_type, now)
 
     async def get_download_count(self) -> int:
-        """返回已下载视频总数（用于健康检查/统计）"""
+        """返回已下载作品总数（用于健康检查/统计）"""
         assert self._conn, "数据库未初始化，请先调用 init()"
         async with self._conn.execute("SELECT COUNT(*) FROM downloads") as cursor:
             row = await cursor.fetchone()
             return row[0] if row else 0
+
+    async def get_download_count_by_type(self) -> dict[str, int]:
+        """
+        按 post_type 统计已下载数量。
+        :return: {"video": int, "image": int, "total": int}
+        """
+        assert self._conn, "数据库未初始化，请先调用 init()"
+        async with self._conn.execute(
+            "SELECT post_type, COUNT(*) FROM downloads GROUP BY post_type"
+        ) as cursor:
+            rows = await cursor.fetchall()
+        counts = {"video": 0, "image": 0}
+        for row in rows:
+            pt = row[0] if row[0] in counts else "video"
+            counts[pt] = row[1]
+        counts["total"] = counts["video"] + counts["image"]
+        return counts
 
     async def get_recent_downloads(self, limit: int = 10) -> list[dict]:
         """
