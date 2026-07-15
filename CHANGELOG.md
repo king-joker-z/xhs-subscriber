@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-07-15 16:xx — 迭代 #15
+
+### 迭代目标
+max_batch 可配置化、最近下载 post_type 筛选、Web UI 筛选 tab、scraper docstring 更新
+
+### 完成内容
+- **feat: `config.py` + `fetcher.py` MAX_BATCH 可配置化（LOW）**
+  - `AppConfig` 新增 `max_batch: int = 30` 字段
+  - YAML `downloader.max_batch` 可覆盖默认值
+  - `fetch_user_videos(user_id, max_batch=None)` 新增 `max_batch` 参数，`None` 时使用 `MAX_BATCH` 类常量
+  - `scheduler._process_subscription` 调用时传入 `max_batch=self._config.max_batch`
+- **feat: `database.py` `get_recent_downloads` 支持 post_type 筛选（LOW）**
+  - 新增 `post_type: str | None = None` 参数
+  - `post_type` 非空时追加 `WHERE post_type = ?` 条件
+- **feat: `api.py` `/api/recent` 支持 `?post_type=` 筛选参数（LOW）**
+  - `api_recent` 新增 `post_type: str | None = None` 查询参数
+  - 传递给 `get_recent_downloads`
+- **feat: `api.py` Web UI 最近下载卡片添加「全部/视频/图文」筛选 tab（LOW）**
+  - 三个按钮：全部 / 🎬 视频 / 📷 图文
+  - 新增 `setRecentFilter(type)` 函数，切换时高亮当前 tab 并重新请求 API
+  - `_recentFilter` 状态变量记录当前筛选类型
+- **fix: `scraper.py` 模块 docstring 更新（LOW）**
+  - 补充图文作品输出路径规则（`{video_id}/movie.nfo`、`{video_id}/thumb.jpg`）
+  - 补充图文作品 `<genre>图文</genre>` 说明
+- **改动文件**：`src/config.py`、`src/fetcher.py`、`src/scheduler.py`、`src/database.py`、`src/api.py`、`src/scraper.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter15.py`）：14 项检查全部 PASS
+- git commit: `844a1ec`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **`config.yaml` 示例文件补充 `max_batch` 字段说明**
+- **Web UI 最近下载卡片支持分页**：当前固定 10 条，可添加「加载更多」按钮
+- **`/api/status` 补充 `max_batch` 字段**：方便用户在 UI 中确认当前配置值
+
+---
+
 ## 2026-07-15 16:xx — 迭代 #14
 
 ### 迭代目标
