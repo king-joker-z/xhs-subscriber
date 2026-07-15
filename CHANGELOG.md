@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-07-15 16:xx — 迭代 #18
+
+### 迭代目标
+耗时统计全链路（scheduler/fetcher）、last_run_elapsed API 暴露、/api/vacuum 端点、Web UI 耗时展示
+
+### 完成内容
+- **feat: `scheduler.py` last_run_elapsed 属性持久化（LOW）**
+  - `XHSScheduler` 新增 `last_run_elapsed: float | None = None` 属性
+  - `run_once` 完成后写入 `self.last_run_elapsed = elapsed`
+  - `_process_subscription` 新增 `_sub_start` 计时，完成/异常时均输出耗时日志
+- **feat: `api.py` StatusResponse 添加 last_run_elapsed + Web UI 展示（LOW）**
+  - `StatusResponse` 新增 `last_run_elapsed: float | None = None` 字段
+  - `api_status` 从 `_scheduler.last_run_elapsed` 读取并填充
+  - Web UI「上次检查」文本追加 `（耗时 X.Xs）`
+- **feat: `api.py` /api/vacuum 端点 + Web UI 按钮（LOW）**
+  - 新增 `POST /api/vacuum` 端点，调用 `db.vacuum()` 并返回结果
+  - Web UI 操作区新增「🗜 VACUUM」按钮
+  - 新增 `triggerVacuum()` JS 函数，执行后在 msg 区域显示结果
+- **feat: `fetcher.py` fetch_user_videos 耗时统计（LOW）**
+  - 使用 `time.monotonic()` 记录开始时间
+  - 完成后输出 INFO 日志：`博主 {user_id} 共获取 N 条作品元数据，耗时 X.Xs`
+- **改动文件**：`src/scheduler.py`、`src/api.py`、`src/fetcher.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter18.py`）：12 项检查全部 PASS
+- git commit: `758490d`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 16:xx — 迭代 #17
 
 ### 迭代目标
