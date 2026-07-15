@@ -128,6 +128,8 @@ class XHSScheduler:
 
     async def run_once(self) -> None:
         """立即执行一次全量检查（所有订阅）"""
+        import time as _time
+        _start = _time.monotonic()
         logger.info("开始全量检查，共 %d 个订阅", len(self._config.subscriptions))
         tasks = [
             self._process_subscription(sub)
@@ -140,7 +142,8 @@ class XHSScheduler:
             return
         await asyncio.gather(*tasks, return_exceptions=True)
         self.last_check_at = datetime.now(timezone.utc)
-        logger.info("全量检查完成")
+        elapsed = _time.monotonic() - _start
+        logger.info("全量检查完成，耗时 %.1f 秒", elapsed)
 
     async def _process_subscription(self, sub: SubscriptionConfig) -> None:
         """

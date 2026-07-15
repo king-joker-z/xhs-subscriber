@@ -142,7 +142,10 @@ async def api_status() -> StatusResponse:
       enabled_subscription_count - 启用中的订阅数量
       subscriptions             - 订阅列表（含 disabled）
       interval_hours            - 轮询间隔（小时）
-      downloaded_total          - 已下载视频总数
+      downloaded_total          - 已下载作品总数（视频+图文）
+      video_count               - 已下载视频作品数
+      image_count               - 已下载图文作品数
+      max_batch                 - 每次抓取博主作品的最大条数
       last_check_at             - 上次全量检查完成时间（UTC），尚未执行时为 null
     """
     uptime = int((datetime.now(timezone.utc) - _start_time).total_seconds())
@@ -293,6 +296,10 @@ _UI_HTML = """\
     <h2>服务状态</h2>
     <div class="stat-row">
       <div class="stat">
+        <div class="val" id="stat-version">—</div>
+        <div class="lbl">版本</div>
+      </div>
+      <div class="stat">
         <div class="val" id="stat-status">—</div>
         <div class="lbl">运行状态</div>
       </div>
@@ -395,6 +402,9 @@ async function loadStatus() {
     window._lastStatus = d;
 
     const ok = d.scheduler_ready;
+    if (document.getElementById('stat-version')) {
+      document.getElementById('stat-version').textContent = d.version ? 'v' + d.version : '—';
+    }
     document.getElementById('stat-status').innerHTML =
       '<span class="dot ' + (ok ? 'green' : 'red') + '"></span>' +
       (ok ? '运行中' : '未就绪');

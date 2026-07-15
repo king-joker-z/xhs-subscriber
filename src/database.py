@@ -56,6 +56,16 @@ class Database:
             self._conn = None
             logger.info("数据库连接已关闭")
 
+    async def vacuum(self) -> None:
+        """
+        执行 VACUUM 整理数据库碎片，释放未使用空间。
+        建议在长期运行后定期调用（例如每周一次），不影响正常读写。
+        """
+        assert self._conn, "数据库未初始化，请先调用 init()"
+        await self._conn.execute("VACUUM;")
+        await self._conn.commit()
+        logger.info("数据库 VACUUM 完成：%s", self._db_path)
+
     async def is_downloaded(self, video_id: str) -> bool:
         """
         检查视频是否已下载。
