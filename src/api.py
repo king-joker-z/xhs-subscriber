@@ -196,7 +196,7 @@ async def api_status() -> StatusResponse:
             image_count = 0
         # 上次检查时间（UTC ISO 8601）
         if _scheduler.last_check_at is not None:
-            last_check_at = _scheduler.last_check_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+            last_check_at = _scheduler.last_check_at.isoformat()
 
     return StatusResponse(
         status="ok",
@@ -355,6 +355,13 @@ _UI_HTML = """\
   <h1>XHS 订阅管理</h1>
   <span class="badge" id="ui-version">v1.0.0</span>
 </header>
+<nav style="background:#fff;border-bottom:1px solid #e0e0e0;padding:0 32px;display:flex;gap:0;overflow-x:auto;">
+  <a href="#section-status" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color='#555'">📊 状态</a>
+  <a href="#section-actions" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color='#555'">▶ 操作</a>
+  <a href="#section-subs" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color='#555'">📋 订阅</a>
+  <a href="#section-stats" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color='#555'">📈 趋势</a>
+  <a href="#section-recent" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color='#555'">🕐 最近</a>
+</nav>
 <div class="container">
 
   <!-- 状态卡片 -->
@@ -450,6 +457,10 @@ _UI_HTML = """\
     </h2>
     <div id="stats-chart-wrap" style="height:80px;display:flex;align-items:flex-end;gap:2px;padding:4px 0;">
       <div class="empty" style="align-self:center;">加载中…</div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:4px;font-size:0.78em;color:#aaa;">
+      <span><span style="display:inline-block;width:10px;height:10px;background:#ff2d55;border-radius:2px;margin-right:3px;vertical-align:middle;"></span>视频</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#0a84ff;border-radius:2px;margin-right:3px;vertical-align:middle;"></span>图文</span>
     </div>
   </div>
 
