@@ -509,9 +509,6 @@ async function loadStatus() {
     if (document.getElementById('stat-version')) {
       document.getElementById('stat-version').textContent = d.version ? 'v' + d.version : '—';
     }
-    // 同步更新页脚版本号
-    var fv = document.getElementById('footer-version');
-    if (fv && d.version) { fv.textContent = 'v' + d.version; }
     // 填充博主筛选下拉（从订阅列表提取有 user_id 的订阅）
     var userSel = document.getElementById('recent-user-select');
     if (userSel && d.subscriptions) {
@@ -778,15 +775,9 @@ function setRefreshInterval(sec) {
 }
 </script>
   <footer style="text-align:center;margin-top:24px;padding:12px;font-size:0.8em;color:#aaa;">
-    xhs-subscriber <span id="footer-version"></span> &nbsp;·&nbsp;
+    xhs-subscriber v__SERVER_VERSION__ &nbsp;·&nbsp;
     <a class="link" href="https://github.com/king-joker-z/xhs-subscriber" target="_blank">GitHub</a>
   </footer>
-  <script>
-    var fv = document.getElementById('footer-version');
-    if (fv && window._lastStatus && window._lastStatus.version) {
-      fv.textContent = 'v' + window._lastStatus.version;
-    }
-  </script>
 </body>
 </html>
 """
@@ -800,5 +791,6 @@ function setRefreshInterval(sec) {
     include_in_schema=False,
 )
 async def web_ui() -> HTMLResponse:
-    """返回 Web 管理界面 HTML 页面"""
-    return HTMLResponse(content=_UI_HTML, status_code=200)
+    """返回 Web 管理界面 HTML 页面（版本号服务端渲染）"""
+    html = _UI_HTML.replace("__SERVER_VERSION__", _VERSION)
+    return HTMLResponse(content=html, status_code=200)
