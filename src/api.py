@@ -62,12 +62,18 @@ class SubscriptionInfo(BaseModel):
     enabled: bool
 
 
+class RecentDownloadItem(BaseModel):
+    video_id: str
+    downloaded_at: str
+
+
 class StatusResponse(BaseModel):
     status: str
     version: str
     uptime_seconds: int
     scheduler_ready: bool
     subscription_count: int
+    enabled_subscription_count: int   # 启用中的订阅数量
     subscriptions: list[SubscriptionInfo]
     interval_hours: float
     downloaded_total: int
@@ -152,11 +158,29 @@ async def api_status() -> StatusResponse:
         uptime_seconds=uptime,
         scheduler_ready=_scheduler is not None,
         subscription_count=len(subs),
+        enabled_subscription_count=sum(1 for s in subs if s.enabled),
         subscriptions=subs,
         interval_hours=interval_hours,
         downloaded_total=downloaded_total,
         last_check_at=last_check_at,
     )
+
+
+@app.get(
+    "/api/recent",
+    response_model=list[RecentDownloadItem],
+    summary="最近下载记录",
+    tags=["system"],
+)
+async def api_recent(limit: int = 10) -> list[RecentDownloadItem]:
+    """返回最近下载的视频记录，按下载时间倒序，默认 10 条"""
+    if _scheduler is None:
+        return []
+    try:
+        rows = await _scheduler._db.get_recent_downloads(limit=limit)
+        return [RecentDownloadItem(video_id=r["video_id"], downloaded_at=r["downloaded_at"]) for r in rows]
+    except Exception:
+        return []
 
 
 # ------------------------------------------------------------------ #
@@ -240,7 +264,7 @@ _UI_HTML = """\
       </div>
       <div class="stat">
         <div class="val" id="stat-subs">—</div>
-        <div class="lbl">订阅数量</div>
+        <div class="lbl">订阅数量（启用/全部）</div>
       </div>
       <div class="stat">
         <div class="val" id="stat-interval">—</div>
@@ -280,6 +304,14 @@ _UI_HTML = """\
     </div>
   </div>
 
+  <!-- 最近下载记录 -->
+  <div class="card">
+    <h2>最近下载</h2>
+    <div id="recent-table-wrap">
+      <div class="empty">加载中…</div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -299,7 +331,8 @@ async function loadStatus() {
     document.getElementById('stat-status').innerHTML =
       '<span class="dot ' + (ok ? 'green' : 'red') + '"></span>' +
       (ok ? '运行中' : '未就绪');
-    document.getElementById('stat-subs').textContent = d.subscription_count;
+    document.getElementById('stat-subs').textContent =
+      (d.enabled_subscription_count ?? d.subscription_count) + '/' + d.subscription_count;
     document.getElementById('stat-interval').textContent = d.interval_hours;
     document.getElementById('stat-downloaded').textContent = d.downloaded_total ?? '—';
     document.getElementById('stat-uptime').textContent = fmtUptime(d.uptime_seconds);
@@ -330,6 +363,26 @@ async function loadStatus() {
   } catch(e) {
     document.getElementById('stat-status').textContent = '连接失败';
     console.error(e);
+  }
+}
+
+async function loadRecent() {
+  try {
+    const r = await fetch('/api/recent?limit=10');
+    const items = await r.json();
+    const wrap = document.getElementById('recent-table-wrap');
+    if (!items || items.length === 0) {
+      wrap.innerHTML = '<div class="empty">暂无下载记录</div>';
+      return;
+    }
+    let rows = items.map(item => {
+      const xhsUrl = 'https://www.xiaohongshu.com/explore/' + escHtml(item.video_id);
+      const at = item.downloaded_at ? item.downloaded_at.replace('T', ' ').slice(0, 19) : '—';
+      return '<tr><td><a class="link" href="' + xhsUrl + '" target="_blank">' + escHtml(item.video_id) + '</a></td><td>' + at + '</td></tr>';
+    }).join('');
+    wrap.innerHTML = '<table><thead><tr><th>视频 ID</th><th>下载时间</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  } catch(e) {
+    console.error('loadRecent error:', e);
   }
 }
 
@@ -364,7 +417,9 @@ async function triggerRun() {
 
 // 初始加载 + 每 30 秒自动刷新
 loadStatus();
+loadRecent();
 setInterval(loadStatus, 30000);
+setInterval(loadRecent, 60000);
 </script>
 </body>
 </html>

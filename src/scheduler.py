@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -162,7 +163,6 @@ class XHSScheduler:
             # M5 刮削（对本次实际下载的内容生成 NFO）
             # 判断依据：mp4 存在（视频作品）或 description 文件存在（图文作品）
             # 图文作品无 video_url，不会下载 mp4，但 description 文件会写入
-            from pathlib import Path
             downloaded_metas = []
             for meta in metas:
                 video_path = Path(self._config.download_dir) / user_id / f"{meta.video_id}.mp4"

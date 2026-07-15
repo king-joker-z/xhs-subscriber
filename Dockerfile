@@ -1,5 +1,6 @@
 # ---- builder stage ----
 # Python 3.12+ 是 XHS-Downloader 的最低版本要求
+# syntax=docker/dockerfile:1
 FROM python:3.12-slim AS builder
 
 WORKDIR /build
@@ -14,8 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --upgrade pip \
-    && pip install --prefix=/install --no-cache-dir -r requirements.txt
+# 使用 BuildKit cache mount 缓存 pip 下载包，避免每次构建重新下载依赖
+# 需要 BuildKit 支持：DOCKER_BUILDKIT=1 docker build ... 或 docker buildx build
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip \
+    && pip install --prefix=/install -r requirements.txt
 
 # ---- runtime stage ----
 FROM python:3.12-slim AS runtime
