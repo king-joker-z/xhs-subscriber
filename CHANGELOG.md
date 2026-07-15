@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-15 19:xx — 迭代 #29
+
+### 迭代目标
+VACUUM 按钮添加确认对话框
+
+### 完成内容
+- **fix: `api.py` VACUUM 按钮添加 `confirm` 确认对话框（LOW）**
+  - `triggerVacuum()` 函数首行添加 `confirm()` 弹窗
+  - 弹窗说明操作内容和影响，用户取消则不执行
+  - 防止误触导致意外数据库操作
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter29.py`）：4 项检查全部 PASS
+- git commit: `f43dceb`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 19:xx — 迭代 #28
 
 ### 迭代目标
