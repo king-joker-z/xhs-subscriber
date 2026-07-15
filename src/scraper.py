@@ -136,8 +136,10 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
         if tag:
             _text_elem(root, "tag", tag)
             _text_elem(root, "genre", tag)
-    # 固定分类：小红书
+    # 固定分类：小红书；图文作品额外加「图文」分类
     _text_elem(root, "genre", "小红书")
+    if is_image_post:
+        _text_elem(root, "genre", "图文")
 
     # ---- 地区 ----
     _text_elem(root, "country", "中国")

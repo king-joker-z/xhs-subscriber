@@ -66,6 +66,7 @@ class SubscriptionInfo(BaseModel):
 class RecentDownloadItem(BaseModel):
     video_id: str
     downloaded_at: str
+    post_type: str = "video"  # 'video' 或 'image'
 
 
 class StatusResponse(BaseModel):
@@ -196,7 +197,11 @@ async def api_recent(limit: int = 10) -> list[RecentDownloadItem]:
         return []
     try:
         rows = await _scheduler._db.get_recent_downloads(limit=limit)
-        return [RecentDownloadItem(video_id=r["video_id"], downloaded_at=r["downloaded_at"]) for r in rows]
+        return [RecentDownloadItem(
+            video_id=r["video_id"],
+            downloaded_at=r["downloaded_at"],
+            post_type=r.get("post_type", "video"),
+        ) for r in rows]
     except Exception:
         return []
 
@@ -437,9 +442,10 @@ async function loadRecent() {
     let rows = items.map(item => {
       const xhsUrl = 'https://www.xiaohongshu.com/explore/' + escHtml(item.video_id);
       const at = item.downloaded_at ? item.downloaded_at.replace('T', ' ').slice(0, 19) : '—';
-      return '<tr><td><a class="link" href="' + xhsUrl + '" target="_blank">' + escHtml(item.video_id) + '</a></td><td>' + at + '</td></tr>';
+      const icon = item.post_type === 'image' ? '📷' : '🎬';
+      return '<tr><td>' + icon + ' <a class="link" href="' + xhsUrl + '" target="_blank">' + escHtml(item.video_id) + '</a></td><td>' + at + '</td></tr>';
     }).join('');
-    wrap.innerHTML = '<table><thead><tr><th>视频 ID</th><th>下载时间</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    wrap.innerHTML = '<table><thead><tr><th>作品 ID</th><th>下载时间</th></tr></thead><tbody>' + rows + '</tbody></table>';
   } catch(e) {
     console.error('loadRecent error:', e);
   }

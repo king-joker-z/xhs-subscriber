@@ -17,9 +17,12 @@ _DB_PATH = "/data/downloads/.db/xhs.db"
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS downloads (
     video_id     TEXT PRIMARY KEY,
-    downloaded_at DATETIME NOT NULL
+    downloaded_at DATETIME NOT NULL,
+    post_type    TEXT NOT NULL DEFAULT 'video'
 );
 """
+# 迁移：为旧表补充 post_type 列（已存在时忽略错误）
+_MIGRATE_SQL = "ALTER TABLE downloads ADD COLUMN post_type TEXT NOT NULL DEFAULT 'video';"
 
 
 class Database:
@@ -38,6 +41,11 @@ class Database:
         # WAL 模式提升并发读性能
         await self._conn.execute("PRAGMA journal_mode=WAL;")
         await self._conn.execute(_CREATE_TABLE_SQL)
+        # 迁移：为旧表补充 post_type 列（已存在时 SQLite 会报错，捕获并忽略）
+        try:
+            await self._conn.execute(_MIGRATE_SQL)
+        except Exception:
+            pass  # 列已存在，忽略
         await self._conn.commit()
         logger.info("数据库初始化完成：%s", self._db_path)
 
@@ -61,19 +69,20 @@ class Database:
             row = await cursor.fetchone()
             return row is not None
 
-    async def mark_downloaded(self, video_id: str) -> None:
+    async def mark_downloaded(self, video_id: str, post_type: str = "video") -> None:
         """
-        标记视频为已下载。
-        :param video_id: 视频唯一 ID
+        标记视频/图文作品为已下载。
+        :param video_id: 作品唯一 ID
+        :param post_type: 作品类型，'video' 或 'image'，默认 'video'
         """
         assert self._conn, "数据库未初始化，请先调用 init()"
         now = datetime.now(timezone.utc).isoformat()
         await self._conn.execute(
-            "INSERT OR REPLACE INTO downloads (video_id, downloaded_at) VALUES (?, ?)",
-            (video_id, now),
+            "INSERT OR REPLACE INTO downloads (video_id, downloaded_at, post_type) VALUES (?, ?, ?)",
+            (video_id, now, post_type),
         )
         await self._conn.commit()
-        logger.debug("已标记下载：video_id=%s at %s", video_id, now)
+        logger.debug("已标记下载：video_id=%s post_type=%s at %s", video_id, post_type, now)
 
     async def get_download_count(self) -> int:
         """返回已下载视频总数（用于健康检查/统计）"""
@@ -84,17 +93,17 @@ class Database:
 
     async def get_recent_downloads(self, limit: int = 10) -> list[dict]:
         """
-        返回最近下载的视频记录列表，按下载时间倒序。
+        返回最近下载的视频/图文记录列表，按下载时间倒序。
         :param limit: 最多返回条数，默认 10
-        :return: [{"video_id": str, "downloaded_at": str}, ...]
+        :return: [{"video_id": str, "downloaded_at": str, "post_type": str}, ...]
         """
         assert self._conn, "数据库未初始化，请先调用 init()"
         async with self._conn.execute(
-            "SELECT video_id, downloaded_at FROM downloads ORDER BY downloaded_at DESC LIMIT ?",
+            "SELECT video_id, downloaded_at, post_type FROM downloads ORDER BY downloaded_at DESC LIMIT ?",
             (limit,),
         ) as cursor:
             rows = await cursor.fetchall()
-            return [{"video_id": row[0], "downloaded_at": row[1]} for row in rows]
+            return [{"video_id": row[0], "downloaded_at": row[1], "post_type": row[2]} for row in rows]
 
 
 # 全局单例

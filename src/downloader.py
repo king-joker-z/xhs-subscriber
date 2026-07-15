@@ -147,8 +147,8 @@ class Downloader:
             )
             created_files.append(desc_path)
 
-            # 4. 标记已下载
-            await self._db.mark_downloaded(meta.video_id)
+            # 4. 标记已下载（传入 post_type 供数据库区分视频/图文）
+            await self._db.mark_downloaded(meta.video_id, post_type=meta.post_type)
             return True
 
         except Exception as exc:
