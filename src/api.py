@@ -82,6 +82,7 @@ class StatusResponse(BaseModel):
     video_count: int = 0   # 已下载视频作品数
     image_count: int = 0   # 已下载图文作品数
     max_batch: int = 30    # 每次抓取博主作品的最大条数
+    last_run_elapsed: float | None = None  # 上次全量检查耗时（秒），None 表示尚未执行过
     last_check_at: str | None  # ISO 8601 UTC，None 表示尚未执行过
     cookie_status: str  # unknown / ok / expired / error
     cookie_nickname: str  # Cookie 有效时的登录用户昵称，其他状态为空字符串
@@ -193,6 +194,7 @@ async def api_status() -> StatusResponse:
         video_count=video_count if _scheduler is not None else 0,
         image_count=image_count if _scheduler is not None else 0,
         max_batch=_scheduler._config.max_batch if _scheduler is not None else 30,
+        last_run_elapsed=_scheduler.last_run_elapsed if _scheduler is not None else None,
         last_check_at=last_check_at,
         cookie_status=_scheduler.cookie_status if _scheduler is not None else "unknown",
         cookie_nickname=_scheduler.cookie_nickname if _scheduler is not None else "",
@@ -218,6 +220,22 @@ async def api_recent(limit: int = 10, post_type: str | None = None) -> list[Rece
         ) for r in rows]
     except Exception:
         return []
+
+
+@app.post(
+    "/api/vacuum",
+    summary="执行数据库 VACUUM",
+    tags=["system"],
+)
+async def api_vacuum() -> dict:
+    """执行 SQLite VACUUM，整理数据库碎片，释放未使用空间。"""
+    if _scheduler is None:
+        return {"status": "error", "message": "调度器未初始化"}
+    try:
+        await _scheduler._db.vacuum()
+        return {"status": "ok", "message": "VACUUM 执行完成"}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
 
 
 # ------------------------------------------------------------------ #
@@ -341,6 +359,9 @@ _UI_HTML = """\
       <button class="btn btn-primary" onclick="loadStatus()" style="background:#555">
         ↻ 刷新状态
       </button>
+      <button class="btn" onclick="triggerVacuum()" style="background:#888;color:#fff;padding:4px 12px;font-size:0.85em;">
+        🗜 VACUUM
+      </button>
       <label style="font-size:0.85em;color:#555;margin-left:8px;">
         自动刷新：
         <select onchange="setRefreshInterval(+this.value)" style="font-size:0.9em;padding:2px 4px;">
@@ -435,7 +456,8 @@ async function loadStatus() {
     document.getElementById('stat-uptime').textContent = fmtUptime(d.uptime_seconds);
     // 上次检查时间
     var lastCheck = document.getElementById('stat-last-check');
-    if (lastCheck) lastCheck.textContent = '上次检查：' + (d.last_check_at || '尚未执行');
+    if (lastCheck) lastCheck.textContent = '上次检查：' + (d.last_check_at || '尚未执行') +
+      (d.last_run_elapsed != null ? '（耗时 ' + d.last_run_elapsed.toFixed(1) + 's）' : '');
     // 动态更新版本号徽章
     var vbadge = document.getElementById('ui-version');
     if (vbadge && d.version) vbadge.textContent = 'v' + d.version;
@@ -517,6 +539,28 @@ async function loadRecent() {
 
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function triggerVacuum() {
+  const msg = document.getElementById('msg');
+  msg.style.display = 'none';
+  msg.className = '';
+  try {
+    const r = await fetch('/api/vacuum', { method: 'POST' });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      msg.textContent = '✓ ' + d.message;
+      msg.style.display = 'inline';
+    } else {
+      msg.textContent = '✗ ' + (d.message || 'VACUUM 失败');
+      msg.className = 'err';
+      msg.style.display = 'inline';
+    }
+  } catch(e) {
+    msg.textContent = '✗ 请求失败：' + e.message;
+    msg.className = 'err';
+    msg.style.display = 'inline';
+  }
 }
 
 async function triggerRun() {

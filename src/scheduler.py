@@ -47,6 +47,8 @@ class XHSScheduler:
         self.cookie_status: str = "unknown"
         # Cookie 有效时的登录用户昵称，unknown/expired/error 时为空字符串
         self.cookie_nickname: str = ""
+        # 上次全量检查耗时（秒），None 表示尚未执行过
+        self.last_run_elapsed: float | None = None
 
     async def startup(self) -> None:
         """
@@ -143,6 +145,7 @@ class XHSScheduler:
         await asyncio.gather(*tasks, return_exceptions=True)
         self.last_check_at = datetime.now(timezone.utc)
         elapsed = _time.monotonic() - _start
+        self.last_run_elapsed = elapsed
         logger.info("全量检查完成，耗时 %.1f 秒", elapsed)
 
     async def _process_subscription(self, sub: SubscriptionConfig) -> None:
@@ -150,6 +153,8 @@ class XHSScheduler:
         处理单个订阅：M3 爬取 → M4 下载 → M5 刮削
         异常在此捕获，不影响其他订阅。
         """
+        import time as _time_sub
+        _sub_start = _time_sub.monotonic()
         try:
             logger.info("处理订阅：%s", sub.name)
 
@@ -202,9 +207,12 @@ class XHSScheduler:
                 )
             else:
                 logger.info("订阅 %s：无新内容需要刮削", sub.name)
+            _sub_elapsed = _time_sub.monotonic() - _sub_start
+            logger.info("订阅 %s 处理完成，耗时 %.1f 秒", sub.name, _sub_elapsed)
 
         except Exception as exc:
-            logger.error("订阅 %s 处理异常（已跳过）：%s", sub.name, exc, exc_info=True)
+            _sub_elapsed = _time_sub.monotonic() - _sub_start
+            logger.error("订阅 %s 处理异常（已跳过，耗时 %.1f 秒）：%s", sub.name, _sub_elapsed, exc, exc_info=True)
 
     def start(self) -> None:
         """启动调度器"""
