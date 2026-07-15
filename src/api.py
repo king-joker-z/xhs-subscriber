@@ -81,6 +81,7 @@ class StatusResponse(BaseModel):
     downloaded_total: int
     video_count: int = 0   # 已下载视频作品数
     image_count: int = 0   # 已下载图文作品数
+    max_batch: int = 30    # 每次抓取博主作品的最大条数
     last_check_at: str | None  # ISO 8601 UTC，None 表示尚未执行过
     cookie_status: str  # unknown / ok / expired / error
     cookie_nickname: str  # Cookie 有效时的登录用户昵称，其他状态为空字符串
@@ -188,6 +189,7 @@ async def api_status() -> StatusResponse:
         downloaded_total=downloaded_total,
         video_count=video_count if _scheduler is not None else 0,
         image_count=image_count if _scheduler is not None else 0,
+        max_batch=_scheduler._config.max_batch if _scheduler is not None else 30,
         last_check_at=last_check_at,
         cookie_status=_scheduler.cookie_status if _scheduler is not None else "unknown",
         cookie_nickname=_scheduler.cookie_nickname if _scheduler is not None else "",
@@ -307,6 +309,10 @@ _UI_HTML = """\
         <div class="lbl">检查间隔（小时）</div>
       </div>
       <div class="stat">
+        <div class="val" id="stat-maxbatch">—</div>
+        <div class="lbl">单次抓取上限</div>
+      </div>
+      <div class="stat">
         <div class="val" id="stat-downloaded">—</div>
         <div class="lbl">已下载（视频/图文）</div>
       </div>
@@ -364,6 +370,10 @@ _UI_HTML = """\
       <button class="btn" id="recent-tab-image" onclick="setRecentFilter('image')" style="padding:3px 10px;font-size:0.85em;background:#888;color:#fff;">📷 图文</button>
     </div>
     <div id="recent-table-wrap">
+    </div>
+    <div style="text-align:center;margin-top:8px;">
+      <button class="btn" id="btn-load-more" onclick="loadMoreRecent()" style="background:#888;color:#fff;padding:4px 16px;font-size:0.85em;">加载更多</button>
+    </div>
       <div class="empty">加载中…</div>
     </div>
   </div>
@@ -407,6 +417,9 @@ async function loadStatus() {
       cookieEl.innerHTML = cookieLabel;
     }
     document.getElementById('stat-interval').textContent = d.interval_hours;
+    if (document.getElementById('stat-maxbatch')) {
+      document.getElementById('stat-maxbatch').textContent = d.max_batch ?? 30;
+    }
     document.getElementById('stat-downloaded').textContent =
       (d.downloaded_total ?? '—') + ' 🎬' + (d.video_count ?? 0) + '/📷' + (d.image_count ?? 0);
     document.getElementById('stat-uptime').textContent = fmtUptime(d.uptime_seconds);
@@ -455,18 +468,24 @@ async function loadStatus() {
 }
 
 var _recentFilter = 'all';
+var _recentLimit = 10;
 function setRecentFilter(type) {
   _recentFilter = type;
+  _recentLimit = 10;
   ['all','video','image'].forEach(function(t) {
     var btn = document.getElementById('recent-tab-' + t);
     if (btn) btn.style.background = (t === type) ? '#555' : '#888';
   });
   loadRecent();
 }
+function loadMoreRecent() {
+  _recentLimit += 10;
+  loadRecent();
+}
 
 async function loadRecent() {
   try {
-    const url = '/api/recent?limit=10' + (_recentFilter !== 'all' ? '&post_type=' + _recentFilter : '');
+    const url = '/api/recent?limit=' + _recentLimit + (_recentFilter !== 'all' ? '&post_type=' + _recentFilter : '');
     const r = await fetch(url);
     const items = await r.json();
     const wrap = document.getElementById('recent-table-wrap');

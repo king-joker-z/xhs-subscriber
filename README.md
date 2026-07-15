@@ -1,6 +1,6 @@
 # xhs-subscriber
 
-小红书视频订阅下载服务。支持按博主主页或单视频 URL 自动定时下载，生成 Jellyfin/Kodi 兼容的 NFO 刮削文件。
+小红书视频/图文订阅下载服务。支持按博主主页或单视频 URL 自动定时下载，生成 Jellyfin/Kodi 兼容的 NFO 刮削文件。
 
 [![Docker Build](https://github.com/king-joker-z/xhs-subscriber/actions/workflows/docker-build.yml/badge.svg)](https://github.com/king-joker-z/xhs-subscriber/actions/workflows/docker-build.yml)
 [![Docker Pulls](https://img.shields.io/docker/pulls/jokermelove/xhs-subscriber)](https://hub.docker.com/r/jokermelove/xhs-subscriber)
@@ -8,13 +8,14 @@
 ## 功能特性
 
 - 🎬 支持订阅博主主页（自动翻页）或单视频 URL
+- 📷 支持图文作品：图片批量下载到 `{video_id}/` 子目录，NFO 写入 `movie.nfo`
 - 🔄 APScheduler 定时轮询，可配置间隔
-- 🚫 SQLite 去重，已下载视频自动跳过
+- 🚫 SQLite 去重，已下载作品自动跳过（区分视频/图文类型）
 - 📄 自动生成 Jellyfin/Kodi 兼容的 Movie NFO 文件
 - 🔁 tenacity 指数退避重试，网络抖动自动恢复
 - 🐳 多架构 Docker 镜像（amd64 / arm64）
 - 🌐 FastAPI HTTP 接口，支持健康检查和手动触发
-- 🖥️ 内置 Web 管理界面（`/ui`），可查看服务状态、订阅列表、已下载数量，一键触发检查
+- 🖥️ 内置 Web 管理界面（`/ui`），可查看服务状态、Cookie 状态指示灯、订阅列表、已下载数量（视频/图文分类统计），一键触发检查
 
 ## 快速开始
 
@@ -73,6 +74,7 @@ scheduler:
 downloader:
   concurrency: 3          # 并发下载数
   download_dir: /data/downloads
+  max_batch: 30           # 每次抓取博主作品的最大条数（默认 30）
 
 logging:
   level: INFO
