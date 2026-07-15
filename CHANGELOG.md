@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-07-15 11:xx — 迭代 #6
+
+### 迭代目标
+退避无限循环修复、Cookie 过期专项提示、上次检查时间暴露、README 补充 Web UI 说明
+
+### 完成内容
+- **fix: `fetcher.py` 退避最大重试限制（HIGH）**
+  - 429/403 退避后 `continue` 原本无次数上限，持续风控时会无限阻塞调度器
+  - 新增 `_MAX_BACKOFF = 3` 常量和 `_backoff_count` 计数器
+  - 超过 3 次连续退避后 `break` 放弃本次分页，并输出 ERROR 日志
+  - 成功响应后重置计数器，不影响正常分页流程
+  - 退避日志补充 `(n/3)` 进度标注，便于排查
+- **fix: `fetcher.py` Cookie 过期专项 WARNING（HIGH）**
+  - API 返回 `code=-3`（签名失效）或 `code=300012`（Cookie 过期/无效）时，原仅打印通用 ERROR
+  - 修复为：专项 `logger.warning` 输出 `⚠️ 小红书 Cookie 已失效` 提示，明确告知用户需更新 `XHS_COOKIE` 环境变量并重启服务
+- **feat: `scheduler.py` + `api.py` 上次检查时间（MEDIUM）**
+  - `XHSScheduler` 新增 `last_check_at: Optional[datetime]` 属性，`run_once()` 完成后记录 UTC 时间戳
+  - `StatusResponse` 新增 `last_check_at: str | None` 字段（ISO 8601 UTC 格式）
+  - `/api/status` 从 `scheduler.last_check_at` 读取并格式化返回
+  - Web UI 状态卡片底部新增「上次检查：」行，未执行时显示「尚未执行」
+- **docs: `README.md` 补充 Web UI 说明（MEDIUM）**
+  - 功能特性列表新增 Web 管理界面条目（`/ui`）
+  - HTTP API 表格补充 `GET /ui` 和 `GET /api/status` 两行
+  - 验证运行示例补充 `open http://localhost:8080/ui` 命令
+- **改动文件**：`src/fetcher.py`、`src/scheduler.py`、`src/api.py`、`README.md`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter6.py`）：14 项检查全部 PASS
+- git commit: `de51dca`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **下载进度日志**：流式下载大文件时补充 MB 级进度输出，方便用户感知下载状态
+- **Cookie 有效性预检**：服务启动时主动发一次轻量 API 请求验证 Cookie，启动日志中明确报告 Cookie 状态
+- **Dockerfile 优化**：当前 Dockerfile 未利用 BuildKit 缓存层，每次构建都重新安装全部依赖，可拆分 `requirements.txt` 安装层
+
+---
+
 ## 2026-07-15 10:xx — 迭代 #5
 
 ### 迭代目标
