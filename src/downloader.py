@@ -1,10 +1,18 @@
 """
 M4 - 下载引擎
-- httpx 流式下载
-- tenacity 指数退避重试（最多 3 次）
+- httpx 流式下载（含 10MB 进度日志）
+- tenacity AsyncRetrying 指数退避重试（最多 3 次，兼容 async 方法）
 - asyncio.Semaphore 控制并发
 - 下载前查 M2 去重，已存在则跳过
 - 文件路径：/data/downloads/{user_id}/{video_id}.mp4 / -thumb.jpg / .description
+
+修复说明：
+- DL-1: @_make_retry() 装饰 async 方法在 tenacity<8.2 下静默失败（不重试）
+  → 改用 AsyncRetrying 上下文管理器，兼容所有 tenacity>=8.0 版本
+- DL-2: 流式下载无进度日志，大文件下载时无法感知进度
+  → 每累计 10MB 输出一次 INFO 进度日志
+- DL-3: download_batch 中异常与正常跳过混淆计入 skipped
+  → 区分统计「已跳过（去重）」「成功」「异常失败」三类
 """
 from __future__ import annotations
 
@@ -15,7 +23,7 @@ from typing import Optional
 
 import httpx
 from tenacity import (
-    retry,
+    AsyncRetrying,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
@@ -30,15 +38,8 @@ logger = logging.getLogger(__name__)
 _DEFAULT_DOWNLOAD_DIR = "/data/downloads"
 _DEFAULT_CONCURRENCY = 3
 
-# 重试装饰器工厂（需要在运行时绑定 logger，所以用函数包装）
-def _make_retry():
-    return retry(
-        retry=retry_if_exception_type((httpx.TransportError, httpx.TimeoutException)),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=30),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True,
-    )
+# 进度日志阈值：每累计下载 10MB 输出一次 INFO
+_PROGRESS_LOG_BYTES = 10 * 1024 * 1024
 
 
 class Downloader:
@@ -141,7 +142,6 @@ class Downloader:
                         logger.warning("清理文件失败：%s，错误：%s", p, oe)
             return False
 
-    @_make_retry()
     async def _stream_download(
         self,
         url: str,
@@ -149,19 +149,44 @@ class Downloader:
         headers: dict,
     ) -> None:
         """
-        流式下载到文件，支持 tenacity 重试。
+        流式下载到文件，使用 AsyncRetrying 上下文管理器重试（兼容所有 tenacity>=8.0）。
         使用临时文件写入，完成后原子重命名，避免写入一半的脏文件。
+        每累计 10MB 输出一次进度 INFO 日志。
+
+        DL-1 修复：原 @_make_retry() 装饰 async 方法在 tenacity<8.2 下静默失败（不重试）。
+        改用 AsyncRetrying 上下文管理器，所有 tenacity>=8.0 版本均可正确重试 async 函数。
         """
         tmp_path = dest.with_suffix(dest.suffix + ".tmp")
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=15.0, read=self._timeout, write=30.0, pool=5.0),
-            follow_redirects=True,
-        ) as client:
-            async with client.stream("GET", url, headers=headers) as resp:
-                resp.raise_for_status()
-                with open(tmp_path, "wb") as f:
-                    async for chunk in resp.aiter_bytes(chunk_size=1024 * 64):
-                        f.write(chunk)
+        filename = dest.name
+
+        async for attempt in AsyncRetrying(
+            retry=retry_if_exception_type((httpx.TransportError, httpx.TimeoutException)),
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=2, max=30),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True,
+        ):
+            with attempt:
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(connect=15.0, read=self._timeout, write=30.0, pool=5.0),
+                    follow_redirects=True,
+                ) as client:
+                    async with client.stream("GET", url, headers=headers) as resp:
+                        resp.raise_for_status()
+                        downloaded_bytes = 0
+                        last_log_bytes = 0
+                        with open(tmp_path, "wb") as f:
+                            async for chunk in resp.aiter_bytes(chunk_size=1024 * 64):
+                                f.write(chunk)
+                                downloaded_bytes += len(chunk)
+                                # DL-2: 每 10MB 输出一次进度日志
+                                if downloaded_bytes - last_log_bytes >= _PROGRESS_LOG_BYTES:
+                                    logger.info(
+                                        "下载进度 %s：%.1f MB",
+                                        filename,
+                                        downloaded_bytes / (1024 * 1024),
+                                    )
+                                    last_log_bytes = downloaded_bytes
 
         # 原子重命名
         tmp_path.replace(dest)
@@ -173,15 +198,27 @@ class Downloader:
     ) -> tuple[int, int]:
         """
         批量下载。
-        :return: (成功数, 跳过/失败数)
+        DL-3 修复：区分「已跳过（去重）」「成功」「异常失败」三类，日志更清晰。
+        :return: (成功数, 跳过数)  — 异常失败单独计数并打印 ERROR
         """
         tasks = [self.download(meta, user_id) for meta in metas]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        success = sum(1 for r in results if r is True)
-        skipped = len(results) - success
+        success = 0
+        skipped = 0
+        failed = 0
+        for r in results:
+            if r is True:
+                success += 1
+            elif isinstance(r, BaseException):
+                failed += 1
+                logger.error("下载任务异常（已跳过）：%s", r)
+            else:
+                # r is False → 正常去重跳过
+                skipped += 1
+
         logger.info(
-            "批量下载完成 user_id=%s：成功 %d，跳过/失败 %d",
-            user_id, success, skipped,
+            "批量下载完成 user_id=%s：成功 %d，跳过（去重）%d，异常失败 %d",
+            user_id, success, skipped, failed,
         )
         return success, skipped
