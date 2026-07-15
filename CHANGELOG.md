@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-07-15 16:xx — 迭代 #14
+
+### 迭代目标
+图文作品 NFO 路径判断修复、按类型统计下载数、Web UI 视频/图文分类统计、自动刷新间隔可配置
+
+### 完成内容
+- **fix: `scheduler.py` 图文作品 NFO 生成路径判断修复（HIGH）**
+  - `_process_subscription` 中判断已下载内容时，图文作品的 `description` 文件路径已改为 `{video_id}/description.txt`（子目录），旧路径 `{video_id}.description` 无法命中
+  - 修复：根据 `meta.image_urls` 是否非空选择正确路径，确保图文作品也能触发 NFO 生成
+- **feat: `database.py` 添加 `get_download_count_by_type` 方法（LOW）**
+  - 按 `post_type` 分组统计，返回 `{"video": int, "image": int, "total": int}`
+  - `api_status` 改用此方法，同时获取总数和分类数
+- **feat: `api.py` StatusResponse 添加 `video_count` / `image_count` 字段（LOW）**
+  - `StatusResponse` 新增 `video_count: int = 0` 和 `image_count: int = 0`
+  - Web UI 已下载统计从 `N` 改为 `N 🎬M/📷K`（总数 + 视频数/图文数）
+  - 标签从「已下载视频」改为「已下载（视频/图文）」
+- **feat: `api.py` Web UI 自动刷新间隔可配置（LOW）**
+  - 操作区新增「自动刷新」下拉选择器：15s / 30s（默认）/ 60s / 关闭
+  - 新增 `setRefreshInterval(sec)` 函数，切换时先 `clearInterval` 清理旧定时器再重建
+- **改动文件**：`src/scheduler.py`、`src/database.py`、`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter14.py`）：14 项检查全部 PASS
+- git commit: `75991fd`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **`/api/recent` 支持 `?post_type=image` 筛选参数**
+- **fetcher.py 分页支持**：`fetch_user_videos` 当前只取第一页，博主作品超过一页时会漏掉旧作品
+- **Web UI 最近下载卡片支持 post_type 筛选**：添加「全部/视频/图文」切换 tab
+
+---
+
 ## 2026-07-15 16:xx — 迭代 #13
 
 ### 迭代目标
