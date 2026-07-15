@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-07-15 17:xx — 迭代 #20
+
+### 迭代目标
+downloads 表添加 user_id 列、订阅已下载数改用数据库精确统计、页脚版本号修复、图标 tooltip、config.example.yaml 补充 max_batch
+
+### 完成内容
+- **feat: `database.py` downloads 表添加 `user_id` 列（MEDIUM）**
+  - `CREATE TABLE` 语句新增 `user_id TEXT` 列
+  - 迁移 SQL 列表 `_MIGRATE_SQLS` 新增 `ADD COLUMN user_id TEXT`，旧库自动升级
+  - `mark_downloaded` 新增 `user_id: str | None = None` 参数，写入数据库
+  - `get_download_count_by_user` 改为精确 SQL 统计：`SELECT user_id, COUNT(*) FROM downloads WHERE user_id IN (...) GROUP BY user_id`
+- **feat: `downloader.py` `mark_downloaded` 传入 `user_id`（MEDIUM）**
+  - `download()` 调用 `mark_downloaded` 时传入 `user_id=user_id`，实现下载记录与博主关联
+- **feat: `api.py` 订阅「已下载数」改用数据库精确统计（MEDIUM）**
+  - 移除文件系统 `iterdir` 统计逻辑
+  - 改为先批量收集 `user_ids`，调用 `get_download_count_by_user` 精确统计
+- **fix: `api.py` 页脚版本号加载时机修复（LOW）**
+  - 在 `loadStatus()` 成功回调中同步更新 `footer-version` 元素，确保页面加载后版本号正确显示
+- **fix: `api.py` 订阅类型图标添加 title tooltip（LOW）**
+  - 👤 图标添加 `title="博主主页订阅"`
+  - 🎬 图标添加 `title="单视频订阅"`
+- **feat: `config/config.example.yaml` 补充 `max_batch` 字段说明（LOW）**
+  - 新增 `max_batch: 30` 配置项及注释说明
+- **改动文件**：`src/database.py`、`src/downloader.py`、`src/api.py`、`config/config.example.yaml`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter20.py`）：11 项检查全部 PASS
+- git commit: `81f18a9`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 16:xx — 迭代 #19
 
 ### 迭代目标
