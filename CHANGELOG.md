@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-07-15 19:xx — 迭代 #25
+
+### 迭代目标
+下载统计 UTC+8 日期修复、趋势图表 7/14/30 天切换、堆叠柱状图、各卡片锚点 id
+
+### 完成内容
+- **fix: `database.py` `get_download_stats_by_date` 改用 UTC+8 本地日期（LOW）**
+  - 日期截取改为 `substr(datetime(downloaded_at, '+8 hours'), 1, 10)`
+  - WHERE 条件改为 `datetime(downloaded_at, '+8 hours') >= datetime('now', '+8 hours', ? || ' days')`
+  - 修复 UTC+8 用户看到日期偏差一天的问题
+- **feat: `api.py` 下载趋势图表支持 7/14/30 天切换（LOW）**
+  - 趋势卡片标题行添加 7天/14天/30天 切换按钮
+  - 新增 `_statsDays = 14` 变量和 `setStatsDays(n)` 函数
+  - `loadStats()` 改为动态使用 `_statsDays` 参数
+- **feat: `api.py` 趋势图表改为堆叠柱状图（LOW）**
+  - 视频：红色（`#ff2d55`）；图文：蓝色（`#0a84ff`）
+  - 今日统计改用本地日期（`getFullYear/getMonth/getDate`），不再依赖 UTC ISO 字符串
+- **feat: `api.py` Web UI 各卡片添加锚点 id（LOW）**
+  - `#section-status`、`#section-actions`、`#section-subs`、`#section-stats`、`#section-recent`
+  - 支持通过 URL hash 快速跳转，如 `/ui#section-recent`
+- **改动文件**：`src/database.py`、`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter25.py`）：16 项检查全部 PASS
+- git commit: `30cce6b`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 18:xx — 迭代 #24
 
 ### 迭代目标
