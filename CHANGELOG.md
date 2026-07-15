@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-07-15 18:xx — 迭代 #24
+
+### 迭代目标
+Web UI 下载趋势迷你图表、今日下载统计、README API 表格补全
+
+### 完成内容
+- **feat: `api.py` Web UI 下载趋势迷你柱状图（LOW）**
+  - 新增「下载趋势」卡片，展示近 14 天每日下载柱状图
+  - 纯 CSS/JS 实现，无外部依赖；每根柱子 hover 显示日期/视频/图文/合计 tooltip
+  - 柱子高度按最大值等比缩放，最小高度 2px
+- **feat: `api.py` Web UI「今日下载」快速统计（LOW）**
+  - 趋势卡片标题行显示「今日: N 个」实时统计
+  - 通过 `/api/stats` 数据中匹配当天 UTC 日期计算
+- **feat: `api.py` `loadStats` 函数 + 定时刷新（LOW）**
+  - 新增 `loadStats()` 异步函数，调用 `/api/stats?days=14`
+  - 初始加载时调用，每 5 分钟自动刷新（`_statsTimer`）
+  - R 键刷新快捷键同步触发 `loadStats()`
+- **feat: `README.md` HTTP API 表格补全（LOW）**
+  - 新增 `/api/recent`、`/api/stats`、`/api/vacuum` 端点说明行
+  - 补充各端点的查询参数说明
+- **改动文件**：`src/api.py`、`README.md`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter24.py`）：10 项检查全部 PASS
+- git commit: `5ff8241`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 18:xx — 迭代 #23
 
 ### 迭代目标
