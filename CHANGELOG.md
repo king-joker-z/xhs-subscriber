@@ -4,6 +4,43 @@
 
 ---
 
+## 2026-07-15 16:xx — 迭代 #13
+
+### 迭代目标
+post_type 全链路打通（DB → 下载器 → API → UI）、图文作品 NFO 图文分类标签
+
+### 完成内容
+- **feat: `database.py` downloads 表添加 post_type 列（MEDIUM）**
+  - `_CREATE_TABLE_SQL` 新增 `post_type TEXT NOT NULL DEFAULT 'video'` 列
+  - 新增 `_MIGRATE_SQL`：`ALTER TABLE downloads ADD COLUMN post_type ...`，`init()` 启动时自动执行，已存在时捕获异常忽略（兼容旧数据库）
+  - `mark_downloaded(video_id, post_type="video")` 新增 `post_type` 参数，写入数据库
+  - `get_recent_downloads` 查询补充 `post_type` 列，返回字典包含 `post_type` 字段
+- **feat: `downloader.py` mark_downloaded 传入 post_type（MEDIUM）**
+  - `_do_download` 调用 `mark_downloaded(meta.video_id, post_type=meta.post_type)`
+  - 视频作品写入 `"video"`，图文作品写入 `"image"`
+- **feat: `api.py` RecentDownloadItem 添加 post_type + UI 图标（MEDIUM + LOW）**
+  - `RecentDownloadItem` 新增 `post_type: str = "video"` 字段
+  - `api_recent` 从数据库记录中读取 `post_type` 并填充
+  - Web UI 最近下载卡片：视频作品显示 🎬，图文作品显示 📷
+  - 表头「视频 ID」改为「作品 ID」（更准确）
+- **feat: `scraper.py` 图文作品 NFO 添加 `<genre>图文</genre>` 标签（LOW）**
+  - `is_image_post` 为 True 时额外写入 `<genre>图文</genre>`
+  - Jellyfin 可按「图文」分类筛选图文作品
+- **改动文件**：`src/database.py`、`src/downloader.py`、`src/api.py`、`src/scraper.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter13.py`）：11 项检查全部 PASS
+- git commit: `77dfbe7`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **`/api/status` 补充 `video_count` / `image_count`**：区分已下载的视频作品和图文作品数量
+- **Web UI 自动刷新间隔可配置**：当前固定 30s，可在 UI 中提供下拉选择
+- **图文作品下载完成后生成 NFO**：当前 `generate_nfo_batch` 在 scheduler 中调用，需确认图文作品也触发 NFO 生成
+- **`/api/recent` 支持 post_type 筛选参数**：`?post_type=image` 只返回图文作品
+
+---
+
 ## 2026-07-15 16:xx — 迭代 #12
 
 ### 迭代目标
