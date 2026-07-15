@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-07-15 16:xx — 迭代 #11
+
+### 迭代目标
+Cookie 状态持久化与 UI 指示灯、图文作品图片批量下载、config __repr__ 补充 enabled 状态
+
+### 完成内容
+- **feat: `scheduler.py` + `api.py` Cookie 状态持久化（MEDIUM）**
+  - `XHSScheduler` 新增 `cookie_status: str` 属性，初始值 `"unknown"`
+  - `_probe_cookie()` 根据预检结果写入四种状态：`ok`（有效）/ `expired`（过期）/ `error`（异常）/ `unknown`（网络受限/未检测）
+  - `StatusResponse` 新增 `cookie_status: str` 字段
+  - `/api/status` 从 `scheduler.cookie_status` 读取并返回
+  - Web UI 状态卡片新增「Cookie 状态」指示灯：🟢 有效 / 🔴 已过期 / 🔴 异常 / ⚪ 未知
+- **feat: `fetcher.py` VideoMeta 添加 image_urls 字段（LOW）**
+  - `VideoMeta` 数据类新增 `image_urls: list[str]` 字段（默认空列表）
+  - `_parse_extract_result` 中：`video_candidates` 为空且 `dl_list` 非空时，将 `dl_list` 中所有 URL 存入 `image_urls`（图文作品图片列表）
+  - 视频作品 `image_urls` 保持空列表
+- **feat: `downloader.py` 图文作品图片批量下载（LOW）**
+  - `_do_download` 中新增图文作品分支：`meta.image_urls` 非空时，在 `{user_id}/{video_id}/` 子目录下按序下载所有图片（`001.jpg`、`002.jpg`...）
+  - 自动从 URL 推断图片扩展名（`.jpg`/`.jpeg`/`.png`/`.webp`/`.avif`），默认 `.jpg`
+  - 下载完成后输出 INFO 日志（`图文作品图片下载完成：{video_id}，共 N 张`）
+  - 视频 URL 和图片列表均为空时降级为 DEBUG 日志，不再输出 WARNING
+- **fix: `config.py` `__repr__` 补充 enabled 状态（LOW）**
+  - `SubscriptionConfig.__repr__` 从 `name/user_id` 改为 `name/user_id/enabled`
+  - 日志中打印订阅对象时可直接看到是否启用，排查 disabled 订阅更直观
+- **改动文件**：`src/scheduler.py`、`src/api.py`、`src/fetcher.py`、`src/downloader.py`、`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter11.py`）：14 项检查全部 PASS
+- git commit: `fbf63d1`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **图文作品 NFO 适配**：图文作品下载到子目录后，`scraper.py` 的 NFO 生成路径需适配（当前 NFO 写在 `{user_id}/{video_id}.nfo`，图文作品应写在 `{user_id}/{video_id}/movie.nfo`）
+- **Web UI 订阅列表「仅显示启用」筛选**：添加切换按钮，隐藏 disabled 订阅，减少视觉干扰
+- **`/api/status` 补充 `cookie_nickname`**：Cookie 有效时返回登录用户昵称，方便用户确认当前 Cookie 归属
+
+---
+
 ## 2026-07-15 15:xx — 迭代 #10
 
 ### 迭代目标
