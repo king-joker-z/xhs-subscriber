@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-07-15 13:xx — 迭代 #8
+
+### 迭代目标
+Cookie 启动预检、cover_url 空列表修复、空订阅 WARNING、最近下载记录接口、NFO 补充 rating 字段
+
+### 完成内容
+- **feat: `scheduler.py` Cookie 有效性预检（HIGH）**
+  - `startup()` 新增 `_probe_cookie()` 调用，服务启动时主动向 `/api/sns/web/v2/user/me` 发一次轻量探测请求
+  - `code=0`：输出 `✅ Cookie 预检通过，当前登录用户：{nickname}`
+  - `code=-3` / `300012` 或 HTTP 401/403：输出 `⚠️ Cookie 已过期或无效` WARNING，提示用户更新 `XHS_COOKIE` 并重启
+  - 预检失败不阻断启动，网络受限时静默跳过（INFO 日志）
+- **fix: `fetcher.py` cover_url 空列表修复（MEDIUM）**
+  - 原 `str([]) = "[]"` 被写入 NFO 封面 URL，Jellyfin 无法加载封面
+  - 修复为：`cover_list` 为空列表时 `cover_url = ""`，非列表类型时也做空值保护
+- **fix: `config.py` 空订阅 WARNING（LOW）**
+  - `load_yaml` 解析订阅后新增 `enabled_count` 统计
+  - 订阅列表为空：`⚠️ 未定义任何订阅，服务将空转`
+  - 全部 disabled：`⚠️ 所有 N 个订阅均已 disabled，服务将空转`
+  - 正常情况：DEBUG 日志输出订阅数量
+- **feat: `database.py` 新增 get_recent_downloads()（LOW）**
+  - 新增 `get_recent_downloads(limit=10)` 方法，按下载时间倒序返回最近 N 条记录
+  - 返回格式：`[{"video_id": str, "downloaded_at": str}, ...]`
+  - 为后续 Web UI 展示最近下载记录提供数据接口
+- **feat: `scraper.py` NFO 补充 `<rating>` 字段（LOW）**
+  - 新增 `<rating>0.0</rating>`，避免 Jellyfin 媒体库评分显示为空
+- **改动文件**：`src/scheduler.py`、`src/fetcher.py`、`src/config.py`、`src/database.py`、`src/scraper.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter8.py`）：14 项检查全部 PASS
+- git commit: `906c2bc`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **Web UI 展示最近下载记录**：利用新增的 `get_recent_downloads()` 接口，在 `/api/status` 或新增 `/api/recent` 端点中暴露，并在 Web UI 中展示最近 10 条下载记录
+- **Dockerfile BuildKit 缓存优化**：`COPY src/` 移到 `pip install` 之后，利用层缓存加速镜像构建
+- **`/api/status` 补充 `enabled_subscription_count`**：当前只返回 `subscription_count`（含 disabled），可补充启用数量字段
+
+---
+
 ## 2026-07-15 12:xx — 迭代 #7
 
 ### 迭代目标
