@@ -38,7 +38,7 @@ class SubscriptionConfig:
         self.enabled: bool = data.get("enabled", True)
 
     def __repr__(self) -> str:
-        return f"<Subscription name={self.name} user_id={self.user_id}>"
+        return f"<Subscription name={self.name} user_id={self.user_id} enabled={self.enabled}>"
 
 
 class AppConfig(BaseSettings):

@@ -74,6 +74,7 @@ class VideoMeta:
     author: str
     publish_time: str          # YYYY-MM-DD
     tags: list[str] = field(default_factory=list)
+    image_urls: list[str] = field(default_factory=list)  # 图文作品图片列表（视频作品为空）
 
 
 # ------------------------------------------------------------------ #
@@ -131,8 +132,14 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
         )]
         # 只有明确匹配视频特征的 URL 才作为 video_url，图文作品返回空字符串
         video_url = video_candidates[0] if video_candidates else ""
+        # 图文作品：dl_list 中非视频的 URL 即为图片列表
+        if not video_candidates and dl_list:
+            image_urls = [u for u in dl_list if isinstance(u, str) and u]
+        else:
+            image_urls = []
     else:
         video_url = str(dl_list) if dl_list else ""
+        image_urls = []
 
     # 标签
     tags_raw = raw.get("作品标签") or raw.get("tags") or []
@@ -150,6 +157,7 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
         author=author,
         publish_time=publish_time,
         tags=tags,
+        image_urls=image_urls,
     )
 
 

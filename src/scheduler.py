@@ -43,6 +43,8 @@ class XHSScheduler:
         self._running = False
         # 上次全量检查完成时间（UTC），None 表示尚未执行过
         self.last_check_at: Optional[datetime] = None
+        # Cookie 预检状态：unknown / ok / expired / error
+        self.cookie_status: str = "unknown"
 
     async def startup(self) -> None:
         """
@@ -66,6 +68,7 @@ class XHSScheduler:
         cookie = self._config.xhs_cookie
         if not cookie or not cookie.strip():
             logger.warning("⚠️  Cookie 预检跳过：XHS_COOKIE 为空")
+            self.cookie_status = "error"
             return
 
         try:
@@ -90,25 +93,31 @@ class XHSScheduler:
                 if code == 0:
                     nickname = data.get("data", {}).get("nickname", "未知")
                     logger.info("✅ Cookie 预检通过，当前登录用户：%s", nickname)
+                    self.cookie_status = "ok"
                 elif code in (-3, 300012):
                     logger.warning(
                         "⚠️  Cookie 预检失败（code=%s）：Cookie 已过期或无效！"
                         "请重新从浏览器获取 Cookie 并更新 XHS_COOKIE 环境变量后重启服务。",
                         code,
                     )
+                    self.cookie_status = "expired"
                 else:
                     logger.warning("⚠️  Cookie 预检返回未知 code=%s，请确认 Cookie 是否有效", code)
+                    self.cookie_status = "error"
             elif resp.status_code in (401, 403):
                 logger.warning(
                     "⚠️  Cookie 预检失败（HTTP %s）：Cookie 已过期或无效！"
                     "请重新从浏览器获取 Cookie 并更新 XHS_COOKIE 环境变量后重启服务。",
                     resp.status_code,
                 )
+                self.cookie_status = "expired"
             else:
                 logger.info("Cookie 预检响应 HTTP %s，跳过状态判断（网络可能受限）", resp.status_code)
+                self.cookie_status = "unknown"
 
         except Exception as exc:
             logger.info("Cookie 预检请求失败（网络受限或超时），跳过：%s", exc)
+            self.cookie_status = "unknown"
 
     async def shutdown(self) -> None:
         """关闭 fetcher 共享 XHS 实例，应在 FastAPI shutdown 事件中调用"""

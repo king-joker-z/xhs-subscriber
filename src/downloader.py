@@ -110,8 +110,23 @@ class Downloader:
                 await self._stream_download(meta.video_url, video_path, headers)
                 created_files.append(video_path)
                 logger.info("视频下载完成：%s -> %s", meta.video_id, video_path)
+            elif meta.image_urls:
+                # 图文作品：批量下载图片到 {video_id}/ 子目录
+                img_dir = self._user_dir(user_id) / meta.video_id
+                img_dir.mkdir(parents=True, exist_ok=True)
+                for idx, img_url in enumerate(meta.image_urls, start=1):
+                    # 尝试从 URL 推断扩展名，默认 .jpg
+                    ext = ".jpg"
+                    for candidate in (".jpg", ".jpeg", ".png", ".webp", ".avif"):
+                        if candidate in img_url.lower():
+                            ext = candidate
+                            break
+                    img_path = img_dir / f"{idx:03d}{ext}"
+                    await self._stream_download(img_url, img_path, headers)
+                    created_files.append(img_path)
+                logger.info("图文作品图片下载完成：%s，共 %d 张", meta.video_id, len(meta.image_urls))
             else:
-                logger.warning("视频 URL 为空，跳过视频下载：%s", meta.video_id)
+                logger.debug("视频 URL 和图片列表均为空，跳过媒体下载：%s", meta.video_id)
 
             # 2. 下载封面
             if meta.cover_url:

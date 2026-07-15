@@ -79,6 +79,7 @@ class StatusResponse(BaseModel):
     interval_hours: float
     downloaded_total: int
     last_check_at: str | None  # ISO 8601 UTC，None 表示尚未执行过
+    cookie_status: str  # unknown / ok / expired / error
 
 
 # ------------------------------------------------------------------ #
@@ -177,6 +178,7 @@ async def api_status() -> StatusResponse:
         interval_hours=interval_hours,
         downloaded_total=downloaded_total,
         last_check_at=last_check_at,
+        cookie_status=_scheduler.cookie_status if _scheduler is not None else "unknown",
     )
 
 
@@ -277,6 +279,10 @@ _UI_HTML = """\
         <div class="lbl">运行状态</div>
       </div>
       <div class="stat">
+        <div class="val" id="stat-cookie">—</div>
+        <div class="lbl">Cookie 状态</div>
+      </div>
+      <div class="stat">
         <div class="val" id="stat-subs">—</div>
         <div class="lbl">订阅数量（启用/全部）</div>
       </div>
@@ -347,6 +353,18 @@ async function loadStatus() {
       (ok ? '运行中' : '未就绪');
     document.getElementById('stat-subs').textContent =
       (d.enabled_subscription_count ?? d.subscription_count) + '/' + d.subscription_count;
+    // Cookie 状态指示灯
+    var cookieEl = document.getElementById('stat-cookie');
+    if (cookieEl) {
+      var cs = d.cookie_status || 'unknown';
+      var cookieMap = {
+        ok:      '<span class="dot green"></span>有效',
+        expired: '<span class="dot red"></span>已过期',
+        error:   '<span class="dot red"></span>异常',
+        unknown: '<span class="dot" style="background:#aaa"></span>未知',
+      };
+      cookieEl.innerHTML = cookieMap[cs] || cookieMap['unknown'];
+    }
     document.getElementById('stat-interval').textContent = d.interval_hours;
     document.getElementById('stat-downloaded').textContent = d.downloaded_total ?? '—';
     document.getElementById('stat-uptime').textContent = fmtUptime(d.uptime_seconds);
