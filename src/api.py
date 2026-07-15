@@ -652,6 +652,7 @@ function escHtml(s) {
 }
 
 async function triggerVacuum() {
+  if (!confirm('确认执行 VACUUM？\n\n此操作将整理数据库碎片，通常耗时较短，执行期间不影响正常读写。')) return;
   const msg = document.getElementById('msg');
   msg.style.display = 'none';
   msg.className = '';
