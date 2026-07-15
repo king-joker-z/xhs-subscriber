@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-07-15 18:xx — 迭代 #21
+
+### 迭代目标
+最近下载按博主筛选、/api/vacuum token 保护、database get_recent_downloads user_id 参数
+
+### 完成内容
+- **feat: `database.py` `get_recent_downloads` 支持 `user_id` 筛选（LOW）**
+  - 新增 `user_id: str | None = None` 参数
+  - 动态构建 WHERE 条件，支持 `post_type` 和 `user_id` 组合筛选
+  - 返回结果新增 `user_id` 字段
+- **feat: `api.py` `RecentDownloadItem` 添加 `user_id` 字段（LOW）**
+  - 新增 `user_id: str | None = None` 字段
+- **feat: `api.py` `/api/recent` 支持 `?user_id=` 参数（LOW）**
+  - `api_recent` 新增 `user_id: str | None = None` 查询参数
+  - 透传至 `get_recent_downloads(user_id=user_id)`
+- **feat: `api.py` Web UI「最近下载」添加按博主筛选下拉（LOW）**
+  - 新增 `<select id="recent-user-select">` 下拉，默认「👤 全部博主」
+  - `loadStatus` 成功后动态填充订阅中有 `user_id` 的博主选项
+  - 新增 `setRecentUser(uid)` 函数，切换博主时重置 limit 并刷新
+  - `loadRecent` 中拼接 `&user_id=` 参数
+  - 最近下载列表每行显示博主 user_id 标签
+- **fix: `api.py` `/api/vacuum` 添加 `XHS_ADMIN_TOKEN` 保护（LOW）**
+  - 若环境变量 `XHS_ADMIN_TOKEN` 已设置，请求头 `X-Admin-Token` 必须匹配
+  - 不匹配时返回 HTTP 403
+  - 新增 `import os` 和 `Header`、`HTTPException` 导入
+- **改动文件**：`src/database.py`、`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter21.py`）：13 项检查全部 PASS
+- git commit: `86d6a6f`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 17:xx — 迭代 #20
 
 ### 迭代目标
