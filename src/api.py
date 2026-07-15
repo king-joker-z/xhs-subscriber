@@ -172,7 +172,8 @@ async def api_status() -> StatusResponse:
         user_ids = [s.user_id for s in cfg.subscriptions if s.user_id]
         try:
             db_counts = await _scheduler._db.get_download_count_by_user(user_ids)
-        except Exception:
+        except Exception as _e:
+            logger.warning("get_download_count_by_user 失败，已降级为空字典：%s", _e)
             db_counts = {}
         for s in cfg.subscriptions:
             dl_count = db_counts.get(s.user_id, 0) if s.user_id else 0
@@ -192,7 +193,8 @@ async def api_status() -> StatusResponse:
             downloaded_total = counts["total"]
             video_count = counts["video"]
             image_count = counts["image"]
-        except Exception:
+        except Exception as _e:
+            logger.warning("get_download_count_by_type 失败，已降级为零：%s", _e)
             downloaded_total = 0
             video_count = 0
             image_count = 0
@@ -238,7 +240,8 @@ async def api_recent(limit: int = 10, post_type: str | None = None, user_id: str
             post_type=r.get("post_type", "video"),
             user_id=r.get("user_id"),
         ) for r in rows]
-    except Exception:
+    except Exception as _e:
+        logger.warning("api_recent 查询失败：%s", _e)
         return []
 
 
@@ -253,7 +256,8 @@ async def api_stats(days: int = 14) -> list[dict]:
         return []
     try:
         return await _scheduler._db.get_download_stats_by_date(days=days)
-    except Exception:
+    except Exception as _e:
+        logger.warning("api_stats 查询失败：%s", _e)
         return []
 
 
