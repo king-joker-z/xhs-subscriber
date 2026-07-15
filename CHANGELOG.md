@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-15 19:xx — 迭代 #27
+
+### 迭代目标
+导航栏暗色主题适配、趋势图表空柱子暗色适配、/health 端点添加 uptime
+
+### 完成内容
+- **feat: `api.py` 导航栏暗色主题适配（LOW）**
+  - 暗色 CSS 新增 `nav { background: #2c2c2e; border-bottom-color: #3a3a3c; }`
+  - 新增 `nav a { color: #aaa !important; }` 和 `nav a:hover { color: #ff2d55 !important; }`
+- **fix: `api.py` 趋势图表空柱子颜色暗色适配（LOW）**
+  - 空柱子颜色从 `#e0e0e0`（亮色过亮）改为 `#555`（亮暗色均可接受）
+- **feat: `api.py` `/health` 端点添加 `uptime_seconds`（LOW）**
+  - `HealthResponse` 新增 `uptime_seconds: int = 0` 字段
+  - `/health` 端点计算 `_start_time` 到当前时间的秒数并返回
+  - 监控系统可通过 `/health` 获取服务运行时长，无需调用 `/api/status`
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter27.py`）：7 项检查全部 PASS
+- git commit: `8819aa9`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 19:xx — 迭代 #26
 
 ### 迭代目标
