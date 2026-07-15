@@ -163,15 +163,14 @@ async def api_status() -> StatusResponse:
         cfg = _scheduler._config
         interval_hours = cfg.interval_hours
         # 全部订阅（含 disabled）均展示，方便用户在 UI 中查看完整配置
-        download_dir = cfg.download_dir
+        # 通过数据库精确统计各订阅已下载数
+        user_ids = [s.user_id for s in cfg.subscriptions if s.user_id]
+        try:
+            db_counts = await _scheduler._db.get_download_count_by_user(user_ids)
+        except Exception:
+            db_counts = {}
         for s in cfg.subscriptions:
-            # 通过文件系统统计已下载数：user_id 订阅统计目录下文件数，video_url 订阅统计 1 个
-            dl_count = 0
-            if s.user_id:
-                user_dir = Path(download_dir) / s.user_id
-                if user_dir.exists():
-                    # 统计 .mp4 文件数 + 子目录数（图文作品）
-                    dl_count = sum(1 for p in user_dir.iterdir() if p.suffix == ".mp4" or p.is_dir())
+            dl_count = db_counts.get(s.user_id, 0) if s.user_id else 0
             subs.append(SubscriptionInfo(
                 name=s.name,
                 user_id=s.user_id,
@@ -449,6 +448,9 @@ async function loadStatus() {
     if (document.getElementById('stat-version')) {
       document.getElementById('stat-version').textContent = d.version ? 'v' + d.version : '—';
     }
+    // 同步更新页脚版本号
+    var fv = document.getElementById('footer-version');
+    if (fv && d.version) { fv.textContent = 'v' + d.version; }
     document.getElementById('stat-status').innerHTML =
       '<span class="dot ' + (ok ? 'green' : 'red') + '"></span>' +
       (ok ? '运行中' : '未就绪');
@@ -507,8 +509,8 @@ async function loadStatus() {
 
     let rows = subs.map(s => {
       const target = s.user_id
-        ? '<a class="link" href="https://www.xiaohongshu.com/user/profile/' + s.user_id + '" target="_blank">👤 ' + s.user_id + '</a>'
-        : (s.video_url ? '<a class="link" href="' + s.video_url + '" target="_blank">🎬 单视频</a>' : '—');
+        ? '<a class="link" href="https://www.xiaohongshu.com/user/profile/' + s.user_id + '" target="_blank" title="博主主页订阅">👤 ' + s.user_id + '</a>'
+        : (s.video_url ? '<a class="link" href="' + s.video_url + '" target="_blank" title="单视频订阅">🎬 单视频</a>' : '—');
       const status = s.enabled
         ? '<span class="tag on">启用</span>'
         : '<span class="tag off">停用</span>';

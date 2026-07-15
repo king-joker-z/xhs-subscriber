@@ -1,6 +1,6 @@
 """
 M2 - SQLite 去重数据库
-使用 aiosqlite 异步操作，表：downloads(video_id, downloaded_at)
+使用 aiosqlite 异步操作，表：downloads(video_id, downloaded_at, post_type, user_id)
 数据库文件：/data/downloads/.db/xhs.db
 """
 from __future__ import annotations
@@ -18,11 +18,15 @@ _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS downloads (
     video_id     TEXT PRIMARY KEY,
     downloaded_at DATETIME NOT NULL,
-    post_type    TEXT NOT NULL DEFAULT 'video'
+    post_type    TEXT NOT NULL DEFAULT 'video',
+    user_id      TEXT
 );
 """
-# 迁移：为旧表补充 post_type 列（已存在时忽略错误）
-_MIGRATE_SQL = "ALTER TABLE downloads ADD COLUMN post_type TEXT NOT NULL DEFAULT 'video';"
+# 迁移：为旧表补充列（已存在时忽略错误）
+_MIGRATE_SQLS = [
+    "ALTER TABLE downloads ADD COLUMN post_type TEXT NOT NULL DEFAULT 'video';",
+    "ALTER TABLE downloads ADD COLUMN user_id TEXT;",
+]
 
 
 class Database:
@@ -41,11 +45,12 @@ class Database:
         # WAL 模式提升并发读性能
         await self._conn.execute("PRAGMA journal_mode=WAL;")
         await self._conn.execute(_CREATE_TABLE_SQL)
-        # 迁移：为旧表补充 post_type 列（已存在时 SQLite 会报错，捕获并忽略）
-        try:
-            await self._conn.execute(_MIGRATE_SQL)
-        except Exception:
-            pass  # 列已存在，忽略
+        # 迁移：为旧表补充新列（已存在时 SQLite 会报错，捕获并忽略）
+        for migrate_sql in _MIGRATE_SQLS:
+            try:
+                await self._conn.execute(migrate_sql)
+            except Exception:
+                pass  # 列已存在，忽略
         await self._conn.commit()
         logger.info("数据库初始化完成：%s", self._db_path)
 
@@ -58,15 +63,24 @@ class Database:
 
     async def get_download_count_by_user(self, user_ids: list[str]) -> dict[str, int]:
         """
-        按 user_id 批量统计已下载数量（通过 video_id 前缀无法区分，需要调用方传入 user_id 列表）。
-        注意：downloads 表只存 video_id，不存 user_id，此方法通过 IN 查询 video_id 列表实现。
-        由于无法直接关联 user_id，此方法返回空字典占位，实际统计由 API 层通过文件系统实现。
+        按 user_id 精确统计已下载数量。
         :param user_ids: 用户 ID 列表
         :return: {user_id: count, ...}
         """
-        # downloads 表无 user_id 列，无法直接按用户统计
-        # 返回空字典，由调用方通过文件系统或其他方式统计
-        return {uid: 0 for uid in user_ids}
+        assert self._conn, "数据库未初始化，请先调用 init()"
+        if not user_ids:
+            return {}
+        placeholders = ",".join("?" * len(user_ids))
+        async with self._conn.execute(
+            f"SELECT user_id, COUNT(*) FROM downloads WHERE user_id IN ({placeholders}) GROUP BY user_id",
+            user_ids,
+        ) as cursor:
+            rows = await cursor.fetchall()
+        result = {uid: 0 for uid in user_ids}
+        for row in rows:
+            if row[0] in result:
+                result[row[0]] = row[1]
+        return result
 
     async def vacuum(self) -> None:
         """
@@ -91,20 +105,21 @@ class Database:
             row = await cursor.fetchone()
             return row is not None
 
-    async def mark_downloaded(self, video_id: str, post_type: str = "video") -> None:
+    async def mark_downloaded(self, video_id: str, post_type: str = "video", user_id: str | None = None) -> None:
         """
         标记视频/图文作品为已下载。
         :param video_id: 作品唯一 ID
         :param post_type: 作品类型，'video' 或 'image'，默认 'video'
+        :param user_id: 博主 user_id，单视频订阅时为 None
         """
         assert self._conn, "数据库未初始化，请先调用 init()"
         now = datetime.now(timezone.utc).isoformat()
         await self._conn.execute(
-            "INSERT OR REPLACE INTO downloads (video_id, downloaded_at, post_type) VALUES (?, ?, ?)",
-            (video_id, now, post_type),
+            "INSERT OR REPLACE INTO downloads (video_id, downloaded_at, post_type, user_id) VALUES (?, ?, ?, ?)",
+            (video_id, now, post_type, user_id),
         )
         await self._conn.commit()
-        logger.debug("已标记下载：video_id=%s post_type=%s at %s", video_id, post_type, now)
+        logger.debug("已标记下载：video_id=%s post_type=%s user_id=%s at %s", video_id, post_type, user_id, now)
 
     async def get_download_count(self) -> int:
         """返回已下载作品总数（用于健康检查/统计）"""

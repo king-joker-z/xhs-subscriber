@@ -5,6 +5,8 @@
 scheduler:
   # 轮询间隔（小时），支持小数，如 0.5 表示 30 分钟
   interval_hours: 6
+  # 每次轮询每个订阅最多抓取的作品数（防止首次运行时批量下载过多）
+  max_batch: 30
 
 downloader:
   # 并发下载数
