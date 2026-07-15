@@ -52,6 +52,7 @@ def set_scheduler(scheduler: "XHSScheduler") -> None:
 class HealthResponse(BaseModel):
     status: str
     version: str
+    uptime_seconds: int = 0  # 服务运行时长（秒）
 
 
 class RunResponse(BaseModel):
@@ -105,8 +106,9 @@ class StatusResponse(BaseModel):
     tags=["system"],
 )
 async def health() -> HealthResponse:
-    """返回服务健康状态"""
-    return HealthResponse(status="ok", version=_VERSION)
+    """返回服务健康状态，包含版本号和运行时长"""
+    uptime = int((datetime.now(timezone.utc) - _start_time).total_seconds())
+    return HealthResponse(status="ok", version=_VERSION, uptime_seconds=uptime)
 
 
 @app.post(
@@ -331,6 +333,9 @@ _UI_HTML = """\
   @media (prefers-color-scheme: dark) {
     body { background: #1c1c1e; color: #f5f5f7; }
     header { background: #2c2c2e; border-bottom-color: #3a3a3c; }
+    nav { background: #2c2c2e; border-bottom-color: #3a3a3c; }
+    nav a { color: #aaa !important; }
+    nav a:hover { color: #ff2d55 !important; }
     .card { background: #2c2c2e; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
     table th { background: #3a3a3c; }
     table tr:nth-child(even) { background: #3a3a3c; }
@@ -752,7 +757,7 @@ async function loadStats() {
         + '<div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:64px;">'
         + (d.image > 0 ? '<div style="width:100%;background:#0a84ff;height:' + imagePct + '%;min-height:2px;border-radius:2px 2px 0 0;"></div>' : '')
         + (d.video > 0 ? '<div style="width:100%;background:#ff2d55;height:' + videoPct + '%;min-height:2px;"></div>' : '')
-        + (d.count === 0 ? '<div style="width:100%;background:#e0e0e0;height:2px;"></div>' : '')
+        + (d.count === 0 ? '<div style="width:100%;background:#555;height:2px;border-radius:2px;"></div>' : '')
         + '</div>'
         + '<div style="font-size:9px;color:#aaa;writing-mode:vertical-rl;transform:rotate(180deg);line-height:1;margin-top:2px;">' + label + '</div>'
         + '</div>';
