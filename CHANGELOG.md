@@ -4,6 +4,47 @@
 
 ---
 
+## 2026-07-15 16:xx — 迭代 #12
+
+### 迭代目标
+图文作品 NFO 路径适配子目录、cookie_nickname 持久化、post_type 属性、空子目录清理、订阅列表筛选 UI
+
+### 完成内容
+- **fix: `scraper.py` 图文作品 NFO 路径适配子目录（HIGH）**
+  - `generate_nfo` 根据 `meta.image_urls` 是否非空判断作品类型（`is_image_post`）
+  - 图文作品：NFO 写入 `{download_dir}/{user_id}/{video_id}/movie.nfo`，封面 `local_thumb = "thumb.jpg"`
+  - 视频作品：NFO 写在 `{download_dir}/{user_id}/{video_id}.nfo`，封面 `local_thumb = "{video_id}-thumb.jpg"`（原逻辑不变）
+  - Jellyfin 可正确识别图文作品子目录中的 `movie.nfo`
+- **feat: `scheduler.py` + `api.py` cookie_nickname 持久化（LOW）**
+  - `XHSScheduler` 新增 `cookie_nickname: str` 属性，初始值 `""`
+  - `_probe_cookie()` Cookie 有效（code=0）时写入 `cookie_nickname = nickname`
+  - `StatusResponse` 新增 `cookie_nickname: str` 字段
+  - Web UI Cookie 状态指示灯有效时追加 `(昵称)` 小字，方便确认 Cookie 归属
+- **feat: `downloader.py` 图文作品封面路径适配 + 空子目录清理（LOW）**
+  - `_do_download` 根据 `is_image_post` 决定封面路径：图文作品封面写入 `{video_id}/thumb.jpg`，描述写入 `{video_id}/description.txt`
+  - 图文作品下载失败时，若 `{video_id}/` 子目录为空则自动 `rmdir` 清理，避免留下脏目录
+- **feat: `fetcher.py` VideoMeta 添加 post_type property（LOW）**
+  - `VideoMeta` 新增 `@property post_type`：`image_urls` 非空返回 `"image"`，否则返回 `"video"`
+  - 调用方可直接用 `meta.post_type` 区分作品类型，无需手动判断 `video_url`/`image_urls`
+- **feat: `api.py` Web UI 订阅列表「仅显示启用」筛选（LOW）**
+  - 订阅列表区域新增「仅显示启用」checkbox
+  - 提取 `renderSubTable(d)` 函数，checkbox 变更时重新渲染，无需重新请求 API
+  - `loadStatus` 将响应缓存到 `window._lastStatus`，供筛选切换复用
+- **改动文件**：`src/scraper.py`、`src/scheduler.py`、`src/api.py`、`src/downloader.py`、`src/fetcher.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter12.py`）：17 项检查全部 PASS
+- git commit: `28feee4`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **`/api/status` 补充 `post_type` 统计**：返回 `video_count` / `image_count` 区分已下载的视频作品和图文作品数量
+- **图文作品 NFO `<genre>` 补充「图文」标签**：方便 Jellyfin 按类型筛选
+- **`/api/recent` 返回 `post_type` 字段**：最近下载卡片区分视频/图文图标
+- **Web UI 自动刷新间隔可配置**：当前固定 30s，可在 UI 中提供下拉选择
+
+---
+
 ## 2026-07-15 16:xx — 迭代 #11
 
 ### 迭代目标
