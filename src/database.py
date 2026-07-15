@@ -145,6 +145,33 @@ class Database:
         counts["total"] = counts["video"] + counts["image"]
         return counts
 
+    async def get_download_stats_by_date(self, days: int = 14) -> list[dict]:
+        """
+        按日期统计最近 N 天的下载数量（UTC 日期）。
+        :param days: 统计天数，默认 14 天
+        :return: [{"date": "YYYY-MM-DD", "count": int, "video": int, "image": int}, ...]，按日期升序
+        """
+        assert self._conn, "数据库未初始化，请先调用 init()"
+        async with self._conn.execute(
+            """
+            SELECT
+                substr(downloaded_at, 1, 10) AS date,
+                COUNT(*) AS total,
+                SUM(CASE WHEN post_type = 'video' THEN 1 ELSE 0 END) AS video_cnt,
+                SUM(CASE WHEN post_type = 'image' THEN 1 ELSE 0 END) AS image_cnt
+            FROM downloads
+            WHERE downloaded_at >= datetime('now', ? || ' days')
+            GROUP BY date
+            ORDER BY date ASC
+            """,
+            (f"-{days}",),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [
+            {"date": row[0], "count": row[1], "video": row[2], "image": row[3]}
+            for row in rows
+        ]
+
     async def get_recent_downloads(
         self,
         limit: int = 10,

@@ -240,6 +240,21 @@ async def api_recent(limit: int = 10, post_type: str | None = None, user_id: str
         return []
 
 
+@app.get(
+    "/api/stats",
+    summary="按日期下载统计",
+    tags=["system"],
+)
+async def api_stats(days: int = 14) -> list[dict]:
+    """返回最近 N 天（默认 14 天）每日下载数量，按日期升序。"""
+    if _scheduler is None:
+        return []
+    try:
+        return await _scheduler._db.get_download_stats_by_date(days=days)
+    except Exception:
+        return []
+
+
 @app.post(
     "/api/vacuum",
     summary="执行数据库 VACUUM",
@@ -544,7 +559,7 @@ async function loadStatus() {
       const dlCount = (s.downloaded_count != null && s.downloaded_count > 0)
         ? s.downloaded_count : '—';
       const lastRun = s.last_run_at
-        ? s.last_run_at.replace('T', ' ').slice(0, 16) + ' UTC'
+        ? new Date(s.last_run_at).toLocaleString('zh-CN', {hour12: false}).slice(0, 16)
         : '—';
       return '<tr><td><strong>' + escHtml(s.name) + '</strong></td><td>' + target + '</td><td>' + status + '</td><td>' + dlCount + '</td><td style="font-size:0.8em;color:#888;">' + lastRun + '</td></tr>';
     }).join('');
