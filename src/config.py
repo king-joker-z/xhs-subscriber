@@ -127,6 +127,19 @@ class AppConfig(BaseSettings):
         subs_raw = data.get("subscriptions", [])
         self.subscriptions = [SubscriptionConfig(s) for s in subs_raw]
 
+        # 空订阅检查：全部 disabled 或列表为空时输出 WARNING，避免服务静默运行无任何订阅
+        enabled_count = sum(1 for s in self.subscriptions if s.enabled)
+        if not self.subscriptions:
+            logger.warning("⚠️  配置文件中未定义任何订阅，服务将空转。请在 config.yaml 中添加 subscriptions。")
+        elif enabled_count == 0:
+            logger.warning(
+                "⚠️  所有 %d 个订阅均已 disabled，服务将空转。"
+                "请在 config.yaml 中将至少一个订阅的 enabled 设为 true。",
+                len(self.subscriptions),
+            )
+        else:
+            logger.debug("订阅加载完成：共 %d 个，启用 %d 个", len(self.subscriptions), enabled_count)
+
         return self
 
 

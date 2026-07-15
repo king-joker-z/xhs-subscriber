@@ -127,6 +127,9 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     # ---- 地区 ----
     _text_elem(root, "country", "中国")
 
+    # ---- 评分（Jellyfin 兼容，固定 0.0，避免媒体库评分显示为空）----
+    _text_elem(root, "rating", "0.0")
+
     # ---- 来源 / 链接 ----
     _text_elem(root, "source", "xiaohongshu")
     _text_elem(root, "website", _build_note_url(meta.video_id))

@@ -44,8 +44,70 @@ class XHSScheduler:
         self.last_check_at: Optional[datetime] = None
 
     async def startup(self) -> None:
-        """启动 fetcher 共享 XHS 实例，应在 FastAPI startup 事件中调用"""
+        """
+        启动 fetcher 共享 XHS 实例，应在 FastAPI startup 事件中调用。
+        同时执行 Cookie 有效性预检：向小红书发一次轻量探测请求，
+        在启动日志中明确报告 Cookie 状态，避免服务静默运行数小时后才发现失效。
+        """
         await self._fetcher.start()
+        await self._probe_cookie()
+
+    async def _probe_cookie(self) -> None:
+        """
+        Cookie 有效性预检：发一次轻量 API 请求（获取用户信息），
+        根据响应码和业务 code 判断 Cookie 是否有效，并输出明确的启动日志。
+        预检失败不阻断启动，仅输出 WARNING，让用户知晓需要更新 Cookie。
+        """
+        import httpx
+        from .fetcher import _random_ua
+
+        probe_url = "https://www.xiaohongshu.com/api/sns/web/v2/user/me"
+        cookie = self._config.xhs_cookie
+        if not cookie or not cookie.strip():
+            logger.warning("⚠️  Cookie 预检跳过：XHS_COOKIE 为空")
+            return
+
+        try:
+            async with httpx.AsyncClient(
+                http2=True,
+                verify=False,
+                follow_redirects=True,
+                timeout=10,
+            ) as client:
+                resp = await client.get(
+                    probe_url,
+                    headers={
+                        "user-agent": _random_ua(),
+                        "referer": "https://www.xiaohongshu.com/",
+                        "cookie": cookie,
+                    },
+                )
+
+            if resp.status_code == 200:
+                data = resp.json()
+                code = data.get("code")
+                if code == 0:
+                    nickname = data.get("data", {}).get("nickname", "未知")
+                    logger.info("✅ Cookie 预检通过，当前登录用户：%s", nickname)
+                elif code in (-3, 300012):
+                    logger.warning(
+                        "⚠️  Cookie 预检失败（code=%s）：Cookie 已过期或无效！"
+                        "请重新从浏览器获取 Cookie 并更新 XHS_COOKIE 环境变量后重启服务。",
+                        code,
+                    )
+                else:
+                    logger.warning("⚠️  Cookie 预检返回未知 code=%s，请确认 Cookie 是否有效", code)
+            elif resp.status_code in (401, 403):
+                logger.warning(
+                    "⚠️  Cookie 预检失败（HTTP %s）：Cookie 已过期或无效！"
+                    "请重新从浏览器获取 Cookie 并更新 XHS_COOKIE 环境变量后重启服务。",
+                    resp.status_code,
+                )
+            else:
+                logger.info("Cookie 预检响应 HTTP %s，跳过状态判断（网络可能受限）", resp.status_code)
+
+        except Exception as exc:
+            logger.info("Cookie 预检请求失败（网络受限或超时），跳过：%s", exc)
 
     async def shutdown(self) -> None:
         """关闭 fetcher 共享 XHS 实例，应在 FastAPI shutdown 事件中调用"""

@@ -113,8 +113,12 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
     publish_time = raw_time[:10] if raw_time else ""
 
     # 封面
+    # 修复：cover_list 为空列表时，str([]) = "[]" 是无效 URL，应返回空字符串
     cover_list = raw.get("封面地址") or raw.get("cover") or []
-    cover_url = cover_list[0] if isinstance(cover_list, list) and cover_list else str(cover_list)
+    if isinstance(cover_list, list):
+        cover_url = cover_list[0] if cover_list else ""
+    else:
+        cover_url = str(cover_list) if cover_list else ""
 
     # 视频 URL（只取第一个，视频作品）
     dl_list = raw.get("下载地址") or raw.get("video_url") or []
