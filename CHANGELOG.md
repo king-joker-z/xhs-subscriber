@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-15 19:xx — 迭代 #28
+
+### 迭代目标
+页脚版本号服务端渲染、移除冗余 JS 版本号更新逻辑
+
+### 完成内容
+- **feat: `api.py` 页脚版本号改为服务端渲染（LOW）**
+  - `_UI_HTML` 页脚改为 `v__SERVER_VERSION__` 占位符
+  - `web_ui()` 函数改为 `_UI_HTML.replace("__SERVER_VERSION__", _VERSION)` 动态注入
+  - 页面加载即显示版本号，无需等待 `loadStatus()` 完成
+- **fix: `api.py` 移除冗余的 `footer-version` JS 更新逻辑（LOW）**
+  - 移除 `loadStatus` 中的 `footer-version` 元素更新代码（已由 SSR 替代）
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter28.py`）：5 项检查全部 PASS
+- git commit: `fd56ed8`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 19:xx — 迭代 #27
 
 ### 迭代目标
