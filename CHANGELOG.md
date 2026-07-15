@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-07-15 10:xx — 迭代 #5
+
+### 迭代目标
+修复订阅可见性 bug、统一版本号常量、NFO 兼容图文作品、补充下载统计
+
+### 完成内容
+- **fix: `config.py` 订阅过滤 bug**
+  - 原 `load_yaml` 中 `if s.get("enabled", True)` 过滤掉了 disabled 订阅，导致 `/api/status` 和 Web UI 中看不到已停用的订阅
+  - 修复为：保留全部订阅（含 disabled），调度时仍通过 `if sub.enabled` 过滤，UI 展示完整配置
+- **fix: `api.py` 版本号统一常量**
+  - 新增 `_VERSION = "1.0.0"` 模块级常量，替换 `/health`、`/api/status`、FastAPI 构造函数中三处硬编码 `"1.0.0"`
+  - UI 版本号徽章改为动态从 `/api/status` 读取，随服务端常量自动同步
+- **feat: `api.py` 补充下载统计**
+  - `StatusResponse` 新增 `downloaded_total: int` 字段
+  - `/api/status` 从数据库 `get_download_count()` 读取已下载视频总数
+  - Web UI 状态卡片新增「已下载视频」统计项
+- **fix: `scheduler.py` NFO 生成兼容图文作品**
+  - 原逻辑只对 `.mp4` 存在的视频生成 NFO，图文作品（无 `video_url`）永远不会生成 NFO
+  - 修复为：`mp4` 存在 **或** `.description` 文件存在，均触发 NFO 生成
+  - 日志文案从「无新视频需要刮削」改为「无新内容需要刮削」
+- **改动文件**：`src/config.py`、`src/api.py`、`src/scheduler.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter5.py`）：11 项检查全部 PASS
+- git commit: `a16e36f`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **Cookie 过期检测**：API 返回 `-3` / `300012` 错误码时，主动 WARNING 日志提示用户更新 Cookie，而不是静默失败
+- **Web UI 手动刷新订阅**：在 UI 中展示「上次检查时间」，方便用户判断调度是否正常运行
+- **README 补充 Web UI 截图说明**：当前 README 无 `/ui` 路径说明，新用户不知道有管理界面
+
+---
+
 ## 2026-07-14 19:xx — 迭代 #4
 
 ### 迭代目标
