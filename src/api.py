@@ -9,11 +9,12 @@ GET  /api/recent  → 最近下载记录列表（按下载时间倒序，默认 
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Header, HTTPException, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -70,6 +71,7 @@ class RecentDownloadItem(BaseModel):
     video_id: str
     downloaded_at: str
     post_type: str = "video"  # 'video' 或 'image'
+    user_id: str | None = None  # 博主 user_id，单视频订阅时为 None
 
 
 class StatusResponse(BaseModel):
@@ -219,16 +221,17 @@ async def api_status() -> StatusResponse:
     summary="最近下载记录",
     tags=["system"],
 )
-async def api_recent(limit: int = 10, post_type: str | None = None) -> list[RecentDownloadItem]:
-    """返回最近下载的作品记录，按下载时间倒序，默认 10 条；post_type 可选 'video'/'image' 筛选"""
+async def api_recent(limit: int = 10, post_type: str | None = None, user_id: str | None = None) -> list[RecentDownloadItem]:
+    """返回最近下载的作品记录，按下载时间倒序，默认 10 条；post_type 可选 'video'/'image' 筛选；user_id 可选博主筛选"""
     if _scheduler is None:
         return []
     try:
-        rows = await _scheduler._db.get_recent_downloads(limit=limit, post_type=post_type)
+        rows = await _scheduler._db.get_recent_downloads(limit=limit, post_type=post_type, user_id=user_id)
         return [RecentDownloadItem(
             video_id=r["video_id"],
             downloaded_at=r["downloaded_at"],
             post_type=r.get("post_type", "video"),
+            user_id=r.get("user_id"),
         ) for r in rows]
     except Exception:
         return []
@@ -239,8 +242,13 @@ async def api_recent(limit: int = 10, post_type: str | None = None) -> list[Rece
     summary="执行数据库 VACUUM",
     tags=["system"],
 )
-async def api_vacuum() -> dict:
-    """执行 SQLite VACUUM，整理数据库碎片，释放未使用空间。"""
+async def api_vacuum(x_admin_token: str | None = Header(default=None)) -> dict:
+    """执行 SQLite VACUUM，整理数据库碎片，释放未使用空间。
+    若环境变量 XHS_ADMIN_TOKEN 已设置，则请求头 X-Admin-Token 必须匹配，否则返回 403。
+    """
+    admin_token = os.environ.get("XHS_ADMIN_TOKEN", "")
+    if admin_token and x_admin_token != admin_token:
+        raise HTTPException(status_code=403, detail="X-Admin-Token 不匹配或缺失")
     if _scheduler is None:
         return {"status": "error", "message": "调度器未初始化"}
     try:
@@ -414,10 +422,13 @@ _UI_HTML = """\
   <!-- 最近下载记录 -->
   <div class="card">
     <h2>最近下载</h2>
-    <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+    <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <button class="btn" id="recent-tab-all" onclick="setRecentFilter('all')" style="padding:3px 10px;font-size:0.85em;background:#555;color:#fff;">全部</button>
       <button class="btn" id="recent-tab-video" onclick="setRecentFilter('video')" style="padding:3px 10px;font-size:0.85em;background:#888;color:#fff;">🎬 视频</button>
       <button class="btn" id="recent-tab-image" onclick="setRecentFilter('image')" style="padding:3px 10px;font-size:0.85em;background:#888;color:#fff;">📷 图文</button>
+      <select id="recent-user-select" onchange="setRecentUser(this.value)" style="font-size:0.85em;padding:3px 8px;border-radius:6px;border:1px solid #ccc;background:inherit;color:inherit;">
+        <option value="">👤 全部博主</option>
+      </select>
     </div>
     <div id="recent-table-wrap">
     </div>
@@ -451,6 +462,19 @@ async function loadStatus() {
     // 同步更新页脚版本号
     var fv = document.getElementById('footer-version');
     if (fv && d.version) { fv.textContent = 'v' + d.version; }
+    // 填充博主筛选下拉（从订阅列表提取有 user_id 的订阅）
+    var userSel = document.getElementById('recent-user-select');
+    if (userSel && d.subscriptions) {
+      var curVal = userSel.value;
+      userSel.innerHTML = '<option value="">👤 全部博主</option>';
+      d.subscriptions.filter(function(s) { return s.user_id; }).forEach(function(s) {
+        var opt = document.createElement('option');
+        opt.value = s.user_id;
+        opt.textContent = (s.name || s.user_id) + ' (' + s.user_id + ')';
+        if (s.user_id === curVal) opt.selected = true;
+        userSel.appendChild(opt);
+      });
+    }
     document.getElementById('stat-status').innerHTML =
       '<span class="dot ' + (ok ? 'green' : 'red') + '"></span>' +
       (ok ? '运行中' : '未就绪');
@@ -528,6 +552,7 @@ async function loadStatus() {
 
 var _recentFilter = 'all';
 var _recentLimit = 10;
+var _recentUserId = '';
 function setRecentFilter(type) {
   _recentFilter = type;
   _recentLimit = 10;
@@ -537,6 +562,11 @@ function setRecentFilter(type) {
   });
   loadRecent();
 }
+function setRecentUser(uid) {
+  _recentUserId = uid;
+  _recentLimit = 10;
+  loadRecent();
+}
 function loadMoreRecent() {
   _recentLimit += 10;
   loadRecent();
@@ -544,7 +574,9 @@ function loadMoreRecent() {
 
 async function loadRecent() {
   try {
-    const url = '/api/recent?limit=' + _recentLimit + (_recentFilter !== 'all' ? '&post_type=' + _recentFilter : '');
+    let url = '/api/recent?limit=' + _recentLimit;
+    if (_recentFilter !== 'all') url += '&post_type=' + _recentFilter;
+    if (_recentUserId) url += '&user_id=' + encodeURIComponent(_recentUserId);
     const r = await fetch(url);
     const items = await r.json();
     const wrap = document.getElementById('recent-table-wrap');
@@ -556,7 +588,8 @@ async function loadRecent() {
       const xhsUrl = 'https://www.xiaohongshu.com/explore/' + escHtml(item.video_id);
       const at = item.downloaded_at ? item.downloaded_at.replace('T', ' ').slice(0, 19) : '—';
       const icon = item.post_type === 'image' ? '📷' : '🎬';
-      return '<tr><td>' + icon + ' <a class="link" href="' + xhsUrl + '" target="_blank">' + escHtml(item.video_id) + '</a></td><td>' + at + '</td></tr>';
+      const userTag = item.user_id ? ' <span style="font-size:0.8em;color:#aaa">👤' + escHtml(item.user_id) + '</span>' : '';
+      return '<tr><td>' + icon + ' <a class="link" href="' + xhsUrl + '" target="_blank">' + escHtml(item.video_id) + '</a>' + userTag + '</td><td>' + at + '</td></tr>';
     }).join('');
     wrap.innerHTML = '<table><thead><tr><th>作品 ID</th><th>下载时间</th></tr></thead><tbody>' + rows + '</tbody></table>';
   } catch(e) {
