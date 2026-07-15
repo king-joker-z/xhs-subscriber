@@ -108,6 +108,9 @@ subscriptions:
 | GET | `/health` | 健康检查，返回 `{"status":"ok","version":"1.0.0"}` |
 | POST | `/run` | 立即触发全量检查，返回 HTTP 202 |
 | GET | `/api/status` | 服务状态 JSON（版本、运行时长、订阅列表、已下载数、上次检查时间） |
+| GET | `/api/recent` | 最近下载记录列表（`?limit=10&post_type=video&user_id=xxx`） |
+| GET | `/api/stats` | 按日期下载统计（`?days=14`），返回每日 video/image/total 数量 |
+| POST | `/api/vacuum` | 执行 SQLite VACUUM（需 `X-Admin-Token` 头，若 `XHS_ADMIN_TOKEN` 已设置） |
 | GET | `/ui` | **Web 管理界面**，浏览器打开 [http://localhost:8080/ui](http://localhost:8080/ui) 即可使用 |
 
 ## 构建镜像

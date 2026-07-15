@@ -437,6 +437,14 @@ _UI_HTML = """\
     </div>
   </div>
 
+  <!-- 下载趋势 -->
+  <div class="card">
+    <h2>下载趋势 <span style="font-size:0.75em;color:#aaa;font-weight:400;">近 14 天 · 今日: <span id="stat-today">—</span></span></h2>
+    <div id="stats-chart-wrap" style="height:80px;display:flex;align-items:flex-end;gap:3px;padding:4px 0;">
+      <div class="empty" style="align-self:center;">加载中…</div>
+    </div>
+  </div>
+
   <!-- 最近下载记录 -->
   <div class="card">
     <h2>最近下载</h2>
@@ -674,15 +682,49 @@ async function triggerRun() {
 // 初始加载 + 每 30 秒自动刷新
 loadStatus();
 loadRecent();
+loadStats();
 var _statusTimer = setInterval(loadStatus, 30000);
 var _recentTimer = setInterval(loadRecent, 60000);
+var _statsTimer  = setInterval(loadStats, 300000);  // 5 分钟刷新一次趋势
 
 // 键盘快捷键：R 刷新状态，T 触发检查
 document.addEventListener('keydown', function(e) {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
-  if (e.key === 'r' || e.key === 'R') { loadStatus(); loadRecent(); }
+  if (e.key === 'r' || e.key === 'R') { loadStatus(); loadRecent(); loadStats(); }
   if (e.key === 't' || e.key === 'T') { triggerRun(); }
 });
+
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats?days=14');
+    const data = await r.json();
+    const wrap = document.getElementById('stats-chart-wrap');
+    if (!wrap) return;
+    if (!data || data.length === 0) {
+      wrap.innerHTML = '<div class="empty" style="align-self:center;">暂无数据</div>';
+      return;
+    }
+    const maxCount = Math.max(...data.map(d => d.count), 1);
+    // 今日统计
+    const today = new Date().toISOString().slice(0, 10);
+    const todayRow = data.find(d => d.date === today);
+    const todayEl = document.getElementById('stat-today');
+    if (todayEl) todayEl.textContent = todayRow ? todayRow.count + ' 个' : '0 个';
+    // 迷你柱状图
+    const bars = data.map(d => {
+      const pct = Math.max(Math.round((d.count / maxCount) * 100), 2);
+      const label = d.date.slice(5);  // MM-DD
+      const tip = d.date + '\\n视频: ' + d.video + '  图文: ' + d.image + '  合计: ' + d.count;
+      return '<div title="' + tip + '" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">'
+        + '<div style="width:100%;background:#ff2d55;border-radius:3px 3px 0 0;height:' + pct + '%;min-height:2px;"></div>'
+        + '<div style="font-size:9px;color:#aaa;writing-mode:vertical-rl;transform:rotate(180deg);line-height:1;">' + label + '</div>'
+        + '</div>';
+    }).join('');
+    wrap.innerHTML = bars;
+  } catch(e) {
+    console.error('loadStats error:', e);
+  }
+}
 
 function setRefreshInterval(sec) {
   clearInterval(_statusTimer);
