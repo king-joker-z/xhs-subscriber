@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-07-15 15:xx — 迭代 #10
+
+### 迭代目标
+修复图文作品 video_url 误设为图片 URL、生成 requirements.lock、更新 API 文档、triggerRun 后刷新最近下载
+
+### 完成内容
+- **fix: `fetcher.py` 图文作品 video_url 修复（HIGH）**
+  - 原逻辑：`video_candidates` 为空时回退到 `dl_list[0]`，图文作品的下载地址是图片列表，导致图片 URL 被当作视频下载，存为 `.mp4` 文件损坏
+  - 修复为：`video_candidates` 为空时 `video_url = ""`，图文作品不下载视频，只保留封面和描述文件
+  - 补充注释说明图文作品处理逻辑，便于后续维护
+- **feat: `requirements.lock` 精确版本锁定（MEDIUM）**
+  - 新增 `requirements.lock` 文件，记录当前环境所有直接依赖的精确版本（`==` 约束）
+  - 包含：fastapi、uvicorn、httpx、lxml、pydantic、pydantic-settings、PyYAML、aiosqlite、tenacity、h2 等核心依赖
+  - 生产环境/CI 使用 `pip install -r requirements.lock` 确保版本一致
+- **docs: `api.py` 模块 docstring 更新（LOW）**
+  - 模块顶部 docstring 补充 `GET /api/recent` 端点说明
+  - `api_status` 函数 docstring 补充所有响应字段说明（`enabled_subscription_count`、`downloaded_total`、`last_check_at` 等）
+- **feat: `api.py` triggerRun 后自动刷新最近下载（LOW）**
+  - `triggerRun` 成功后添加 `setTimeout(loadRecent, 3000)`
+  - 用户点击「立即检查」后 3 秒自动刷新最近下载记录卡片，无需手动刷新
+- **改动文件**：`src/fetcher.py`、`src/api.py`、`requirements.lock`（新增）
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter10.py`）：15 项检查全部 PASS
+- git commit: `c4ff661`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **图文作品图片批量下载**：当前图文作品只保留封面和描述，可考虑把图片列表全部下载到 `{video_id}/` 子目录，并生成对应 NFO
+- **`/api/status` 补充 `cookie_status` 字段**：将 Cookie 预检结果（有效/失效/未知）持久化到 scheduler，通过 API 暴露，让 Web UI 展示 Cookie 状态指示灯
+- **Web UI 订阅列表支持按状态筛选**：当前订阅列表展示全部（含 disabled），可添加「仅显示启用」切换按钮
+
+---
+
 ## 2026-07-15 14:xx — 迭代 #9
 
 ### 迭代目标
