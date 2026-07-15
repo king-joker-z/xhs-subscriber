@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-07-15 18:xx — 迭代 #22
+
+### 迭代目标
+每个订阅 last_run_at 记录、订阅表格「最后检查」列、键盘快捷键、README XHS_ADMIN_TOKEN 说明
+
+### 完成内容
+- **feat: `scheduler.py` 记录每个订阅最后检查时间（LOW）**
+  - `__init__` 新增 `_sub_last_run_at: dict[str, str] = {}` 字典
+  - `_process_subscription` 正常完成和异常时均写入 `_sub_last_run_at[sub.name]`（UTC ISO 字符串）
+- **feat: `api.py` `SubscriptionInfo` 添加 `last_run_at` 字段（LOW）**
+  - 新增 `last_run_at: str | None = None` 字段
+  - `api_status` 从 `_scheduler._sub_last_run_at.get(s.name)` 读取并填充
+- **feat: `api.py` Web UI 订阅表格添加「最后检查」列（LOW）**
+  - 表头新增「最后检查」列
+  - 每行显示 `last_run_at`（格式：`YYYY-MM-DD HH:MM UTC`），未检查时显示「—」
+- **feat: `api.py` Web UI 键盘快捷键（LOW）**
+  - `R` 键：刷新状态 + 最近下载
+  - `T` 键：触发立即检查
+  - 输入框/下拉框聚焦时不触发
+- **feat: `README.md` 补充 `XHS_ADMIN_TOKEN` 环境变量说明（LOW）**
+  - 环境变量表格新增 `XHS_ADMIN_TOKEN` 行，说明用途和请求头匹配规则
+- **改动文件**：`src/scheduler.py`、`src/api.py`、`README.md`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter22.py`）：11 项检查全部 PASS
+- git commit: `2895d87`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 18:xx — 迭代 #21
 
 ### 迭代目标
