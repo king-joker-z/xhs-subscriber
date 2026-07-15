@@ -49,6 +49,8 @@ class XHSScheduler:
         self.cookie_nickname: str = ""
         # 上次全量检查耗时（秒），None 表示尚未执行过
         self.last_run_elapsed: float | None = None
+        # 每个订阅最后检查时间（UTC ISO 字符串），key 为 sub.name
+        self._sub_last_run_at: dict[str, str] = {}
 
     async def startup(self) -> None:
         """
@@ -209,10 +211,12 @@ class XHSScheduler:
                 logger.info("订阅 %s：无新内容需要刮削", sub.name)
             _sub_elapsed = _time_sub.monotonic() - _sub_start
             logger.info("订阅 %s 处理完成，耗时 %.1f 秒", sub.name, _sub_elapsed)
+            self._sub_last_run_at[sub.name] = datetime.now(timezone.utc).isoformat()
 
         except Exception as exc:
             _sub_elapsed = _time_sub.monotonic() - _sub_start
             logger.error("订阅 %s 处理异常（已跳过，耗时 %.1f 秒）：%s", sub.name, _sub_elapsed, exc, exc_info=True)
+            self._sub_last_run_at[sub.name] = datetime.now(timezone.utc).isoformat()
 
     def start(self) -> None:
         """启动调度器"""

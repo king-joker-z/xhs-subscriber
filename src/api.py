@@ -63,8 +63,9 @@ class SubscriptionInfo(BaseModel):
     user_id: str | None
     video_url: str | None
     enabled: bool
-    downloaded_count: int = 0  # 已下载作品数（通过文件系统统计）
-    sub_type: str = "user"     # 'user'（博主主页）或 'video'（单视频）
+    downloaded_count: int = 0       # 已下载作品数（数据库精确统计）
+    sub_type: str = "user"          # 'user'（博主主页）或 'video'（单视频）
+    last_run_at: str | None = None  # 最后一次检查时间（UTC ISO 字符串）
 
 
 class RecentDownloadItem(BaseModel):
@@ -173,6 +174,7 @@ async def api_status() -> StatusResponse:
             db_counts = {}
         for s in cfg.subscriptions:
             dl_count = db_counts.get(s.user_id, 0) if s.user_id else 0
+            last_run_at = _scheduler._sub_last_run_at.get(s.name)
             subs.append(SubscriptionInfo(
                 name=s.name,
                 user_id=s.user_id,
@@ -180,6 +182,7 @@ async def api_status() -> StatusResponse:
                 enabled=s.enabled,
                 downloaded_count=dl_count,
                 sub_type="user" if s.user_id else "video",
+                last_run_at=last_run_at,
             ))
         # 从数据库读取已下载总数及分类统计
         try:
@@ -540,10 +543,13 @@ async function loadStatus() {
         : '<span class="tag off">停用</span>';
       const dlCount = (s.downloaded_count != null && s.downloaded_count > 0)
         ? s.downloaded_count : '—';
-      return '<tr><td><strong>' + escHtml(s.name) + '</strong></td><td>' + target + '</td><td>' + status + '</td><td>' + dlCount + '</td></tr>';
+      const lastRun = s.last_run_at
+        ? s.last_run_at.replace('T', ' ').slice(0, 16) + ' UTC'
+        : '—';
+      return '<tr><td><strong>' + escHtml(s.name) + '</strong></td><td>' + target + '</td><td>' + status + '</td><td>' + dlCount + '</td><td style="font-size:0.8em;color:#888;">' + lastRun + '</td></tr>';
     }).join('');
 
-    wrap.innerHTML = '<table><thead><tr><th>名称</th><th>目标</th><th>状态</th><th>已下载</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    wrap.innerHTML = '<table><thead><tr><th>名称</th><th>目标</th><th>状态</th><th>已下载</th><th>最后检查</th></tr></thead><tbody>' + rows + '</tbody></table>';
   } catch(e) {
     document.getElementById('stat-status').textContent = '连接失败';
     console.error(e);
@@ -655,6 +661,13 @@ loadStatus();
 loadRecent();
 var _statusTimer = setInterval(loadStatus, 30000);
 var _recentTimer = setInterval(loadRecent, 60000);
+
+// 键盘快捷键：R 刷新状态，T 触发检查
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'r' || e.key === 'R') { loadStatus(); loadRecent(); }
+  if (e.key === 't' || e.key === 'T') { triggerRun(); }
+});
 
 function setRefreshInterval(sec) {
   clearInterval(_statusTimer);

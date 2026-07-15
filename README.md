@@ -64,6 +64,7 @@ open http://localhost:8080/ui
 | `CONFIG_PATH` | ❌ | `/config/config.yaml` | 配置文件路径 |
 | `LOG_LEVEL` | ❌ | `INFO` | 日志级别 |
 | `HTTP_PORT` | ❌ | `8080` | HTTP 服务端口 |
+| `XHS_ADMIN_TOKEN` | ❌ | - | 若设置，`POST /api/vacuum` 请求头 `X-Admin-Token` 必须匹配，防止未授权触发 |
 
 ### config.yaml 字段
 
