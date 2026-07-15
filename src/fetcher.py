@@ -321,6 +321,9 @@ class XHSFetcher:
         # 分页获取作品列表
         all_notes: list[dict] = []
         cursor = ""
+        # 风控退避计数器：429/403 最多连续退避 3 次，超出则放弃本次分页，防止无限循环
+        _MAX_BACKOFF = 3
+        _backoff_count = 0
 
         while len(all_notes) < self.MAX_BATCH:
             params: dict[str, str] = {
@@ -357,22 +360,38 @@ class XHSFetcher:
                         headers=request_headers,
                     )
 
-                # 风控退避：429 限流 / 403 封禁，延长等待后重试一次
+                # 风控退避：429 限流 / 403 封禁，最多退避 _MAX_BACKOFF 次后放弃
                 if resp.status_code == 429:
+                    _backoff_count += 1
+                    if _backoff_count > _MAX_BACKOFF:
+                        logger.error(
+                            "博主主页 API 连续触发限流（429）超过 %d 次，放弃 user_id=%s",
+                            _MAX_BACKOFF, user_id,
+                        )
+                        break
                     logger.warning(
-                        "博主主页 API 触发限流（429）user_id=%s，退避 30s 后重试",
-                        user_id,
+                        "博主主页 API 触发限流（429）user_id=%s，退避 30s 后重试（%d/%d）",
+                        user_id, _backoff_count, _MAX_BACKOFF,
                     )
                     await asyncio.sleep(30)
                     continue
                 if resp.status_code == 403:
+                    _backoff_count += 1
+                    if _backoff_count > _MAX_BACKOFF:
+                        logger.error(
+                            "博主主页 API 连续返回 403 超过 %d 次，放弃 user_id=%s",
+                            _MAX_BACKOFF, user_id,
+                        )
+                        break
                     logger.warning(
-                        "博主主页 API 返回 403 user_id=%s，退避 60s 后重试",
-                        user_id,
+                        "博主主页 API 返回 403 user_id=%s，退避 60s 后重试（%d/%d）",
+                        user_id, _backoff_count, _MAX_BACKOFF,
                     )
                     await asyncio.sleep(60)
                     continue
 
+                # 成功响应，重置退避计数
+                _backoff_count = 0
                 data = resp.json()
             except Exception as exc:
                 logger.error("博主主页 API 请求失败 user_id=%s：%s", user_id, exc)
@@ -380,10 +399,19 @@ class XHSFetcher:
 
             code = data.get("code")
             if code != 0:
-                logger.error(
-                    "博主主页 API 返回错误 user_id=%s：code=%s msg=%s",
-                    user_id, code, data.get("msg"),
-                )
+                # 专项错误码检测：-3=签名失效，300012=Cookie 过期/无效
+                # 这两种情况需要用户主动更新 XHS_COOKIE 环境变量
+                if code in (-3, 300012):
+                    logger.warning(
+                        "⚠️  小红书 Cookie 已失效（code=%s）user_id=%s！"
+                        "请重新从浏览器获取 Cookie 并更新 XHS_COOKIE 环境变量后重启服务。",
+                        code, user_id,
+                    )
+                else:
+                    logger.error(
+                        "博主主页 API 返回错误 user_id=%s：code=%s msg=%s",
+                        user_id, code, data.get("msg"),
+                    )
                 break
 
             notes: list[dict] = data.get("data", {}).get("notes", [])

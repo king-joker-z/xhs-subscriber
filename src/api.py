@@ -71,6 +71,7 @@ class StatusResponse(BaseModel):
     subscriptions: list[SubscriptionInfo]
     interval_hours: float
     downloaded_total: int
+    last_check_at: str | None  # ISO 8601 UTC，None 表示尚未执行过
 
 
 # ------------------------------------------------------------------ #
@@ -123,6 +124,8 @@ async def api_status() -> StatusResponse:
     interval_hours = 6.0
     downloaded_total = 0
 
+    last_check_at: str | None = None
+
     if _scheduler is not None:
         cfg = _scheduler._config
         interval_hours = cfg.interval_hours
@@ -139,6 +142,9 @@ async def api_status() -> StatusResponse:
             downloaded_total = await _scheduler._db.get_download_count()
         except Exception:
             downloaded_total = 0
+        # 上次检查时间（UTC ISO 8601）
+        if _scheduler.last_check_at is not None:
+            last_check_at = _scheduler.last_check_at.strftime("%Y-%m-%d %H:%M:%S UTC")
 
     return StatusResponse(
         status="ok",
@@ -149,6 +155,7 @@ async def api_status() -> StatusResponse:
         subscriptions=subs,
         interval_hours=interval_hours,
         downloaded_total=downloaded_total,
+        last_check_at=last_check_at,
     )
 
 
@@ -248,6 +255,7 @@ _UI_HTML = """\
         <div class="lbl">运行时长</div>
       </div>
     </div>
+    <div style="margin-top:12px;font-size:12px;color:#aaa" id="stat-last-check">上次检查：—</div>
   </div>
 
   <!-- 操作卡片 -->
@@ -295,6 +303,9 @@ async function loadStatus() {
     document.getElementById('stat-interval').textContent = d.interval_hours;
     document.getElementById('stat-downloaded').textContent = d.downloaded_total ?? '—';
     document.getElementById('stat-uptime').textContent = fmtUptime(d.uptime_seconds);
+    // 上次检查时间
+    var lastCheck = document.getElementById('stat-last-check');
+    if (lastCheck) lastCheck.textContent = '上次检查：' + (d.last_check_at || '尚未执行');
     // 动态更新版本号徽章
     var vbadge = document.getElementById('ui-version');
     if (vbadge && d.version) vbadge.textContent = 'v' + d.version;

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -39,6 +40,8 @@ class XHSScheduler:
         )
         self._scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
         self._running = False
+        # 上次全量检查完成时间（UTC），None 表示尚未执行过
+        self.last_check_at: Optional[datetime] = None
 
     async def startup(self) -> None:
         """启动 fetcher 共享 XHS 实例，应在 FastAPI startup 事件中调用"""
@@ -58,8 +61,10 @@ class XHSScheduler:
         ]
         if not tasks:
             logger.warning("没有启用的订阅，跳过本次检查")
+            self.last_check_at = datetime.now(timezone.utc)
             return
         await asyncio.gather(*tasks, return_exceptions=True)
+        self.last_check_at = datetime.now(timezone.utc)
         logger.info("全量检查完成")
 
     async def _process_subscription(self, sub: SubscriptionConfig) -> None:

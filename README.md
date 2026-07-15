@@ -14,6 +14,7 @@
 - 🔁 tenacity 指数退避重试，网络抖动自动恢复
 - 🐳 多架构 Docker 镜像（amd64 / arm64）
 - 🌐 FastAPI HTTP 接口，支持健康检查和手动触发
+- 🖥️ 内置 Web 管理界面（`/ui`），可查看服务状态、订阅列表、已下载数量，一键触发检查
 
 ## 快速开始
 
@@ -47,6 +48,9 @@ curl http://localhost:8080/health
 
 # 手动触发立即执行
 curl -X POST http://localhost:8080/run
+
+# 打开 Web 管理界面（浏览器）
+open http://localhost:8080/ui
 ```
 
 ## 配置说明
@@ -100,6 +104,8 @@ subscriptions:
 |------|------|------|
 | GET | `/health` | 健康检查，返回 `{"status":"ok","version":"1.0.0"}` |
 | POST | `/run` | 立即触发全量检查，返回 HTTP 202 |
+| GET | `/api/status` | 服务状态 JSON（版本、运行时长、订阅列表、已下载数、上次检查时间） |
+| GET | `/ui` | **Web 管理界面**，浏览器打开 [http://localhost:8080/ui](http://localhost:8080/ui) 即可使用 |
 
 ## 构建镜像
 
