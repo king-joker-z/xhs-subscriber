@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-07-15 16:xx — 迭代 #17
+
+### 迭代目标
+Web UI 版本号展示、run_once 耗时统计、数据库 VACUUM 机制、docstring 修正
+
+### 完成内容
+- **fix: `api.py` docstring 修正（LOW）**
+  - `downloaded_total` 说明从「已下载视频总数」改为「已下载作品总数（视频+图文）」
+  - 补充 `video_count`、`image_count`、`max_batch` 字段说明
+- **feat: `api.py` Web UI 状态卡片添加版本号展示（LOW）**
+  - 新增「版本」stat 卡片（`stat-version`），显示 `v{version}`
+  - `loadStatus` JS 中读取 `d.version` 并渲染
+- **feat: `scheduler.py` run_once 添加执行耗时统计（LOW）**
+  - 使用 `time.monotonic()` 记录开始时间
+  - 全量检查完成后输出 INFO 日志：`全量检查完成，耗时 X.X 秒`
+- **feat: `database.py` 添加 vacuum 方法（LOW）**
+  - 新增 `async def vacuum()` 方法，执行 `VACUUM;` 整理数据库碎片
+  - 适合长期运行后定期调用（例如每周一次）
+  - 完成后输出 INFO 日志
+- **改动文件**：`src/api.py`、`src/scheduler.py`、`src/database.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter17.py`）：8 项检查全部 PASS
+- git commit: `65426a5`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 16:xx — 迭代 #16
 
 ### 迭代目标
