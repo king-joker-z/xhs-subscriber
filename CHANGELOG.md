@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-07-15 12:xx — 迭代 #7
+
+### 迭代目标
+修复 tenacity async 重试静默失败、补充下载进度日志、区分批量下载统计
+
+### 完成内容
+- **fix: `downloader.py` AsyncRetrying 替换 @_make_retry()（HIGH）**
+  - 原 `@_make_retry()` 装饰 `async def _stream_download`，tenacity<8.2 对 async 函数的 `@retry` 装饰器会静默失败（不重试），网络抖动时下载直接报错而非重试
+  - 修复为：改用 `AsyncRetrying` 上下文管理器（`async for attempt in AsyncRetrying(...)`），兼容所有 tenacity>=8.0 版本，正确重试 async 函数
+  - 重试参数保持不变：最多 3 次，指数退避 2-30s，重试前输出 WARNING 日志
+- **feat: `downloader.py` 流式下载进度日志（MEDIUM）**
+  - 新增 `_PROGRESS_LOG_BYTES = 10 * 1024 * 1024`（10MB）进度阈值常量
+  - 每累计下载 10MB 输出一次 `INFO` 进度日志（`下载进度 {filename}：{n} MB`）
+  - 使用 `last_log_bytes` 避免重复触发，不影响下载性能
+- **fix: `downloader.py` download_batch 区分统计（LOW）**
+  - 原 `gather(return_exceptions=True)` 返回的异常和正常跳过都计入 `skipped`，日志无法区分
+  - 修复为：区分三类结果：`True`=成功、`False`=已跳过（去重）、`BaseException`=异常失败
+  - 异常失败单独计数并输出 `ERROR` 日志，日志格式改为「成功 N，跳过（去重）N，异常失败 N」
+- **改动文件**：`src/downloader.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter7.py`）：12 项检查全部 PASS（含 AST 级装饰器验证）
+- git commit: `e9d5f0d`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **Cookie 有效性预检**：`startup()` 时主动发一次轻量 API 请求验证 Cookie，启动日志中明确报告 Cookie 状态
+- **Dockerfile BuildKit 缓存优化**：`COPY src/` 在 `pip install` 之后，利用层缓存加速镜像构建
+- **config.py 空订阅 WARNING**：订阅列表全部 disabled 时，`load_yaml` 后输出 WARNING 提示用户
+
+---
+
 ## 2026-07-15 11:xx — 迭代 #6
 
 ### 迭代目标
