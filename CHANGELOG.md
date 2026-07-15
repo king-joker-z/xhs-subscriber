@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-15 18:xx — 迭代 #23
+
+### 迭代目标
+按日期下载统计 API、/api/stats 端点、「最后检查」时间本地化
+
+### 完成内容
+- **feat: `database.py` 添加 `get_download_stats_by_date` 方法（LOW）**
+  - 按 UTC 日期统计最近 N 天（默认 14 天）每日下载数量
+  - 返回 `[{"date": "YYYY-MM-DD", "count": int, "video": int, "image": int}, ...]`，按日期升序
+  - 使用 `substr(downloaded_at, 1, 10)` 截取日期，`GROUP BY date` 聚合
+- **feat: `api.py` 添加 `/api/stats` 端点（LOW）**
+  - `GET /api/stats?days=14` 返回按日期的下载统计数组
+  - 调用 `get_download_stats_by_date(days=days)`，异常时返回空列表
+- **fix: `api.py` Web UI「最后检查」时间本地化（LOW）**
+  - 改用 `new Date(s.last_run_at).toLocaleString('zh-CN', {hour12: false})` 转换为本地时间
+  - 移除原来的 UTC 字符串拼接
+- **改动文件**：`src/database.py`、`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter23.py`）：8 项检查全部 PASS
+- git commit: `4e926e8`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 18:xx — 迭代 #22
 
 ### 迭代目标
