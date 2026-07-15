@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, Response
@@ -61,6 +62,8 @@ class SubscriptionInfo(BaseModel):
     user_id: str | None
     video_url: str | None
     enabled: bool
+    downloaded_count: int = 0  # 已下载作品数（通过文件系统统计）
+    sub_type: str = "user"     # 'user'（博主主页）或 'video'（单视频）
 
 
 class RecentDownloadItem(BaseModel):
@@ -160,12 +163,22 @@ async def api_status() -> StatusResponse:
         cfg = _scheduler._config
         interval_hours = cfg.interval_hours
         # 全部订阅（含 disabled）均展示，方便用户在 UI 中查看完整配置
+        download_dir = cfg.download_dir
         for s in cfg.subscriptions:
+            # 通过文件系统统计已下载数：user_id 订阅统计目录下文件数，video_url 订阅统计 1 个
+            dl_count = 0
+            if s.user_id:
+                user_dir = Path(download_dir) / s.user_id
+                if user_dir.exists():
+                    # 统计 .mp4 文件数 + 子目录数（图文作品）
+                    dl_count = sum(1 for p in user_dir.iterdir() if p.suffix == ".mp4" or p.is_dir())
             subs.append(SubscriptionInfo(
                 name=s.name,
                 user_id=s.user_id,
                 video_url=s.video_url,
                 enabled=s.enabled,
+                downloaded_count=dl_count,
+                sub_type="user" if s.user_id else "video",
             ))
         # 从数据库读取已下载总数及分类统计
         try:
@@ -290,6 +303,16 @@ _UI_HTML = """\
   .btn-primary { background: #0071e3; color: #fff; }
   .btn-danger  { background: #ff3b30; color: #fff; }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1c1c1e; color: #f5f5f7; }
+    header { background: #2c2c2e; border-bottom-color: #3a3a3c; }
+    .card { background: #2c2c2e; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+    table th { background: #3a3a3c; }
+    table tr:nth-child(even) { background: #3a3a3c; }
+    .lbl { color: #aaa; }
+    .empty { color: #888; }
+    footer { color: #666; }
+  }
   .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   #msg { font-size: 13px; color: #34c759; display: none; }
   #msg.err { color: #ff3b30; }
@@ -484,15 +507,17 @@ async function loadStatus() {
 
     let rows = subs.map(s => {
       const target = s.user_id
-        ? '<a class="link" href="https://www.xiaohongshu.com/user/profile/' + s.user_id + '" target="_blank">' + s.user_id + '</a>'
-        : (s.video_url ? '<a class="link" href="' + s.video_url + '" target="_blank">单视频</a>' : '—');
+        ? '<a class="link" href="https://www.xiaohongshu.com/user/profile/' + s.user_id + '" target="_blank">👤 ' + s.user_id + '</a>'
+        : (s.video_url ? '<a class="link" href="' + s.video_url + '" target="_blank">🎬 单视频</a>' : '—');
       const status = s.enabled
         ? '<span class="tag on">启用</span>'
         : '<span class="tag off">停用</span>';
-      return '<tr><td><strong>' + escHtml(s.name) + '</strong></td><td>' + target + '</td><td>' + status + '</td></tr>';
+      const dlCount = (s.downloaded_count != null && s.downloaded_count > 0)
+        ? s.downloaded_count : '—';
+      return '<tr><td><strong>' + escHtml(s.name) + '</strong></td><td>' + target + '</td><td>' + status + '</td><td>' + dlCount + '</td></tr>';
     }).join('');
 
-    wrap.innerHTML = '<table><thead><tr><th>名称</th><th>目标</th><th>状态</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    wrap.innerHTML = '<table><thead><tr><th>名称</th><th>目标</th><th>状态</th><th>已下载</th></tr></thead><tbody>' + rows + '</tbody></table>';
   } catch(e) {
     document.getElementById('stat-status').textContent = '连接失败';
     console.error(e);
@@ -605,6 +630,16 @@ function setRefreshInterval(sec) {
   }
 }
 </script>
+  <footer style="text-align:center;margin-top:24px;padding:12px;font-size:0.8em;color:#aaa;">
+    xhs-subscriber <span id="footer-version"></span> &nbsp;·&nbsp;
+    <a class="link" href="https://github.com/king-joker-z/xhs-subscriber" target="_blank">GitHub</a>
+  </footer>
+  <script>
+    var fv = document.getElementById('footer-version');
+    if (fv && window._lastStatus && window._lastStatus.version) {
+      fv.textContent = 'v' + window._lastStatus.version;
+    }
+  </script>
 </body>
 </html>
 """

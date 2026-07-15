@@ -56,6 +56,18 @@ class Database:
             self._conn = None
             logger.info("数据库连接已关闭")
 
+    async def get_download_count_by_user(self, user_ids: list[str]) -> dict[str, int]:
+        """
+        按 user_id 批量统计已下载数量（通过 video_id 前缀无法区分，需要调用方传入 user_id 列表）。
+        注意：downloads 表只存 video_id，不存 user_id，此方法通过 IN 查询 video_id 列表实现。
+        由于无法直接关联 user_id，此方法返回空字典占位，实际统计由 API 层通过文件系统实现。
+        :param user_ids: 用户 ID 列表
+        :return: {user_id: count, ...}
+        """
+        # downloads 表无 user_id 列，无法直接按用户统计
+        # 返回空字典，由调用方通过文件系统或其他方式统计
+        return {uid: 0 for uid in user_ids}
+
     async def vacuum(self) -> None:
         """
         执行 VACUUM 整理数据库碎片，释放未使用空间。
