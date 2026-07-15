@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-07-15 16:xx — 迭代 #16
+
+### 迭代目标
+max_batch 状态 API 暴露与 UI 展示、最近下载「加载更多」、README 图文作品支持说明
+
+### 完成内容
+- **feat: `api.py` StatusResponse 添加 `max_batch` 字段（LOW）**
+  - `StatusResponse` 新增 `max_batch: int = 30` 字段
+  - `api_status` 从 `_scheduler._config.max_batch` 读取并填充
+  - Web UI 状态卡片新增「单次抓取上限」展示（`stat-maxbatch`）
+- **feat: `api.py` Web UI 最近下载「加载更多」分页（LOW）**
+  - 新增 `_recentLimit` 状态变量（初始 10）
+  - 新增 `loadMoreRecent()` 函数：每次 +10 条并重新请求
+  - 新增「加载更多」按钮（`btn-load-more`）
+  - `setRecentFilter` 切换筛选时重置 `_recentLimit = 10`
+  - fetch URL 改用 `_recentLimit` 替代硬编码 10
+- **docs: `README.md` 更新图文作品支持说明（LOW）**
+  - 标题从「视频订阅下载服务」改为「视频/图文订阅下载服务」
+  - 功能特性新增图文作品说明（图片批量下载、NFO 路径）
+  - 已下载去重说明补充「区分视频/图文类型」
+  - Web UI 说明补充 Cookie 状态指示灯、视频/图文分类统计
+  - `config.yaml` 示例补充 `max_batch: 30` 字段说明
+- **改动文件**：`src/api.py`、`README.md`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter16.py`）：10 项检查全部 PASS
+- git commit: `c21b992`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 16:xx — 迭代 #15
 
 ### 迭代目标
