@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-07-15 16:xx — 迭代 #19
+
+### 迭代目标
+订阅列表「已下载数」列、暗色主题、Web UI 页脚、database 按用户统计方法
+
+### 完成内容
+- **feat: `database.py` 添加 `get_download_count_by_user` 方法（LOW）**
+  - 占位方法，返回 `{user_id: 0}` 字典（downloads 表无 user_id 列，实际统计由文件系统实现）
+- **feat: `api.py` SubscriptionInfo 添加 `downloaded_count` + `sub_type` 字段（LOW）**
+  - `SubscriptionInfo` 新增 `downloaded_count: int = 0` 和 `sub_type: str = "user"`
+  - `api_status` 通过文件系统统计：`user_id` 订阅统计 `{user_id}/` 目录下 `.mp4` 文件数 + 子目录数（图文作品）
+  - Web UI 订阅表格新增「已下载」列，显示已下载作品数
+  - 订阅目标列添加类型图标：👤（博主主页）/ 🎬（单视频）
+- **feat: `api.py` Web UI 暗色主题支持（LOW）**
+  - 新增 `@media (prefers-color-scheme: dark)` CSS 规则
+  - 覆盖 body、header、card、table、lbl、empty、footer 等元素的暗色样式
+- **feat: `api.py` Web UI 页脚（LOW）**
+  - 新增页脚：显示版本号 + GitHub 项目链接
+  - 版本号从 `window._lastStatus.version` 动态读取
+- **fix: `api.py` 补充 `from pathlib import Path` 导入**
+- **改动文件**：`src/api.py`、`src/database.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter19.py`）：11 项检查全部 PASS
+- git commit: `2e261ad`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-15 16:xx — 迭代 #18
 
 ### 迭代目标
