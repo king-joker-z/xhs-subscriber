@@ -54,7 +54,7 @@ class XHSScheduler:
         tasks = [
             self._process_subscription(sub)
             for sub in self._config.subscriptions
-            if sub.enabled
+            if sub.enabled  # disabled 订阅仅展示，不参与调度
         ]
         if not tasks:
             logger.warning("没有启用的订阅，跳过本次检查")
@@ -92,13 +92,15 @@ class XHSScheduler:
             # M4 下载
             success, skipped = await self._downloader.download_batch(metas, user_id)
 
-            # M5 刮削（只对本次成功下载的视频生成 NFO）
-            # 过滤出本次实际下载的（通过检查文件是否存在）
+            # M5 刮削（对本次实际下载的内容生成 NFO）
+            # 判断依据：mp4 存在（视频作品）或 description 文件存在（图文作品）
+            # 图文作品无 video_url，不会下载 mp4，但 description 文件会写入
+            from pathlib import Path
             downloaded_metas = []
             for meta in metas:
-                from pathlib import Path
                 video_path = Path(self._config.download_dir) / user_id / f"{meta.video_id}.mp4"
-                if video_path.exists():
+                desc_path = Path(self._config.download_dir) / user_id / f"{meta.video_id}.description"
+                if video_path.exists() or desc_path.exists():
                     downloaded_metas.append(meta)
 
             if downloaded_metas:
@@ -112,7 +114,7 @@ class XHSScheduler:
                     sub.name, success, skipped, len(nfo_paths),
                 )
             else:
-                logger.info("订阅 %s：无新视频需要刮削", sub.name)
+                logger.info("订阅 %s：无新内容需要刮削", sub.name)
 
         except Exception as exc:
             logger.error("订阅 %s 处理异常（已跳过）：%s", sub.name, exc, exc_info=True)

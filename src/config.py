@@ -123,11 +123,9 @@ class AppConfig(BaseSettings):
         if "level" in logging_cfg and os.environ.get("LOG_LEVEL") is None:
             self.log_level = logging_cfg["level"].upper()
 
-        # 解析订阅列表
+        # 解析订阅列表（保留全部订阅，包括 enabled=False 的，供 UI 展示）
         subs_raw = data.get("subscriptions", [])
-        self.subscriptions = [
-            SubscriptionConfig(s) for s in subs_raw if s.get("enabled", True)
-        ]
+        self.subscriptions = [SubscriptionConfig(s) for s in subs_raw]
 
         return self
 

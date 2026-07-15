@@ -20,12 +20,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# 服务版本（统一常量，避免多处硬编码）
+_VERSION = "1.0.0"
+
 # 记录服务启动时间
 _start_time: datetime = datetime.now(timezone.utc)
 
 app = FastAPI(
     title="xhs-subscriber",
-    version="1.0.0",
+    version=_VERSION,
     description="小红书视频订阅下载服务",
 )
 
@@ -67,6 +70,7 @@ class StatusResponse(BaseModel):
     subscription_count: int
     subscriptions: list[SubscriptionInfo]
     interval_hours: float
+    downloaded_total: int
 
 
 # ------------------------------------------------------------------ #
@@ -81,7 +85,7 @@ class StatusResponse(BaseModel):
 )
 async def health() -> HealthResponse:
     """返回服务健康状态"""
-    return HealthResponse(status="ok", version="1.0.0")
+    return HealthResponse(status="ok", version=_VERSION)
 
 
 @app.post(
@@ -117,10 +121,12 @@ async def api_status() -> StatusResponse:
     uptime = int((datetime.now(timezone.utc) - _start_time).total_seconds())
     subs: list[SubscriptionInfo] = []
     interval_hours = 6.0
+    downloaded_total = 0
 
     if _scheduler is not None:
         cfg = _scheduler._config
         interval_hours = cfg.interval_hours
+        # 全部订阅（含 disabled）均展示，方便用户在 UI 中查看完整配置
         for s in cfg.subscriptions:
             subs.append(SubscriptionInfo(
                 name=s.name,
@@ -128,15 +134,21 @@ async def api_status() -> StatusResponse:
                 video_url=s.video_url,
                 enabled=s.enabled,
             ))
+        # 从数据库读取已下载总数
+        try:
+            downloaded_total = await _scheduler._db.get_download_count()
+        except Exception:
+            downloaded_total = 0
 
     return StatusResponse(
         status="ok",
-        version="1.0.0",
+        version=_VERSION,
         uptime_seconds=uptime,
         scheduler_ready=_scheduler is not None,
         subscription_count=len(subs),
         subscriptions=subs,
         interval_hours=interval_hours,
+        downloaded_total=downloaded_total,
     )
 
 
@@ -207,7 +219,7 @@ _UI_HTML = """\
 <header>
   <span style="font-size:24px">📺</span>
   <h1>XHS 订阅管理</h1>
-  <span class="badge">v1.0.0</span>
+  <span class="badge" id="ui-version">v1.0.0</span>
 </header>
 <div class="container">
 
@@ -226,6 +238,10 @@ _UI_HTML = """\
       <div class="stat">
         <div class="val" id="stat-interval">—</div>
         <div class="lbl">检查间隔（小时）</div>
+      </div>
+      <div class="stat">
+        <div class="val" id="stat-downloaded">—</div>
+        <div class="lbl">已下载视频</div>
       </div>
       <div class="stat">
         <div class="val uptime" id="stat-uptime">—</div>
@@ -277,7 +293,11 @@ async function loadStatus() {
       (ok ? '运行中' : '未就绪');
     document.getElementById('stat-subs').textContent = d.subscription_count;
     document.getElementById('stat-interval').textContent = d.interval_hours;
+    document.getElementById('stat-downloaded').textContent = d.downloaded_total ?? '—';
     document.getElementById('stat-uptime').textContent = fmtUptime(d.uptime_seconds);
+    // 动态更新版本号徽章
+    var vbadge = document.getElementById('ui-version');
+    if (vbadge && d.version) vbadge.textContent = 'v' + d.version;
 
     const wrap = document.getElementById('sub-table-wrap');
     if (!d.subscriptions || d.subscriptions.length === 0) {
