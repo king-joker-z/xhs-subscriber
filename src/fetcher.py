@@ -121,14 +121,18 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
         cover_url = str(cover_list) if cover_list else ""
 
     # 视频 URL（只取第一个，视频作品）
+    # 修复：图文作品的 "下载地址" 是图片列表，video_candidates 为空时不应回退到 dl_list[0]（图片 URL）
+    # 否则下载器会把图片 URL 当作视频下载，存为 .mp4 导致文件损坏
+    # 图文作品应将 video_url 设为空字符串，由下载器跳过视频下载，只保留封面和描述
     dl_list = raw.get("下载地址") or raw.get("video_url") or []
     if isinstance(dl_list, list):
         video_candidates = [u for u in dl_list if isinstance(u, str) and (
             ".mp4" in u or "xhscdn" in u or "sns-video" in u
         )]
-        video_url = video_candidates[0] if video_candidates else (dl_list[0] if dl_list else "")
+        # 只有明确匹配视频特征的 URL 才作为 video_url，图文作品返回空字符串
+        video_url = video_candidates[0] if video_candidates else ""
     else:
-        video_url = str(dl_list)
+        video_url = str(dl_list) if dl_list else ""
 
     # 标签
     tags_raw = raw.get("作品标签") or raw.get("tags") or []

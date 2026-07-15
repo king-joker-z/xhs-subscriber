@@ -1,9 +1,10 @@
 """
 M7 - FastAPI HTTP 接口
-GET  /health → {"status": "ok", "version": "1.0.0"}
-POST /run    → {"status": "accepted"} HTTP 202，异步触发调度器立即执行
-GET  /ui     → Web 管理界面（HTML）
-GET  /api/status → 服务状态 JSON（供 UI 轮询）
+GET  /health      → {"status": "ok", "version": "1.0.0"}
+POST /run         → {"status": "accepted"} HTTP 202，异步触发调度器立即执行
+GET  /ui          → Web 管理界面（HTML）
+GET  /api/status  → 服务状态 JSON（版本、运行时长、订阅列表、已下载数、上次检查时间）
+GET  /api/recent  → 最近下载记录列表（按下载时间倒序，默认 10 条）
 """
 from __future__ import annotations
 
@@ -124,7 +125,20 @@ async def run_now(response: Response) -> RunResponse:
     tags=["system"],
 )
 async def api_status() -> StatusResponse:
-    """返回服务运行状态和订阅列表，供 Web UI 轮询使用"""
+    """
+    返回服务运行状态和订阅列表，供 Web UI 轮询使用。
+    响应字段：
+      status                    - 服务状态（ok）
+      version                   - 服务版本号
+      uptime_seconds            - 服务运行时长（秒）
+      scheduler_ready           - 调度器是否就绪
+      subscription_count        - 订阅总数（含 disabled）
+      enabled_subscription_count - 启用中的订阅数量
+      subscriptions             - 订阅列表（含 disabled）
+      interval_hours            - 轮询间隔（小时）
+      downloaded_total          - 已下载视频总数
+      last_check_at             - 上次全量检查完成时间（UTC），尚未执行时为 null
+    """
     uptime = int((datetime.now(timezone.utc) - _start_time).total_seconds())
     subs: list[SubscriptionInfo] = []
     interval_hours = 6.0
@@ -402,6 +416,8 @@ async function triggerRun() {
     if (r.status === 202 && d.status === 'accepted') {
       msg.textContent = '✓ 已触发全量检查，后台执行中…';
       msg.className = '';
+      // 触发检查后延迟 3 秒刷新最近下载记录，让用户看到最新结果
+      setTimeout(loadRecent, 3000);
     } else {
       msg.textContent = '✗ ' + (d.status || '触发失败');
       msg.className = 'err';
