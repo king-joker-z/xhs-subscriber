@@ -4,6 +4,46 @@
 
 ---
 
+## 2026-07-15 14:xx — 迭代 #9
+
+### 迭代目标
+新增最近下载记录 API 与 UI 卡片、补充启用订阅数量字段、修复 pathlib 内部 import、Dockerfile BuildKit 缓存优化
+
+### 完成内容
+- **feat: `api.py` 新增 `/api/recent` 端点（MEDIUM）**
+  - 新增 `RecentDownloadItem` Pydantic 模型（`video_id`、`downloaded_at`）
+  - 新增 `GET /api/recent?limit=10` 端点，调用 `get_recent_downloads()` 返回最近下载记录
+  - 调度器未就绪时返回空列表，异常时静默降级
+- **feat: `api.py` StatusResponse 补充 `enabled_subscription_count`（LOW）**
+  - `StatusResponse` 新增 `enabled_subscription_count: int` 字段
+  - `/api/status` 通过 `sum(1 for s in subs if s.enabled)` 计算启用数量
+  - Web UI 订阅数量展示格式改为「启用数/总数」（如 `2/3`）
+- **feat: `api.py` Web UI 最近下载记录卡片（LOW）**
+  - 新增「最近下载」卡片，展示最近 10 条下载记录（视频 ID 链接 + 下载时间）
+  - 新增 `loadRecent()` JS 函数，初始加载 + 每 60 秒自动刷新
+  - 视频 ID 自动生成小红书作品页面链接（`/explore/{video_id}`）
+- **fix: `scheduler.py` pathlib import 移至顶部（LOW）**
+  - `_process_subscription` 方法体内的 `from pathlib import Path` 移至文件顶部 import 区
+  - 消除每次处理订阅时的重复 import
+- **feat: `Dockerfile` BuildKit pip cache mount（LOW）**
+  - 添加 `# syntax=docker/dockerfile:1` BuildKit 语法声明
+  - `pip install` 改用 `--mount=type=cache,target=/root/.cache/pip`，缓存 pip 下载包
+  - 移除 `--no-cache-dir` 标志，配合 cache mount 加速重复构建
+  - 构建命令：`DOCKER_BUILDKIT=1 docker build ...` 或 `docker buildx build ...`
+- **改动文件**：`src/api.py`、`src/scheduler.py`、`Dockerfile`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter9.py`）：13 项检查全部 PASS
+- git commit: `949a89b`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **requirements.txt 精确版本锁定**：生成 `requirements.lock`（`pip freeze` 输出），供生产环境使用，避免依赖升级引入不兼容变更
+- **`/api/status` 文档注释更新**：模块 docstring 中 API 列表未包含 `/api/recent`，需同步更新
+- **Web UI 「立即检查」后自动刷新最近下载**：当前触发检查后不会自动刷新最近下载卡片，可在 `triggerRun` 成功后延迟调用 `loadRecent()`
+
+---
+
 ## 2026-07-15 13:xx — 迭代 #8
 
 ### 迭代目标
