@@ -121,13 +121,6 @@ class Database:
         await self._conn.commit()
         logger.debug("已标记下载：video_id=%s post_type=%s user_id=%s at %s", video_id, post_type, user_id, now)
 
-    async def get_download_count(self) -> int:
-        """返回已下载作品总数（用于健康检查/统计）"""
-        assert self._conn, "数据库未初始化，请先调用 init()"
-        async with self._conn.execute("SELECT COUNT(*) FROM downloads") as cursor:
-            row = await cursor.fetchone()
-            return row[0] if row else 0
-
     async def get_download_count_by_type(self) -> dict[str, int]:
         """
         按 post_type 统计已下载数量。
