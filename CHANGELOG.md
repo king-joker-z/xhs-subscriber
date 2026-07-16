@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #44
+
+### 迭代目标
+引入 tab-btn class 精确限定 tab 样式作用域，移除过宽的 .btn:not(.tab-active) 规则
+
+### 完成内容
+- **fix: `api.py` 引入 `.tab-btn` class 精确限定 tab 样式（LOW）**
+  - 新增 `.tab-btn { background: #888; color: #fff; }` 规则
+  - 新增 `.tab-btn.tab-active { background: #555 !important; }` 规则
+  - 移除 `.btn:not(.tab-active) { background: #888; }` 过宽规则（会影响所有非 tab 按钮）
+  - 6 个 tab 按钮（stats-tab-7/14/30、recent-tab-all/video/image）均添加 `tab-btn` class
+  - 移除内联 `color:#fff`（由 `.tab-btn` CSS 统一提供）
+  - 其他按钮（刷新状态、VACUUM、加载更多等）不受影响
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter44.py`）：11 项检查全部 PASS
+- git commit: `6e3402a`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #43
 
 ### 迭代目标
