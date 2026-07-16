@@ -20,7 +20,7 @@ api.py `/api/vacuum` 端点无防重入保护，并发调用可能导致多次 V
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter76.py`）：10 项检查全部 PASS
-- git commit: 待提交
+- git commit: `4989816`，已 push 到 `origin/main`
 
 ---
 
