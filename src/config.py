@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import yaml
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -61,15 +61,15 @@ class AppConfig(BaseSettings):
     # ---- 可选 ----
     config_path: str = "/config/config.yaml"
     log_level: str = "INFO"
-    http_port: int = 8080
+    http_port: int = Field(default=8080, ge=1, le=65535)
 
     # ---- 从 YAML 加载的字段（不直接走 env） ----
-    interval_hours: float = 6.0
-    download_concurrency: int = 3
+    interval_hours: float = Field(default=6.0, ge=0.1, le=168.0)  # 0.1h ~ 7天
+    download_concurrency: int = Field(default=3, ge=1, le=20)
     download_dir: str = "/data/downloads"
     log_dir: str = "/data/logs"
     subscriptions: List[SubscriptionConfig] = []
-    max_batch: int = 30  # 每次抓取博主作品的最大条数（对应 fetcher MAX_BATCH）
+    max_batch: int = Field(default=30, ge=1, le=500)  # 每次抓取博主作品的最大条数（对应 fetcher MAX_BATCH）
 
     @field_validator("xhs_cookie", mode="before")
     @classmethod
