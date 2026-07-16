@@ -20,7 +20,7 @@ scheduler.py `_save_state` 直接 `write_text` 写状态文件，无原子性保
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter65.py`）：7 项检查全部 PASS
-- git commit: 待提交
+- git commit: `f43347e`，已 push 到 `origin/main`
 
 ---
 
