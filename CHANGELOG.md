@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #53
+
+### 迭代目标
+scheduler.py 将函数内部延迟 import time 提升到模块顶层
+
+### 完成内容
+- **refactor: `scheduler.py` 将 `import time` 提升到模块顶层（LOW）**
+  - 原 `run_once` 和 `_process_subscription` 内各有一次 `import time as _time` / `import time as _time_sub` 延迟导入
+  - 统一提升为顶层 `import time`，消除重复延迟导入
+  - 所有 `_time.monotonic()` / `_time_sub.monotonic()` 替换为 `time.monotonic()`
+- **改动文件**：`src/scheduler.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter53.py`）：5 项检查全部 PASS
+- git commit: `4c544c7`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #52
 
 ### 迭代目标
