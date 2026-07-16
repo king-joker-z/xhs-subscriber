@@ -497,8 +497,6 @@ _UI_HTML = """\
     <div style="text-align:center;margin-top:8px;">
       <button class="btn" id="btn-load-more" onclick="loadMoreRecent()" style="background:#888;color:#fff;padding:4px 16px;font-size:0.85em;">加载更多</button>
     </div>
-      <div class="empty">加载中…</div>
-    </div>
   </div>
 
 </div>
@@ -633,8 +631,11 @@ function setRecentUser(uid) {
   loadRecent();
 }
 function loadMoreRecent() {
+  var btn = document.getElementById('btn-load-more');
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
   _recentLimit += 10;
-  loadRecent();
+  loadRecent().finally(function() { if (btn) btn.disabled = false; });
 }
 
 async function loadRecent() {
