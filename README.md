@@ -16,6 +16,8 @@
 - 🐳 多架构 Docker 镜像（amd64 / arm64）
 - 🌐 FastAPI HTTP 接口，支持健康检查和手动触发
 - 🖥️ 内置 Web 管理界面（`/ui`），可查看服务状态、Cookie 状态指示灯、订阅列表、已下载数量（视频/图文分类统计），一键触发检查
+- ⌨️ Web UI 支持键盘快捷键（`T` 立即检查 / `R` 刷新状态），nav 导航栏滚动高亮
+- 💾 订阅「上次检查时间」持久化到 `.xhs_sub_state.json`，服务重启后自动恢复
 
 ## 快速开始
 
@@ -99,6 +101,9 @@ subscriptions:
     ├── {video_id}-thumb.jpg    # 封面图
     ├── {video_id}.description  # 描述文本
     └── {video_id}.nfo          # Jellyfin/Kodi NFO 文件
+
+/data/                          # download_dir 的上级目录
+└── .xhs_sub_state.json         # 订阅「上次检查时间」持久化文件（运行时生成，已加入 .gitignore）
 ```
 
 ## HTTP API
