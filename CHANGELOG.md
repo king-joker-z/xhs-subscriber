@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 13:xx — 迭代 #61
+
+### 迭代目标
+config.py `load_yaml` 从 YAML 读取 `log_level` 时未验证合法性，非法值静默写入
+
+### 完成内容
+- **fix: `config.py` `load_yaml` 中 YAML `log_level` 加入合法性校验（LOW）**
+  - 提取模块级常量 `_ALLOWED_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}`，供 `field_validator` 和 `load_yaml` 共用，消除重复硬编码
+  - `field_validator("log_level")` 改用共享常量 `_ALLOWED_LOG_LEVELS`
+  - `load_yaml` 中从 YAML 读取 `log_level` 时，先校验是否在 `_ALLOWED_LOG_LEVELS` 内：合法则赋值，非法则输出 WARNING 并忽略（保持当前值，不中断启动）
+  - 修复前：非法值（如 `"VERBOSE"`）会直接赋值，`setup_logging` 中 `getattr` 兜底静默降级，用户无感知
+- **改动文件**：`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter61.py`）：7 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 12:xx — 迭代 #60
 
 ### 迭代目标

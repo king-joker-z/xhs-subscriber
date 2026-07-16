@@ -18,6 +18,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+# 合法日志级别集合（field_validator 与 load_yaml 共用，避免重复定义）
+_ALLOWED_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+
 # Python 版本检查（XHS-Downloader 要求 >= 3.12）
 if sys.version_info < (3, 12):
     print(
@@ -85,10 +88,9 @@ class AppConfig(BaseSettings):
     @field_validator("log_level", mode="before")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
-        allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
         upper = v.upper()
-        if upper not in allowed:
-            raise ValueError(f"LOG_LEVEL 必须是 {allowed} 之一，当前值：{v!r}")
+        if upper not in _ALLOWED_LOG_LEVELS:
+            raise ValueError(f"LOG_LEVEL 必须是 {_ALLOWED_LOG_LEVELS} 之一，当前值：{v!r}")
         return upper
 
     @model_validator(mode="after")
@@ -122,9 +124,18 @@ class AppConfig(BaseSettings):
         logging_cfg = data.get("logging", {})
         if "dir" in logging_cfg:
             self.log_dir = logging_cfg["dir"]
-        # log_level 环境变量优先，YAML 次之
+        # log_level 环境变量优先，YAML 次之；YAML 值需验证合法性
         if "level" in logging_cfg and os.environ.get("LOG_LEVEL") is None:
-            self.log_level = logging_cfg["level"].upper()
+            yaml_level = logging_cfg["level"].upper()
+            if yaml_level in _ALLOWED_LOG_LEVELS:
+                self.log_level = yaml_level
+            else:
+                logger.warning(
+                    "⚠️  config.yaml 中 logging.level=%r 非法（允许值：%s），已忽略，保持当前值：%s",
+                    logging_cfg["level"],
+                    ", ".join(sorted(_ALLOWED_LOG_LEVELS)),
+                    self.log_level,
+                )
 
         # 解析订阅列表（保留全部订阅，包括 enabled=False 的，供 UI 展示）
         subs_raw = data.get("subscriptions", [])
