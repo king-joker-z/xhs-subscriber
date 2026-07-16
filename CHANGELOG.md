@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 12:xx — 迭代 #60
+
+### 迭代目标
+fetcher.py 将 `fetch_user_videos` 内部延迟 `import time as _time_fetch` 提升到模块顶层
+
+### 完成内容
+- **refactor: `fetcher.py` 将 `import time` 提升到模块顶层（LOW）**
+  - 原 `fetch_user_videos` 函数内有 `import time as _time_fetch` 延迟导入
+  - 统一提升为顶层 `import time`，消除延迟导入
+  - 所有 `_time_fetch.monotonic()` 替换为 `time.monotonic()`
+  - 与 #53/#54/#58 系列 import 提升重构保持一致
+- **改动文件**：`src/fetcher.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter60.py`）：6 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 11:xx — 迭代 #59
 
 ### 迭代目标

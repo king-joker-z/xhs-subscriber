@@ -19,6 +19,7 @@ import logging
 import random
 import re
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -320,8 +321,7 @@ class XHSFetcher:
         :return: VideoMeta 列表
         """
         limit = max_batch if max_batch is not None else self.MAX_BATCH
-        import time as _time_fetch
-        _fetch_start = _time_fetch.monotonic()
+        _fetch_start = time.monotonic()
         logger.info("开始爬取博主主页：user_id=%s，最大抓取 %d 条", user_id, limit)
 
         # 导入 xhshow 签名库
@@ -466,7 +466,7 @@ class XHSFetcher:
                 results.append(meta)
             await _random_delay()
 
-        _fetch_elapsed = _time_fetch.monotonic() - _fetch_start
+        _fetch_elapsed = time.monotonic() - _fetch_start
         logger.info("博主 %s 共获取 %d 条作品元数据，耗时 %.1f 秒", user_id, len(results), _fetch_elapsed)
         return results
 
