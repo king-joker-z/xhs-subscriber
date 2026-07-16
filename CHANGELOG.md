@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #33
+
+### 迭代目标
+nav 导航栏添加滚动高亮，提升页面导航体验
+
+### 完成内容
+- **feat: `api.py` nav 导航栏添加 IntersectionObserver 滚动高亮（LOW）**
+  - 为 5 个 nav 链接添加 `data-section` 属性
+  - 使用 `IntersectionObserver` 监听各 section 可见性
+  - 当前可见区域对应的 nav 链接高亮（红色 + 底部边框）
+  - 默认高亮「状态」区域，浏览器不支持时优雅降级
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter33.py`）：9 项检查全部 PASS
+- git commit: `405aff7`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #32
 
 ### 迭代目标
