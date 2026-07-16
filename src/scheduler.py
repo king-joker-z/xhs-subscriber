@@ -16,13 +16,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from .config import AppConfig, SubscriptionConfig
 from .database import Database
 from .downloader import Downloader
-from .fetcher import XHSFetcher
+from .fetcher import XHSFetcher, _random_ua
 from .scraper import generate_nfo_batch
 
 logger = logging.getLogger(__name__)
@@ -95,9 +96,6 @@ class XHSScheduler:
         根据响应码和业务 code 判断 Cookie 是否有效，并输出明确的启动日志。
         预检失败不阻断启动，仅输出 WARNING，让用户知晓需要更新 Cookie。
         """
-        import httpx
-        from .fetcher import _random_ua
-
         probe_url = "https://www.xiaohongshu.com/api/sns/web/v2/user/me"
         cookie = self._config.xhs_cookie
         if not cookie or not cookie.strip():
