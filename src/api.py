@@ -334,6 +334,9 @@ _UI_HTML = """\
   .btn-primary { background: #0071e3; color: #fff; }
   .btn-danger  { background: #ff3b30; color: #fff; }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
+  nav a { color: #555; text-decoration: none; transition: color .15s; }
+  nav a:hover, nav a.nav-active { color: #ff2d55; }
+  nav a.nav-active { border-bottom-color: #ff2d55 !important; }
   @media (prefers-color-scheme: dark) {
     body { background: #1c1c1e; color: #f5f5f7; }
     header { background: #2c2c2e; border-bottom-color: #3a3a3c; }
@@ -366,11 +369,11 @@ _UI_HTML = """\
   <span class="badge" id="ui-version">v1.0.0</span>
 </header>
 <nav style="background:#fff;border-bottom:1px solid #e0e0e0;padding:0 32px;display:flex;gap:0;overflow-x:auto;">
-  <a href="#section-status" data-section="section-status" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color=this.classList.contains('nav-active')?'#ff2d55':'#555'">📊 状态</a>
-  <a href="#section-actions" data-section="section-actions" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color=this.classList.contains('nav-active')?'#ff2d55':'#555'">▶ 操作</a>
-  <a href="#section-subs" data-section="section-subs" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color=this.classList.contains('nav-active')?'#ff2d55':'#555'">📋 订阅</a>
-  <a href="#section-stats" data-section="section-stats" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color=this.classList.contains('nav-active')?'#ff2d55':'#555'">📈 趋势</a>
-  <a href="#section-recent" data-section="section-recent" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color=this.classList.contains('nav-active')?'#ff2d55':'#555'">🕐 最近</a>
+  <a href="#section-status" data-section="section-status" style="padding:10px 14px;font-size:0.85em;white-space:nowrap;border-bottom:2px solid transparent;">📊 状态</a>
+  <a href="#section-actions" data-section="section-actions" style="padding:10px 14px;font-size:0.85em;white-space:nowrap;border-bottom:2px solid transparent;">▶ 操作</a>
+  <a href="#section-subs" data-section="section-subs" style="padding:10px 14px;font-size:0.85em;white-space:nowrap;border-bottom:2px solid transparent;">📋 订阅</a>
+  <a href="#section-stats" data-section="section-stats" style="padding:10px 14px;font-size:0.85em;white-space:nowrap;border-bottom:2px solid transparent;">📈 趋势</a>
+  <a href="#section-recent" data-section="section-recent" style="padding:10px 14px;font-size:0.85em;white-space:nowrap;border-bottom:2px solid transparent;">🕐 最近</a>
 </nav>
 <div class="container">
 
