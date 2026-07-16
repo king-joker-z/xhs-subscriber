@@ -93,6 +93,7 @@ class StatusResponse(BaseModel):
     last_check_at: str | None  # ISO 8601 UTC，None 表示尚未执行过
     cookie_status: str  # unknown / ok / expired / error
     cookie_nickname: str  # Cookie 有效时的登录用户昵称，其他状态为空字符串
+    is_checking: bool = False  # 当前是否正在执行全量检查
 
 
 # ------------------------------------------------------------------ #
@@ -219,6 +220,7 @@ async def api_status() -> StatusResponse:
         last_check_at=last_check_at,
         cookie_status=_scheduler.cookie_status if _scheduler is not None else "unknown",
         cookie_nickname=_scheduler.cookie_nickname if _scheduler is not None else "",
+        is_checking=_scheduler._run_once_active if _scheduler is not None else False,
     )
 
 
@@ -582,6 +584,19 @@ async function loadStatus() {
     // 动态更新版本号徽章
     var vbadge = document.getElementById('ui-version');
     if (vbadge && d.version) vbadge.textContent = 'v' + d.version;
+    // 检查进行中时禁用「立即检查」按钮并显示提示
+    var btnRun = document.getElementById('btn-run');
+    if (btnRun) {
+      if (d.is_checking) {
+        btnRun.disabled = true;
+        btnRun.title = '全量检查正在执行中，请稍候…';
+      } else {
+        if (!btnRun.dataset.userDisabled) {
+          btnRun.disabled = false;
+          btnRun.title = '快捷键 T';
+        }
+      }
+    }
 
     // 订阅列表筛选
     var filterEl = document.getElementById('filter-enabled-only');
