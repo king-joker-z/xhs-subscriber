@@ -71,6 +71,13 @@ class SubscriptionConfig:
         self.video_url: Optional[str] = raw_url
         self.name: str = data.get("name", self.user_id or "unknown")
         self.enabled: bool = data.get("enabled", True)
+        # CFG-3 修复：user_id 和 video_url 同时为 None 时，订阅配置实际无效，
+        # 在加载阶段输出 warning，避免服务空转时难以排查原因。
+        if self.user_id is None and self.video_url is None:
+            logger.warning(
+                "SubscriptionConfig [%s]: user_id 和 video_url 均未配置，此订阅无法正常工作，请检查配置。",
+                self.name,
+            )
 
     def __repr__(self) -> str:
         return f"<Subscription name={self.name} user_id={self.user_id} enabled={self.enabled}>"
