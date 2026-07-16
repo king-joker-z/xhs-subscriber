@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #49
+
+### 迭代目标
+api_recent limit 参数添加范围验证（1-200），防止过大查询
+
+### 完成内容
+- **fix: `api.py` `api_recent` `limit` 参数添加范围验证（LOW）**
+  - 添加 `limit = max(1, min(limit, 200))` 限制
+  - 防止用户传入极大值导致数据库查询过慢
+  - docstring 补充范围说明
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter49.py`）：5 项检查全部 PASS
+- git commit: `b00b3be`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #48
 
 ### 迭代目标
