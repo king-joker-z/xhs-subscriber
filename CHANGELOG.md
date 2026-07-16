@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #43
+
+### 迭代目标
+趋势图 stats-tab 按钮改为 CSS tab-active class 驱动，与 recent-tab 保持一致
+
+### 完成内容
+- **fix: `api.py` stats-tab 按钮颜色改为 `.tab-active` CSS class 驱动（LOW）**
+  - `setStatsDays` 改用 `classList.toggle('tab-active', ...)` 切换状态
+  - 移除内联 `style.background = '#555'/'#888'` 硬编码
+  - `stats-tab-14` 初始 HTML 添加 `tab-active` class（默认 14 天）
+  - 与 recent-tab 的 tab-active 机制完全统一
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter43.py`）：7 项检查全部 PASS
+- git commit: `f3fb451`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #42
 
 ### 迭代目标
