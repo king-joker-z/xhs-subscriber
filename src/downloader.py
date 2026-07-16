@@ -14,7 +14,9 @@ M4 - 下载引擎
 - DL-3: download_batch 中异常与正常跳过混淆计入 skipped
   → 区分统计「已跳过（去重）」「成功」「异常失败」三类
 - DL-4: _stream_download reraise=True 时异常抛出，.tmp 临时文件残留磁盘
-  → 用 try/finally 包裹重试块，finally 中清理残留 .tmp 文件
+  → 用 try/except 包裹重试块，except 中清理残留 .tmp 文件
+- DL-5: 图片扩展名推断用 'candidate in img_url.lower()'，URL query 参数含 .jpg 时误匹配
+  → 改用 urlparse + Path.suffix 提取路径真实扩展名，新增 _ext_from_url() 辅助函数
 """
 from __future__ import annotations
 
@@ -22,6 +24,7 @@ import asyncio
 import logging
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from tenacity import (
@@ -42,6 +45,27 @@ _DEFAULT_CONCURRENCY = 3
 
 # 进度日志阈值：每累计下载 10MB 输出一次 INFO
 _PROGRESS_LOG_BYTES = 10 * 1024 * 1024
+
+# 支持的图片扩展名集合（小写）
+_SUPPORTED_IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".avif"}
+
+
+def _ext_from_url(url: str, default: str = ".jpg") -> str:
+    """
+    从 URL 路径部分推断图片扩展名。
+    DL-5 修复：原实现用 'candidate in img_url.lower()' 匹配，
+    URL query 参数中含 .jpg 时会误匹配（如 ?format=jpg&...）。
+    改用 urlparse 提取 path 部分，再用 Path.suffix 取扩展名，
+    仅匹配路径末尾的真实扩展名，避免误匹配 query 参数。
+    """
+    try:
+        path = urlparse(url).path
+        suffix = Path(path).suffix.lower()
+        if suffix in _SUPPORTED_IMG_EXTS:
+            return suffix
+    except Exception:
+        pass
+    return default
 
 
 class Downloader:
@@ -123,12 +147,9 @@ class Downloader:
             elif meta.image_urls:
                 # 图文作品：批量下载图片到 {video_id}/ 子目录（img_dir 已在上方创建）
                 for idx, img_url in enumerate(meta.image_urls, start=1):
-                    # 尝试从 URL 推断扩展名，默认 .jpg
-                    ext = ".jpg"
-                    for candidate in (".jpg", ".jpeg", ".png", ".webp", ".avif"):
-                        if candidate in img_url.lower():
-                            ext = candidate
-                            break
+                    # DL-5 修复：改用 urlparse + Path.suffix 推断扩展名，
+                    # 避免 URL query 参数中含 .jpg 时误匹配（如 ?format=jpg&...）
+                    ext = _ext_from_url(img_url)
                     img_path = img_dir / f"{idx:03d}{ext}"
                     await self._stream_download(img_url, img_path, headers)
                     created_files.append(img_path)

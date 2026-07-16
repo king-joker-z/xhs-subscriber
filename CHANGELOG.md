@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 15:xx — 迭代 #63
+
+### 迭代目标
+downloader.py 图片扩展名推断用 `candidate in img_url.lower()`，URL query 参数含 `.jpg` 时误匹配
+
+### 完成内容
+- **fix: `downloader.py` 图片扩展名推断改用 `urlparse + Path.suffix`（DL-5）**
+  - 原实现：`for candidate in (...) if candidate in img_url.lower()`，URL query 参数中含 `.jpg`（如 `?format=jpg&quality=80`）时会误匹配，导致路径为 `.webp` 的图片被存为 `.jpg`
+  - 修复：新增顶层导入 `from urllib.parse import urlparse`，提取模块级常量 `_SUPPORTED_IMG_EXTS`，新增辅助函数 `_ext_from_url(url, default=".jpg")`，用 `urlparse(url).path` 提取路径部分，再用 `Path(path).suffix.lower()` 取真实扩展名，仅匹配路径末尾，避免误匹配 query 参数
+  - 调用处替换为 `ext = _ext_from_url(img_url)`，逻辑更清晰
+  - 新增 DL-5 修复说明到模块 docstring 和辅助函数 docstring
+- **改动文件**：`src/downloader.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter63.py`）：10 项检查全部 PASS（含 7 个 `_ext_from_url` 单元测试用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 14:xx — 迭代 #62
 
 ### 迭代目标
