@@ -20,7 +20,7 @@ database.py `vacuum()` 在 WAL 模式下执行 `VACUUM` 前未做 `wal_checkpoin
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter68.py`）：7 项检查全部 PASS
-- git commit: 待提交
+- git commit: `f8026b0`，已 push 到 `origin/main`
 
 ---
 
