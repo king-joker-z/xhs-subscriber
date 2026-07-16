@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 22:xx — 迭代 #69
+
+### 迭代目标
+api.py UI `escHtml` 未转义引号（`"` 和 `'`），在 HTML 属性中存在 XSS 风险
+
+### 完成内容
+- **fix: `api.py` UI `escHtml` 加入引号转义（UI-2）**
+  - 原实现：`escHtml` 只转义 `&`/`<`/`>`，未转义 `"`（`&quot;`）和 `'`（`&#39;`）
+  - 风险：`video_id`、`user_id`、`name` 等字段若含引号，在 HTML 属性值中会破坏属性边界，存在 XSS 风险
+  - 修复：在 `.replace(/>/g,'&gt;')` 链式调用后追加 `.replace(/"/g,'&quot;').replace(/'/g,'&#39;')`
+  - 新增 UI-2 修复说明注释
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter69.py`）：9 项检查全部 PASS（含 6 个 `escHtml` 单元测试用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 20:xx — 迭代 #68
 
 ### 迭代目标

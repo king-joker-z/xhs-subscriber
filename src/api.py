@@ -693,8 +693,11 @@ async function loadRecent() {
   }
 }
 
+// UI-2 修复：escHtml 加入引号转义（&quot; 和 &#39;），
+// 防止 video_id/user_id/name 等字段含引号时在 HTML 属性中破坏属性边界（XSS 风险）。
 function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+           .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 async function triggerVacuum() {
