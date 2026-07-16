@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-17 07:xx — 迭代 #78
+
+### 迭代目标
+api.py `triggerVacuum` JS 未处理 409 响应（VACUUM 执行中），用户看到通用错误提示
+
+### 完成内容
+- **fix: `api.py` `triggerVacuum` JS 加入 409 响应处理（UI-6）**
+  - 原实现：`triggerVacuum` 只处理 `d.status === 'ok'`，其余走 `else` 显示通用错误提示；后端 API-6 修复已返回 409，但前端未对应处理
+  - 修复：加入 `else if (r.status === 409)` 分支，显示「⏳ VACUUM 正在执行中，请稍后再试」友好提示（非 err 样式）
+  - 同时将 `else` 分支的错误提示改为 `d.message || d.detail || 'VACUUM 失败'`，兼容 FastAPI HTTPException 的 `detail` 字段
+  - 与 `triggerRun` 的 UI-3 防重入提示风格保持一致
+  - 新增 UI-6 修复说明注释
+- **改动文件**：`src/api.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，其余 9 项均为 PASS 或误报（代码已正确处理），代码质量整体扎实。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter78.py`）：8 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 06:xx — 迭代 #77
 
 ### 迭代目标

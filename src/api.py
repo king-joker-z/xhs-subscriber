@@ -743,8 +743,13 @@ async function triggerVacuum() {
     if (d.status === 'ok') {
       msg.textContent = '✓ ' + d.message;
       msg.style.display = 'inline';
+    } else if (r.status === 409) {
+      // UI-6 修复：VACUUM 正在执行中，给出明确提示而非通用错误
+      msg.textContent = '⏳ VACUUM 正在执行中，请稍后再试';
+      msg.className = '';
+      msg.style.display = 'inline';
     } else {
-      msg.textContent = '✗ ' + (d.message || 'VACUUM 失败');
+      msg.textContent = '✗ ' + (d.message || d.detail || 'VACUUM 失败');
       msg.className = 'err';
       msg.style.display = 'inline';
     }
