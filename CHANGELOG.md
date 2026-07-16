@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #48
+
+### 迭代目标
+api_stats days 参数添加范围验证（1-365），防止过大查询
+
+### 完成内容
+- **fix: `api.py` `api_stats` `days` 参数添加范围验证（LOW）**
+  - 添加 `days = max(1, min(days, 365))` 限制
+  - 防止用户传入极大值（如 `days=99999`）导致数据库查询过慢
+  - docstring 补充范围说明
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter48.py`）：5 项检查全部 PASS
+- git commit: `83d393f`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #47
 
 ### 迭代目标
