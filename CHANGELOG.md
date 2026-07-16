@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #42
+
+### 迭代目标
+最近下载筛选 tab 按钮颜色改为 CSS class 驱动，修复 dark mode 兼容性
+
+### 完成内容
+- **fix: `api.py` 筛选 tab 按钮颜色改为 `.tab-active` CSS class 驱动（LOW）**
+  - CSS 添加 `.tab-active { background: #555 !important; }` 规则
+  - `setRecentFilter` 改用 `classList.toggle('tab-active', ...)` 切换状态
+  - 移除内联 `style.background = '#555'/'#888'` 硬编码
+  - `recent-tab-all` 初始 HTML 添加 `tab-active` class
+  - 修复 dark mode 下 tab 按钮颜色不一致问题
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter42.py`）：6 项检查全部 PASS
+- git commit: `f67e5df`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #41
 
 ### 迭代目标
