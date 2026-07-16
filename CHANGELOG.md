@@ -24,7 +24,7 @@ api.py `triggerVacuum` JS 未处理 409 响应（VACUUM 执行中），用户看
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter78.py`）：8 项检查全部 PASS
-- git commit: 待提交
+- git commit: `3b6ddda`，已 push 到 `origin/main`
 
 ---
 
