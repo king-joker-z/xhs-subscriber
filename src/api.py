@@ -123,11 +123,21 @@ async def run_now(response: Response) -> RunResponse:
     """
     异步触发调度器立即执行一次全量检查。
     返回 HTTP 202 Accepted，实际执行在后台进行。
+
+    UI-3 修复：若调度器当前正在执行（_run_once_active=True），
+    返回 HTTP 409 Conflict + status="already_running"，
+    避免重复触发并给调用方明确的语义反馈。
     """
     if _scheduler is None:
         logger.warning("/run 被调用但调度器尚未初始化")
         response.status_code = 503
         return RunResponse(status="scheduler_not_ready")
+
+    # UI-3 修复：防重入保护
+    if _scheduler._run_once_active:
+        logger.info("/run 被调用但任务已在执行中，返回 409")
+        response.status_code = 409
+        return RunResponse(status="already_running")
 
     _scheduler.trigger_now()
     logger.info("/run 触发立即执行")
@@ -737,6 +747,10 @@ async function triggerRun() {
       msg.className = '';
       // 触发检查后延迟 3 秒刷新最近下载记录，让用户看到最新结果
       setTimeout(loadRecent, 3000);
+    } else if (r.status === 409 && d.status === 'already_running') {
+      // UI-3 修复：任务已在执行中，给出明确提示而非静默失败
+      msg.textContent = '⏳ 任务执行中，请稍后再试';
+      msg.className = '';
     } else {
       msg.textContent = '✗ ' + (d.status || '触发失败');
       msg.className = 'err';

@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 23:xx — 迭代 #70
+
+### 迭代目标
+api.py `/run` 端点在 `is_checking=True` 时仍返回 202，实际 `run_once` 会跳过，用户体验不一致
+
+### 完成内容
+- **fix: `api.py` `/run` 端点加入防重入保护（UI-3）**
+  - 原实现：`/run` 无论调度器是否正在执行，均调用 `trigger_now()` 并返回 202；`trigger_now()` 内部虽有 `_run_once_active` 检查会跳过，但调用方收到 202 误以为触发成功
+  - 修复（后端）：在 `trigger_now()` 前检查 `_scheduler._run_once_active`，若为 `True` 则返回 `HTTP 409 Conflict` + `status="already_running"`
+  - 修复（前端）：`triggerRun()` 增加对 `409 already_running` 的处理，显示「⏳ 任务执行中，请稍后再试」友好提示（非错误样式）
+  - 原有 503 `scheduler_not_ready` 逻辑保留不变
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter70.py`）：10 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 22:xx — 迭代 #69
 
 ### 迭代目标
