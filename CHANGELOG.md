@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #40
+
+### 迭代目标
+将 .xhs_sub_state.json 加入 .gitignore，避免运行时状态文件被纳入版本控制
+
+### 完成内容
+- **chore: `.gitignore` 添加 `.xhs_sub_state.json` 排除规则（LOW）**
+  - 迭代 #39 引入的运行时状态文件不应纳入版本控制
+  - 添加注释说明该文件为运行时生成
+- **改动文件**：`.gitignore`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter40.py`）：3 项检查全部 PASS
+- git commit: `cb657e5`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #39
 
 ### 迭代目标
