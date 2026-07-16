@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #47
+
+### 迭代目标
+移除 database.py 中未使用的 get_download_count 死代码
+
+### 完成内容
+- **refactor: `database.py` 移除未使用的 `get_download_count` 方法（LOW）**
+  - 该方法在 `api.py`、`scheduler.py`、`downloader.py` 中均无调用
+  - 功能已被 `get_download_count_by_type` 完全覆盖（返回 total/video/image 分类统计）
+  - 移除 7 行死代码，减少维护负担
+- **改动文件**：`src/database.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter47.py`）：5 项检查全部 PASS
+- git commit: `b8ca480`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #46
 
 ### 迭代目标
