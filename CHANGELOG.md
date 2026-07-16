@@ -23,7 +23,7 @@ scraper.py `_text_elem` 未对文本做 `strip()`（SCR-5）+ fetcher.py `VideoM
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter77.py`）：10 项检查全部 PASS（含 6 个 strip 单元测试 + 5 个 title 截断单元测试）
-- git commit: 待提交
+- git commit: `77412a0`，已 push 到 `origin/main`
 
 ---
 
