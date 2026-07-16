@@ -20,7 +20,7 @@ main.py `lifespan` 中配置加载或数据库/调度器初始化失败时无 `t
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter72.py`）：9 项检查全部 PASS
-- git commit: 待提交
+- git commit: `7771e24`，已 push 到 `origin/main`
 
 ---
 
