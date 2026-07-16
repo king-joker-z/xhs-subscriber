@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-17 05:xx — 迭代 #76
+
+### 迭代目标
+api.py `/api/vacuum` 端点无防重入保护，并发调用可能导致多次 VACUUM 同时执行
+
+### 完成内容
+- **fix: `api.py` `/api/vacuum` 加入防重入保护（API-6）**
+  - 原实现：`api_vacuum` 无并发保护，多个请求同时到达时会并发执行 `vacuum()`，SQLite VACUUM 不支持并发，可能导致异常
+  - 修复：新增模块级 `_vacuum_active: bool = False` 标志；`api_vacuum` 中加入 `global _vacuum_active` 声明；执行前检查 `_vacuum_active`，为 True 时返回 `HTTP 409 Conflict`；用 `try/finally` 确保任何情况下都重置标志
+  - 与 `/run` 端点的 UI-3 防重入保护风格保持一致
+  - 新增 API-6 修复说明到注释和 docstring
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter76.py`）：10 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 04:xx — 迭代 #75
 
 ### 迭代目标

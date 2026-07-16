@@ -37,6 +37,8 @@ app = FastAPI(
 
 # 调度器实例由 main.py 注入
 _scheduler: "XHSScheduler | None" = None
+# API-6 修复：VACUUM 防重入标志，防止并发调用导致多次 VACUUM 同时执行
+_vacuum_active: bool = False
 
 
 def set_scheduler(scheduler: "XHSScheduler") -> None:
@@ -294,17 +296,28 @@ async def api_stats(
 async def api_vacuum(x_admin_token: str | None = Header(default=None)) -> dict:
     """执行 SQLite VACUUM，整理数据库碎片，释放未使用空间。
     若环境变量 XHS_ADMIN_TOKEN 已设置，则请求头 X-Admin-Token 必须匹配，否则返回 403。
+
+    API-6 修复：加入防重入保护，VACUUM 执行期间并发调用返回 409 Conflict。
     """
+    global _vacuum_active
     admin_token = os.environ.get("XHS_ADMIN_TOKEN", "")
     if admin_token and x_admin_token != admin_token:
         raise HTTPException(status_code=403, detail="X-Admin-Token 不匹配或缺失")
     if _scheduler is None:
         return {"status": "error", "message": "调度器未初始化"}
+    # API-6 修复：防重入保护
+    if _vacuum_active:
+        logger.info("/api/vacuum 被调用但 VACUUM 已在执行中，返回 409")
+        raise HTTPException(status_code=409, detail="VACUUM 正在执行中，请稍后再试")
+    _vacuum_active = True
     try:
         await _scheduler._db.vacuum()
         return {"status": "ok", "message": "VACUUM 执行完成"}
     except Exception as exc:
         return {"status": "error", "message": str(exc)}
+    finally:
+        # API-6 修复：无论成功或失败，均重置防重入标志
+        _vacuum_active = False
 
 
 # ------------------------------------------------------------------ #
