@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #41
+
+### 迭代目标
+更新 README，补充近期新特性和 .xhs_sub_state.json 说明
+
+### 完成内容
+- **docs: `README.md` 功能特性补充键盘快捷键和持久化说明（LOW）**
+  - 功能特性列表新增：Web UI 键盘快捷键（T/R）、nav 滚动高亮
+  - 功能特性列表新增：订阅「上次检查时间」持久化到 `.xhs_sub_state.json`
+  - 目录结构补充 `.xhs_sub_state.json` 说明（运行时生成，已加入 .gitignore）
+- **改动文件**：`README.md`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter41.py`）：5 项检查全部 PASS
+- git commit: `ae3f48e`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #40
 
 ### 迭代目标
