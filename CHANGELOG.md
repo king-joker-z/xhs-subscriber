@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 17:xx — 迭代 #65
+
+### 迭代目标
+scheduler.py `_save_state` 直接 `write_text` 写状态文件，无原子性保证（中途崩溃可能损坏 JSON）
+
+### 完成内容
+- **fix: `scheduler.py` `_save_state` 改为原子写入（SC-3）**
+  - 原实现：`self._state_path.write_text(...)` 直接写入目标文件，若进程在写入中途崩溃（如 OOM、强制 kill），会留下不完整的 JSON，下次启动 `_load_state` 解析失败，订阅状态全部丢失
+  - 修复：先写临时文件 `_state_path.with_suffix(".json.tmp")`，写入完成后原子 `tmp_path.replace(self._state_path)`，与 `downloader.py` DL-4 的临时文件策略一致
+  - 更新 `_save_state` docstring 为「原子写入」
+  - 新增 SC-3 修复说明到注释
+- **改动文件**：`src/scheduler.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter65.py`）：7 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 16:xx — 迭代 #64
 
 ### 迭代目标

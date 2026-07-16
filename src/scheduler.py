@@ -71,13 +71,17 @@ class XHSScheduler:
             logger.warning("加载订阅状态失败，将使用空状态：%s", exc)
 
     def _save_state(self) -> None:
-        """将 _sub_last_run_at 状态持久化到 JSON 文件"""
+        """将 _sub_last_run_at 状态持久化到 JSON 文件（原子写入）"""
         try:
             self._state_path.parent.mkdir(parents=True, exist_ok=True)
-            self._state_path.write_text(
+            # SC-3 修复：先写临时文件，再原子 replace()，避免直接 write_text 中途崩溃损坏 JSON。
+            # 与 downloader.py DL-4 的临时文件策略一致。
+            tmp_path = self._state_path.with_suffix(".json.tmp")
+            tmp_path.write_text(
                 json.dumps({"sub_last_run_at": self._sub_last_run_at}, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            tmp_path.replace(self._state_path)
         except Exception as exc:
             logger.warning("保存订阅状态失败：%s", exc)
 
