@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
 import uvicorn
 
@@ -22,7 +23,6 @@ async def _startup() -> None:
     config = get_config()
 
     # 初始化数据库（路径从配置读取）
-    import os
     db_path = os.path.join(config.download_dir, ".db", "xhs.db")
     db = await init_db(db_path=db_path)
 
