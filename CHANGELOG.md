@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #55
+
+### 迭代目标
+统一 api.py 中异常变量命名，将 except Exception as _e 改为 except Exception as exc
+
+### 完成内容
+- **refactor: `api.py` 统一异常变量命名（LOW）**
+  - 将 4 处 `except Exception as _e:` 改为 `except Exception as exc:`
+  - 同步将对应 `logger.warning(... _e)` 中的 `_e` 改为 `exc`
+  - 与 `scheduler.py`、`downloader.py`、`fetcher.py`、`scraper.py` 保持一致
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter55.py`）：5 项检查全部 PASS
+- git commit: `9717770`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #54
 
 ### 迭代目标
