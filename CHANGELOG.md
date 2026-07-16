@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #54
+
+### 迭代目标
+scheduler.py 将 _probe_cookie 内部延迟 import httpx / _random_ua 提升到模块顶层
+
+### 完成内容
+- **refactor: `scheduler.py` 将 `import httpx` 和 `_random_ua` 提升到模块顶层（LOW）**
+  - 原 `_probe_cookie` 内有 `import httpx` 和 `from .fetcher import _random_ua` 延迟导入
+  - 统一提升为顶层导入，与 `import time` 提升（迭代 #53）保持一致
+  - 消除函数内部重复延迟导入，提升代码可读性
+- **改动文件**：`src/scheduler.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter54.py`）：5 项检查全部 PASS
+- git commit: `d7e4c33`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #53
 
 ### 迭代目标
