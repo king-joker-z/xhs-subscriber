@@ -20,7 +20,7 @@ config.py `load_yaml` 从 YAML 读取 `log_level` 时未验证合法性，非法
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter61.py`）：7 项检查全部 PASS
-- git commit: 待提交
+- git commit: `9fc78a8`，已 push 到 `origin/main`
 
 ---
 
