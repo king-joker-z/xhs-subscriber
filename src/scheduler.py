@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -164,8 +165,7 @@ class XHSScheduler:
             return
         self._run_once_active = True
         try:
-            import time as _time
-            _start = _time.monotonic()
+            _start = time.monotonic()
             logger.info("开始全量检查，共 %d 个订阅", len(self._config.subscriptions))
             tasks = [
                 self._process_subscription(sub)
@@ -178,7 +178,7 @@ class XHSScheduler:
                 return
             await asyncio.gather(*tasks, return_exceptions=True)
             self.last_check_at = datetime.now(timezone.utc)
-            elapsed = _time.monotonic() - _start
+            elapsed = time.monotonic() - _start
             self.last_run_elapsed = elapsed
             logger.info("全量检查完成，耗时 %.1f 秒", elapsed)
         finally:
@@ -189,8 +189,7 @@ class XHSScheduler:
         处理单个订阅：M3 爬取 → M4 下载 → M5 刮削
         异常在此捕获，不影响其他订阅。
         """
-        import time as _time_sub
-        _sub_start = _time_sub.monotonic()
+        _sub_start = time.monotonic()
         try:
             logger.info("处理订阅：%s", sub.name)
 
@@ -243,13 +242,13 @@ class XHSScheduler:
                 )
             else:
                 logger.info("订阅 %s：无新内容需要刮削", sub.name)
-            _sub_elapsed = _time_sub.monotonic() - _sub_start
+            _sub_elapsed = time.monotonic() - _sub_start
             logger.info("订阅 %s 处理完成，耗时 %.1f 秒", sub.name, _sub_elapsed)
             self._sub_last_run_at[sub.name] = datetime.now(timezone.utc).isoformat()
             self._save_state()
 
         except Exception as exc:
-            _sub_elapsed = _time_sub.monotonic() - _sub_start
+            _sub_elapsed = time.monotonic() - _sub_start
             logger.error("订阅 %s 处理异常（已跳过，耗时 %.1f 秒）：%s", sub.name, _sub_elapsed, exc, exc_info=True)
             self._sub_last_run_at[sub.name] = datetime.now(timezone.utc).isoformat()
             self._save_state()
