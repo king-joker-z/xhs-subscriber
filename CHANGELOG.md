@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #35
+
+### 迭代目标
+修复 nav 链接内联 onmouseover/onmouseout 在 dark mode 下颜色错误问题
+
+### 完成内容
+- **fix: `api.py` nav 链接颜色控制改为纯 CSS 驱动（LOW）**
+  - 移除 5 个 nav 链接的内联 `onmouseover`/`onmouseout` 事件处理
+  - 全局 CSS 添加 `nav a { color: #555; transition: color .15s; }`
+  - 全局 CSS 添加 `nav a:hover, nav a.nav-active { color: #ff2d55; }`
+  - dark mode 已有 `nav a { color: #aaa !important; }` 覆盖，颜色正确
+  - 修复 dark mode 下鼠标移出后颜色变为浅色主题 `#555` 的 bug
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter35.py`）：6 项检查全部 PASS
+- git commit: `30dd58c`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #34
 
 ### 迭代目标
