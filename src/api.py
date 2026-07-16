@@ -417,10 +417,10 @@ _UI_HTML = """\
   <div class="card" id="section-actions">
     <h2>操作</h2>
     <div class="actions">
-      <button class="btn btn-primary" id="btn-run" onclick="triggerRun()">
+      <button class="btn btn-primary" id="btn-run" onclick="triggerRun()" title="快捷键 T">
         ▶ 立即检查
       </button>
-      <button class="btn btn-primary" onclick="loadStatus()" style="background:#555">
+      <button class="btn btn-primary" onclick="loadStatus()" style="background:#555" title="快捷键 R">
         ↻ 刷新状态
       </button>
       <button class="btn" onclick="triggerVacuum()" style="background:#888;color:#fff;padding:4px 12px;font-size:0.85em;">
@@ -436,6 +436,10 @@ _UI_HTML = """\
         </select>
       </label>
       <span id="msg"></span>
+    </div>
+    <div style="margin-top:6px;font-size:0.78em;color:#666;">
+      快捷键：<kbd style="background:#333;color:#ccc;padding:1px 5px;border-radius:3px;font-size:0.95em;">T</kbd> 立即检查 &nbsp;
+      <kbd style="background:#333;color:#ccc;padding:1px 5px;border-radius:3px;font-size:0.95em;">R</kbd> 刷新状态
     </div>
   </div>
 
