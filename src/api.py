@@ -560,7 +560,10 @@ async function loadStatus() {
     document.getElementById('stat-uptime').textContent = fmtUptime(d.uptime_seconds);
     // 上次检查时间
     var lastCheck = document.getElementById('stat-last-check');
-    if (lastCheck) lastCheck.textContent = '上次检查：' + (d.last_check_at || '尚未执行') +
+    var lastCheckTime = d.last_check_at
+      ? new Date(d.last_check_at).toLocaleString('zh-CN', {hour12: false}).slice(0, 16)
+      : '尚未执行';
+    if (lastCheck) lastCheck.textContent = '上次检查：' + lastCheckTime +
       (d.last_run_elapsed != null ? '（耗时 ' + d.last_run_elapsed.toFixed(1) + 's）' : '');
     // 动态更新版本号徽章
     var vbadge = document.getElementById('ui-version');
