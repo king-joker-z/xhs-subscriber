@@ -42,6 +42,8 @@ class XHSScheduler:
         )
         self._scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
         self._running = False
+        # run_once 并发保护标志：True 表示正在执行，防止重复触发
+        self._run_once_active: bool = False
         # 上次全量检查完成时间（UTC），None 表示尚未执行过
         self.last_check_at: Optional[datetime] = None
         # Cookie 预检状态：unknown / ok / expired / error
@@ -156,24 +158,31 @@ class XHSScheduler:
         await self._fetcher.stop()
 
     async def run_once(self) -> None:
-        """立即执行一次全量检查（所有订阅）"""
-        import time as _time
-        _start = _time.monotonic()
-        logger.info("开始全量检查，共 %d 个订阅", len(self._config.subscriptions))
-        tasks = [
-            self._process_subscription(sub)
-            for sub in self._config.subscriptions
-            if sub.enabled  # disabled 订阅仅展示，不参与调度
-        ]
-        if not tasks:
-            logger.warning("没有启用的订阅，跳过本次检查")
-            self.last_check_at = datetime.now(timezone.utc)
+        """立即执行一次全量检查（所有订阅）。若已有检查正在执行则跳过，防止并发重复触发。"""
+        if self._run_once_active:
+            logger.info("run_once 已在执行中，跳过本次触发")
             return
-        await asyncio.gather(*tasks, return_exceptions=True)
-        self.last_check_at = datetime.now(timezone.utc)
-        elapsed = _time.monotonic() - _start
-        self.last_run_elapsed = elapsed
-        logger.info("全量检查完成，耗时 %.1f 秒", elapsed)
+        self._run_once_active = True
+        try:
+            import time as _time
+            _start = _time.monotonic()
+            logger.info("开始全量检查，共 %d 个订阅", len(self._config.subscriptions))
+            tasks = [
+                self._process_subscription(sub)
+                for sub in self._config.subscriptions
+                if sub.enabled  # disabled 订阅仅展示，不参与调度
+            ]
+            if not tasks:
+                logger.warning("没有启用的订阅，跳过本次检查")
+                self.last_check_at = datetime.now(timezone.utc)
+                return
+            await asyncio.gather(*tasks, return_exceptions=True)
+            self.last_check_at = datetime.now(timezone.utc)
+            elapsed = _time.monotonic() - _start
+            self.last_run_elapsed = elapsed
+            logger.info("全量检查完成，耗时 %.1f 秒", elapsed)
+        finally:
+            self._run_once_active = False
 
     async def _process_subscription(self, sub: SubscriptionConfig) -> None:
         """
