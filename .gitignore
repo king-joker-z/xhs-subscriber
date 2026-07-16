@@ -1,1 +1,4 @@
 .DS_Store
+
+# Runtime state (generated at runtime, not for version control)
+.xhs_sub_state.json
