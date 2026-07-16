@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #37
+
+### 迭代目标
+最近下载记录 downloaded_at 时间展示本地化
+
+### 完成内容
+- **fix: `api.py` `downloaded_at` 展示改为本地化时间（LOW）**
+  - 原来使用 `.replace('T', ' ').slice(0, 19)` 截取 UTC 字符串
+  - 改为 `new Date(item.downloaded_at).toLocaleString('zh-CN', {hour12: false}).slice(0, 16)`
+  - 与 `last_check_at`、`last_run_at` 本地化格式完全一致
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter37.py`）：5 项检查全部 PASS
+- git commit: `41f99f0`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #36
 
 ### 迭代目标
