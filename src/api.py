@@ -229,8 +229,10 @@ async def api_status() -> StatusResponse:
     tags=["system"],
 )
 async def api_recent(limit: int = 10, post_type: str | None = None, user_id: str | None = None) -> list[RecentDownloadItem]:
-    """返回最近下载的作品记录，按下载时间倒序，默认 10 条；limit 范围限制为 1-200；post_type 可选 'video'/'image' 筛选；user_id 可选博主筛选"""
+    """返回最近下载的作品记录，按下载时间倒序，默认 10 条；limit 范围限制为 1-200；post_type 仅允许 'video'/'image'/None；user_id 可选博主筛选"""
     limit = max(1, min(limit, 200))
+    if post_type is not None and post_type not in ("video", "image"):
+        raise HTTPException(status_code=422, detail="post_type 仅允许 'video' 或 'image'")
     if _scheduler is None:
         return []
     try:
