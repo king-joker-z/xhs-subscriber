@@ -13,6 +13,8 @@ M4 - 下载引擎
   → 每累计 10MB 输出一次 INFO 进度日志
 - DL-3: download_batch 中异常与正常跳过混淆计入 skipped
   → 区分统计「已跳过（去重）」「成功」「异常失败」三类
+- DL-4: _stream_download reraise=True 时异常抛出，.tmp 临时文件残留磁盘
+  → 用 try/finally 包裹重试块，finally 中清理残留 .tmp 文件
 """
 from __future__ import annotations
 
@@ -185,41 +187,54 @@ class Downloader:
 
         DL-1 修复：原 @_make_retry() 装饰 async 方法在 tenacity<8.2 下静默失败（不重试）。
         改用 AsyncRetrying 上下文管理器，所有 tenacity>=8.0 版本均可正确重试 async 函数。
+        DL-4 修复：reraise=True 时重试全部失败会抛出异常，.tmp 临时文件残留磁盘。
+        用 try/finally 包裹重试块，finally 中清理残留 .tmp 文件（成功时 replace() 已重命名，exists() 为 False）。
         """
         tmp_path = dest.with_suffix(dest.suffix + ".tmp")
         filename = dest.name
 
-        async for attempt in AsyncRetrying(
-            retry=retry_if_exception_type((httpx.TransportError, httpx.TimeoutException)),
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=1, min=2, max=30),
-            before_sleep=before_sleep_log(logger, logging.WARNING),
-            reraise=True,
-        ):
-            with attempt:
-                async with httpx.AsyncClient(
-                    timeout=httpx.Timeout(connect=15.0, read=self._timeout, write=30.0, pool=5.0),
-                    follow_redirects=True,
-                ) as client:
-                    async with client.stream("GET", url, headers=headers) as resp:
-                        resp.raise_for_status()
-                        downloaded_bytes = 0
-                        last_log_bytes = 0
-                        with open(tmp_path, "wb") as f:
-                            async for chunk in resp.aiter_bytes(chunk_size=1024 * 64):
-                                f.write(chunk)
-                                downloaded_bytes += len(chunk)
-                                # DL-2: 每 10MB 输出一次进度日志
-                                if downloaded_bytes - last_log_bytes >= _PROGRESS_LOG_BYTES:
-                                    logger.info(
-                                        "下载进度 %s：%.1f MB",
-                                        filename,
-                                        downloaded_bytes / (1024 * 1024),
-                                    )
-                                    last_log_bytes = downloaded_bytes
+        # DL-4 修复：try/finally 确保异常时清理 .tmp 临时文件
+        try:
+            async for attempt in AsyncRetrying(
+                retry=retry_if_exception_type((httpx.TransportError, httpx.TimeoutException)),
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=1, min=2, max=30),
+                before_sleep=before_sleep_log(logger, logging.WARNING),
+                reraise=True,
+            ):
+                with attempt:
+                    async with httpx.AsyncClient(
+                        timeout=httpx.Timeout(connect=15.0, read=self._timeout, write=30.0, pool=5.0),
+                        follow_redirects=True,
+                    ) as client:
+                        async with client.stream("GET", url, headers=headers) as resp:
+                            resp.raise_for_status()
+                            downloaded_bytes = 0
+                            last_log_bytes = 0
+                            with open(tmp_path, "wb") as f:
+                                async for chunk in resp.aiter_bytes(chunk_size=1024 * 64):
+                                    f.write(chunk)
+                                    downloaded_bytes += len(chunk)
+                                    # DL-2: 每 10MB 输出一次进度日志
+                                    if downloaded_bytes - last_log_bytes >= _PROGRESS_LOG_BYTES:
+                                        logger.info(
+                                            "下载进度 %s：%.1f MB",
+                                            filename,
+                                            downloaded_bytes / (1024 * 1024),
+                                        )
+                                        last_log_bytes = downloaded_bytes
 
-        # 原子重命名
-        tmp_path.replace(dest)
+            # 原子重命名（仅在全部重试成功后执行）
+            tmp_path.replace(dest)
+        except Exception:
+            # 清理残留的 .tmp 临时文件，避免磁盘脏文件积累
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                    logger.debug("已清理残留临时文件：%s", tmp_path)
+                except OSError as oe:
+                    logger.warning("清理临时文件失败：%s，错误：%s", tmp_path, oe)
+            raise
 
     async def download_batch(
         self,

@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 11:xx — 迭代 #59
+
+### 迭代目标
+downloader.py `_stream_download` 重试全部失败后 `.tmp` 临时文件未清理（资源泄漏 bug）
+
+### 完成内容
+- **fix: `downloader.py` `_stream_download` 用 `try/except` 包裹重试块，异常时清理 `.tmp` 临时文件（MED）**
+  - 原实现：`reraise=True` 时三次重试全部失败会抛出异常，`tmp_path` 不会被清理，磁盘上残留 `.tmp` 脏文件
+  - 修复：用 `try/except` 包裹整个 `AsyncRetrying` 循环，`except` 块中检查并 `unlink()` 残留 `.tmp` 文件，最后 `raise` 重新抛出异常（不吞异常）
+  - 成功路径不受影响：`tmp_path.replace(dest)` 执行后 `.tmp` 文件已重命名，`exists()` 为 False，`unlink()` 不会被触发
+  - 新增 `DL-4` 修复说明到模块 docstring 和方法 docstring
+- **改动文件**：`src/downloader.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter59.py`）：8 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #58
 
 ### 迭代目标
