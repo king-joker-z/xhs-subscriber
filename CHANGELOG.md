@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #38
+
+### 迭代目标
+「加载更多」按钮添加防重复点击保护，修复多余 HTML div
+
+### 完成内容
+- **fix: `api.py` `loadMoreRecent` 添加 `disabled` 防重复点击保护（LOW）**
+  - 点击「加载更多」时立即 `disabled = true`，请求完成后 `finally` 恢复
+  - 防止快速多次点击触发重复请求
+- **fix: `api.py` 移除最近下载区域多余的 `<div class="empty">加载中…</div>`（LOW）**
+  - 该 div 在 `btn-load-more` 之后，属于 HTML 结构错误，已清理
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter38.py`）：6 项检查全部 PASS
+- git commit: `c946830`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #37
 
 ### 迭代目标
