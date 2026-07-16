@@ -337,6 +337,8 @@ _UI_HTML = """\
   nav a { color: #555; text-decoration: none; transition: color .15s; }
   nav a:hover, nav a.nav-active { color: #ff2d55; }
   nav a.nav-active { border-bottom-color: #ff2d55 !important; }
+  .tab-active { background: #555 !important; }
+  .btn:not(.tab-active) { background: #888; }
   @media (prefers-color-scheme: dark) {
     body { background: #1c1c1e; color: #f5f5f7; }
     header { background: #2c2c2e; border-bottom-color: #3a3a3c; }
@@ -485,9 +487,9 @@ _UI_HTML = """\
   <div class="card" id="section-recent">
     <h2>最近下载</h2>
     <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      <button class="btn" id="recent-tab-all" onclick="setRecentFilter('all')" style="padding:3px 10px;font-size:0.85em;background:#555;color:#fff;">全部</button>
-      <button class="btn" id="recent-tab-video" onclick="setRecentFilter('video')" style="padding:3px 10px;font-size:0.85em;background:#888;color:#fff;">🎬 视频</button>
-      <button class="btn" id="recent-tab-image" onclick="setRecentFilter('image')" style="padding:3px 10px;font-size:0.85em;background:#888;color:#fff;">📷 图文</button>
+      <button class="btn tab-active" id="recent-tab-all" onclick="setRecentFilter('all')" style="padding:3px 10px;font-size:0.85em;color:#fff;">全部</button>
+      <button class="btn" id="recent-tab-video" onclick="setRecentFilter('video')" style="padding:3px 10px;font-size:0.85em;color:#fff;">🎬 视频</button>
+      <button class="btn" id="recent-tab-image" onclick="setRecentFilter('image')" style="padding:3px 10px;font-size:0.85em;color:#fff;">📷 图文</button>
       <select id="recent-user-select" onchange="setRecentUser(this.value)" style="font-size:0.85em;padding:3px 8px;border-radius:6px;border:1px solid #ccc;background:inherit;color:inherit;">
         <option value="">👤 全部博主</option>
       </select>
@@ -621,7 +623,7 @@ function setRecentFilter(type) {
   _recentLimit = 10;
   ['all','video','image'].forEach(function(t) {
     var btn = document.getElementById('recent-tab-' + t);
-    if (btn) btn.style.background = (t === type) ? '#555' : '#888';
+    if (btn) btn.classList.toggle('tab-active', t === type);
   });
   loadRecent();
 }
