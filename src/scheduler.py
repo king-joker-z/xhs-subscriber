@@ -174,7 +174,17 @@ class XHSScheduler:
                 logger.warning("没有启用的订阅，跳过本次检查")
                 self.last_check_at = datetime.now(timezone.utc)
                 return
-            await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # SC-2 修复：检查 gather 返回值中的异常对象并记录 ERROR 日志。
+            # return_exceptions=True 会将各协程抛出的异常作为返回值，若不检查则静默吞掉。
+            # _process_subscription 内部已有 try/except，正常情况下不会抛出；
+            # 此处作为兜底，捕获意外的未处理异常并记录，便于排查。
+            for idx, result in enumerate(results):
+                if isinstance(result, BaseException):
+                    logger.error(
+                        "订阅任务意外异常（gather 兜底捕获，任务索引 %d）：%s",
+                        idx, result, exc_info=result,
+                    )
             self.last_check_at = datetime.now(timezone.utc)
             elapsed = time.monotonic() - _start
             self.last_run_elapsed = elapsed

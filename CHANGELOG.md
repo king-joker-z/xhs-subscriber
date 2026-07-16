@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 14:xx — 迭代 #62
+
+### 迭代目标
+scheduler.py `run_once` 中 `gather(return_exceptions=True)` 返回值未检查，异常静默吞掉
+
+### 完成内容
+- **fix: `scheduler.py` `run_once` 检查 `gather` 返回值中的异常并记录 ERROR 日志（SC-2）**
+  - 原实现：`await asyncio.gather(*tasks, return_exceptions=True)` 返回值直接丢弃，`_process_subscription` 意外抛出的异常会被完全吞掉，不记录任何日志
+  - 修复：将返回值赋给 `results`，遍历检查 `isinstance(result, BaseException)`，发现异常时记录 ERROR 日志（含 `exc_info=result` 保留完整堆栈）
+  - `_process_subscription` 内部已有 `try/except` 兜底，此处作为第二道防线，捕获意外的未处理异常
+  - 新增 SC-2 修复说明到注释
+- **改动文件**：`src/scheduler.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter62.py`）：9 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 13:xx — 迭代 #61
 
 ### 迭代目标
