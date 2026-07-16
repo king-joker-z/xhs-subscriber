@@ -784,9 +784,11 @@ async function loadStats() {
 function setRefreshInterval(sec) {
   clearInterval(_statusTimer);
   clearInterval(_recentTimer);
+  clearInterval(_statsTimer);
   if (sec > 0) {
     _statusTimer = setInterval(loadStatus, sec * 1000);
     _recentTimer = setInterval(loadRecent, sec * 2000);
+    _statsTimer  = setInterval(loadStats, Math.max(sec * 10, 300) * 1000);
   }
 }
 
