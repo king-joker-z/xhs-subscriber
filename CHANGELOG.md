@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-17 00:xx — 迭代 #71
+
+### 迭代目标
+config.py `SubscriptionConfig.video_url` 无格式校验，非法 URL 在运行时才报错
+
+### 完成内容
+- **fix: `config.py` `SubscriptionConfig.video_url` 加入格式校验（CFG-2）**
+  - 原实现：`video_url` 直接从 YAML dict 读取，无任何格式检查，非法 URL 在运行时才报错
+  - 修复：新增 `from urllib.parse import urlparse`；在 `__init__` 中对非 None 的 `video_url` 做 `urlparse` 校验，`scheme` 或 `netloc` 为空时立即抛出 `ValueError`，配置加载阶段即失败
+  - `video_url=None` 时跳过校验，保持向后兼容
+  - 新增 CFG-2 修复说明注释
+- **改动文件**：`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter71.py`）：8 项检查全部 PASS（含 7 个 `video_url` 单元测试用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 23:xx — 迭代 #70
 
 ### 迭代目标

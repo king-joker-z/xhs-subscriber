@@ -11,6 +11,7 @@ import sys
 import logging
 from pathlib import Path
 from typing import List, Optional
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import Field, field_validator, model_validator
@@ -57,7 +58,17 @@ class SubscriptionConfig:
 
     def __init__(self, data: dict):
         self.user_id: Optional[str] = data.get("user_id")
-        self.video_url: Optional[str] = data.get("video_url")
+        # CFG-2 修复：video_url 在配置加载阶段做格式校验，
+        # 非法 URL（缺少 scheme 或 netloc）立即抛出 ValueError，
+        # 避免等到运行时才报错。
+        raw_url: Optional[str] = data.get("video_url")
+        if raw_url is not None:
+            parsed = urlparse(raw_url)
+            if not parsed.scheme or not parsed.netloc:
+                raise ValueError(
+                    f"SubscriptionConfig: video_url 格式非法（缺少 scheme 或 netloc）：{raw_url!r}"
+                )
+        self.video_url: Optional[str] = raw_url
         self.name: str = data.get("name", self.user_id or "unknown")
         self.enabled: bool = data.get("enabled", True)
 
