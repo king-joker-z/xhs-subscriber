@@ -340,6 +340,7 @@ _UI_HTML = """\
     nav { background: #2c2c2e; border-bottom-color: #3a3a3c; }
     nav a { color: #aaa !important; }
     nav a:hover { color: #ff2d55 !important; }
+    nav a.nav-active { color: #ff2d55 !important; border-bottom-color: #ff2d55 !important; }
     .card { background: #2c2c2e; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
     table th { background: #3a3a3c; }
     table tr:nth-child(even) { background: #3a3a3c; }
