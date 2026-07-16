@@ -251,7 +251,8 @@ async def api_recent(limit: int = 10, post_type: str | None = None, user_id: str
     tags=["system"],
 )
 async def api_stats(days: int = 14) -> list[dict]:
-    """返回最近 N 天（默认 14 天）每日下载数量，按日期升序。"""
+    """返回最近 N 天（默认 14 天）每日下载数量，按日期升序。days 范围限制为 1-365。"""
+    days = max(1, min(days, 365))
     if _scheduler is None:
         return []
     try:
