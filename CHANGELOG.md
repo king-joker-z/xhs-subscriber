@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #50
+
+### 迭代目标
+api_recent post_type 参数添加白名单验证（video/image），非法值返回 422
+
+### 完成内容
+- **fix: `api.py` `api_recent` `post_type` 参数添加白名单验证（LOW）**
+  - 添加 `if post_type is not None and post_type not in ("video", "image")` 检查
+  - 非法值抛出 `HTTPException(status_code=422)`，明确告知调用方
+  - docstring 补充约束说明
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter50.py`）：5 项检查全部 PASS
+- git commit: `f3a421d`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #49
 
 ### 迭代目标
