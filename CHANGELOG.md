@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #51
+
+### 迭代目标
+scheduler.py run_once 添加防并发重复触发保护
+
+### 完成内容
+- **fix: `scheduler.py` `run_once` 添加 `_run_once_active` 并发保护（MEDIUM）**
+  - 新增 `self._run_once_active: bool = False` 实例标志
+  - `run_once` 入口检查：若已在执行则 `logger.info` 跳过，避免并发重复全量检查
+  - 主体包裹在 `try/finally` 中，确保任何情况下都能重置标志
+  - 修复用户快速多次点击「立即检查」按钮导致并发执行多个全量检查任务的问题
+- **改动文件**：`src/scheduler.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter51.py`）：5 项检查全部 PASS
+- git commit: `1500e82`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #50
 
 ### 迭代目标
