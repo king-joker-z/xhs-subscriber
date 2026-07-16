@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #39
+
+### 迭代目标
+scheduler.py _sub_last_run_at 持久化到 JSON 文件，服务重启后恢复
+
+### 完成内容
+- **feat: `scheduler.py` `_sub_last_run_at` 持久化到 JSON 文件（LOW）**
+  - `__init__` 中初始化 `_state_path`（`download_dir` 同级的 `.xhs_sub_state.json`）
+  - 启动时调用 `_load_state()` 从文件恢复状态
+  - 每次订阅处理完成（成功/异常）后调用 `_save_state()` 写入文件
+  - 加载/保存失败均有 `logger.warning` 日志，不阻断主流程
+  - 服务重启后订阅「上次检查时间」不再丢失
+- **改动文件**：`src/scheduler.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter39.py`）：6 项检查全部 PASS
+- git commit: `6a34287`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #38
 
 ### 迭代目标
