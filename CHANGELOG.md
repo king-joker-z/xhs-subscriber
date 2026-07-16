@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 16:xx — 迭代 #64
+
+### 迭代目标
+api.py UI `renderSubTable` 函数定义在 JS `try{}` 块内部，严格模式下存在作用域问题
+
+### 完成内容
+- **fix: `api.py` UI `renderSubTable` 从 `loadStatus` 的 `try{}` 块内提升到顶层函数（UI-1）**
+  - 原实现：`renderSubTable` 函数声明嵌套在 `loadStatus` 的 `try{}` 块内部，JS 严格模式（`"use strict"`）下函数声明不允许出现在块级作用域（`try/catch/if` 等）内，会导致语法错误或行为不一致
+  - 修复：将 `renderSubTable` 函数定义提升到 `loadStatus` 函数外部，作为独立顶层函数；`loadStatus` 的 `try/catch` 结构保持完整，`catch(e)` 错误处理逻辑不变
+  - 新增 UI-1 修复说明到注释
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter64.py`）：8 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 15:xx — 迭代 #63
 
 ### 迭代目标

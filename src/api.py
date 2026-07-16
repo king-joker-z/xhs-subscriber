@@ -604,40 +604,43 @@ async function loadStatus() {
       filterEl.onchange = function() { renderSubTable(window._lastStatus); };
     }
     renderSubTable(d);
-  }
-
-  function renderSubTable(d) {
-    if (!d) return;
-    var filterEl = document.getElementById('filter-enabled-only');
-    var enabledOnly = filterEl ? filterEl.checked : false;
-    var subs = d.subscriptions || [];
-    if (enabledOnly) subs = subs.filter(function(s) { return s.enabled; });
-    const wrap = document.getElementById('sub-table-wrap');
-    if (!d.subscriptions || d.subscriptions.length === 0) {
-      wrap.innerHTML = '<div class="empty">暂无订阅，请在 config/config.yaml 中添加</div>';
-      return;
-    }
-
-    let rows = subs.map(s => {
-      const target = s.user_id
-        ? '<a class="link" href="https://www.xiaohongshu.com/user/profile/' + s.user_id + '" target="_blank" title="博主主页订阅">👤 ' + s.user_id + '</a>'
-        : (s.video_url ? '<a class="link" href="' + s.video_url + '" target="_blank" title="单视频订阅">🎬 单视频</a>' : '—');
-      const status = s.enabled
-        ? '<span class="tag on">启用</span>'
-        : '<span class="tag off">停用</span>';
-      const dlCount = (s.downloaded_count != null && s.downloaded_count > 0)
-        ? s.downloaded_count : '—';
-      const lastRun = s.last_run_at
-        ? new Date(s.last_run_at).toLocaleString('zh-CN', {hour12: false}).slice(0, 16)
-        : '—';
-      return '<tr><td><strong>' + escHtml(s.name) + '</strong></td><td>' + target + '</td><td>' + status + '</td><td>' + dlCount + '</td><td style="font-size:0.8em;color:#888;">' + lastRun + '</td></tr>';
-    }).join('');
-
-    wrap.innerHTML = '<table><thead><tr><th>名称</th><th>目标</th><th>状态</th><th>已下载</th><th>最后检查</th></tr></thead><tbody>' + rows + '</tbody></table>';
   } catch(e) {
     document.getElementById('stat-status').textContent = '连接失败';
     console.error(e);
   }
+}
+
+// UI-1 修复：renderSubTable 从 loadStatus 的 try{} 块内提升到顶层函数。
+// 函数声明在严格模式下不允许出现在块级作用域（try/catch/if 等）内，
+// 提升到顶层后作用域明确，避免严格模式下的语法错误或行为不一致。
+function renderSubTable(d) {
+  if (!d) return;
+  var filterEl = document.getElementById('filter-enabled-only');
+  var enabledOnly = filterEl ? filterEl.checked : false;
+  var subs = d.subscriptions || [];
+  if (enabledOnly) subs = subs.filter(function(s) { return s.enabled; });
+  const wrap = document.getElementById('sub-table-wrap');
+  if (!d.subscriptions || d.subscriptions.length === 0) {
+    wrap.innerHTML = '<div class="empty">暂无订阅，请在 config/config.yaml 中添加</div>';
+    return;
+  }
+
+  let rows = subs.map(s => {
+    const target = s.user_id
+      ? '<a class="link" href="https://www.xiaohongshu.com/user/profile/' + s.user_id + '" target="_blank" title="博主主页订阅">👤 ' + s.user_id + '</a>'
+      : (s.video_url ? '<a class="link" href="' + s.video_url + '" target="_blank" title="单视频订阅">🎬 单视频</a>' : '—');
+    const status = s.enabled
+      ? '<span class="tag on">启用</span>'
+      : '<span class="tag off">停用</span>';
+    const dlCount = (s.downloaded_count != null && s.downloaded_count > 0)
+      ? s.downloaded_count : '—';
+    const lastRun = s.last_run_at
+      ? new Date(s.last_run_at).toLocaleString('zh-CN', {hour12: false}).slice(0, 16)
+      : '—';
+    return '<tr><td><strong>' + escHtml(s.name) + '</strong></td><td>' + target + '</td><td>' + status + '</td><td>' + dlCount + '</td><td style="font-size:0.8em;color:#888;">' + lastRun + '</td></tr>';
+  }).join('');
+
+  wrap.innerHTML = '<table><thead><tr><th>名称</th><th>目标</th><th>状态</th><th>已下载</th><th>最后检查</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 var _recentFilter = 'all';
