@@ -67,7 +67,8 @@ class Database:
         :param user_ids: 用户 ID 列表
         :return: {user_id: count, ...}
         """
-        assert self._conn, "数据库未初始化，请先调用 init()"
+        if not self._conn:
+            raise RuntimeError("数据库未初始化，请先调用 init()")
         if not user_ids:
             return {}
         placeholders = ",".join("?" * len(user_ids))
@@ -87,7 +88,8 @@ class Database:
         执行 VACUUM 整理数据库碎片，释放未使用空间。
         建议在长期运行后定期调用（例如每周一次），不影响正常读写。
         """
-        assert self._conn, "数据库未初始化，请先调用 init()"
+        if not self._conn:
+            raise RuntimeError("数据库未初始化，请先调用 init()")
         await self._conn.execute("VACUUM;")
         await self._conn.commit()
         logger.info("数据库 VACUUM 完成：%s", self._db_path)
@@ -98,7 +100,8 @@ class Database:
         :param video_id: 视频唯一 ID
         :return: True 表示已下载，False 表示未下载
         """
-        assert self._conn, "数据库未初始化，请先调用 init()"
+        if not self._conn:
+            raise RuntimeError("数据库未初始化，请先调用 init()")
         async with self._conn.execute(
             "SELECT 1 FROM downloads WHERE video_id = ? LIMIT 1", (video_id,)
         ) as cursor:
@@ -112,7 +115,8 @@ class Database:
         :param post_type: 作品类型，'video' 或 'image'，默认 'video'
         :param user_id: 博主 user_id，单视频订阅时为 None
         """
-        assert self._conn, "数据库未初始化，请先调用 init()"
+        if not self._conn:
+            raise RuntimeError("数据库未初始化，请先调用 init()")
         now = datetime.now(timezone.utc).isoformat()
         await self._conn.execute(
             "INSERT OR REPLACE INTO downloads (video_id, downloaded_at, post_type, user_id) VALUES (?, ?, ?, ?)",
@@ -126,7 +130,8 @@ class Database:
         按 post_type 统计已下载数量。
         :return: {"video": int, "image": int, "total": int}
         """
-        assert self._conn, "数据库未初始化，请先调用 init()"
+        if not self._conn:
+            raise RuntimeError("数据库未初始化，请先调用 init()")
         async with self._conn.execute(
             "SELECT post_type, COUNT(*) FROM downloads GROUP BY post_type"
         ) as cursor:
@@ -144,7 +149,8 @@ class Database:
         :param days: 统计天数，默认 14 天
         :return: [{"date": "YYYY-MM-DD", "count": int, "video": int, "image": int}, ...]，按日期升序
         """
-        assert self._conn, "数据库未初始化，请先调用 init()"
+        if not self._conn:
+            raise RuntimeError("数据库未初始化，请先调用 init()")
         # SQLite datetime() 默认 UTC；通过 '+8 hours' 偏移转换为 UTC+8 本地日期
         async with self._conn.execute(
             """
@@ -179,7 +185,8 @@ class Database:
         :param user_id: 可选筛选，指定博主 user_id，None 表示全部
         :return: [{"video_id": str, "downloaded_at": str, "post_type": str, "user_id": str|None}, ...]
         """
-        assert self._conn, "数据库未初始化，请先调用 init()"
+        if not self._conn:
+            raise RuntimeError("数据库未初始化，请先调用 init()")
         conditions: list[str] = []
         params: list = []
         if post_type:
