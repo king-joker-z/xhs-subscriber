@@ -651,7 +651,7 @@ async function loadRecent() {
     }
     let rows = items.map(item => {
       const xhsUrl = 'https://www.xiaohongshu.com/explore/' + escHtml(item.video_id);
-      const at = item.downloaded_at ? item.downloaded_at.replace('T', ' ').slice(0, 19) : '—';
+      const at = item.downloaded_at ? new Date(item.downloaded_at).toLocaleString('zh-CN', {hour12: false}).slice(0, 16) : '—';
       const icon = item.post_type === 'image' ? '📷' : '🎬';
       const userTag = item.user_id ? ' <span style="font-size:0.8em;color:#aaa">👤' + escHtml(item.user_id) + '</span>' : '';
       return '<tr><td>' + icon + ' <a class="link" href="' + xhsUrl + '" target="_blank">' + escHtml(item.video_id) + '</a>' + userTag + '</td><td>' + at + '</td></tr>';
