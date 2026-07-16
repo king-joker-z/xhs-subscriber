@@ -23,7 +23,7 @@ api.py `/api/recent` `limit` 参数无上限约束，超大值（如 `limit=9999
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter74.py`）：8 项检查全部 PASS
-- git commit: 待提交
+- git commit: `6f6bc00`，已 push 到 `origin/main`
 
 ---
 
