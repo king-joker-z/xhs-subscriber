@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #36
+
+### 迭代目标
+修复 setRefreshInterval 未重置 _statsTimer 导致趋势图刷新不受控的问题
+
+### 完成内容
+- **fix: `api.py` `setRefreshInterval` 补充 `clearInterval(_statsTimer)` 和重置逻辑（LOW）**
+  - 切换自动刷新间隔时同步清除并重置 `_statsTimer`
+  - 趋势图刷新间隔设为 `max(sec*10, 300)` 秒，避免过于频繁
+  - 关闭自动刷新时三个 timer 全部停止
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter36.py`）：5 项检查全部 PASS
+- git commit: `b8de274`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #35
 
 ### 迭代目标
