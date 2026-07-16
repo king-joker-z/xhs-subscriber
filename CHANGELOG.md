@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #45
+
+### 迭代目标
+引入 btn-secondary/btn-muted CSS class，移除剩余内联 background 颜色
+
+### 完成内容
+- **fix: `api.py` 引入 `.btn-secondary` 和 `.btn-muted` CSS class（LOW）**
+  - 新增 `.btn-secondary { background: #555; color: #fff; }` 规则
+  - 新增 `.btn-muted { background: #888; color: #fff; }` 规则
+  - 「刷新状态」按钮改为 `btn btn-secondary`（原 `btn btn-primary` + 内联 `background:#555`）
+  - 「VACUUM」按钮改为 `btn btn-muted`（原 `btn` + 内联 `background:#888;color:#fff`）
+  - 「加载更多」按钮改为 `btn btn-muted`（原 `btn` + 内联 `background:#888;color:#fff`）
+  - 所有按钮颜色统一由 CSS class 管理，无内联 background 颜色残留
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter45.py`）：9 项检查全部 PASS
+- git commit: `af2df76`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #44
 
 ### 迭代目标
