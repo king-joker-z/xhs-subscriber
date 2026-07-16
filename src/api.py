@@ -270,7 +270,11 @@ async def api_recent(
     summary="按日期下载统计",
     tags=["system"],
 )
-async def api_stats(days: int = 14) -> list[dict]:
+async def api_stats(
+    # API-2 修复：days 加入 Query(ge=1, le=365) 声明，OpenAPI 文档展示合法范围；
+    # 函数体内保留 clamp 作为双重保护，与 /api/recent limit 风格保持一致。
+    days: int = Query(default=14, ge=1, le=365, description="统计天数，1-365"),
+) -> list[dict]:
     """返回最近 N 天（默认 14 天）每日下载数量，按日期升序。days 范围限制为 1-365。"""
     days = max(1, min(days, 365))
     if _scheduler is None:

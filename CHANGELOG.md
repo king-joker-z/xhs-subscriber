@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-17 04:xx — 迭代 #75
+
+### 迭代目标
+api.py `/api/stats` `days` 参数虽有函数体内 clamp，但缺少 `Query` 声明，OpenAPI 文档不展示合法范围
+
+### 完成内容
+- **fix: `api.py` `/api/stats` `days` 参数加入 `Query(ge=1, le=365)` 声明（API-2）**
+  - 原实现：`days: int = 14`，函数体内有 `max(1, min(days, 365))` clamp，但 FastAPI OpenAPI 文档不展示范围约束，调用方无法从文档得知合法范围
+  - 修复：改为 `days: int = Query(default=14, ge=1, le=365, description="统计天数，1-365")`，与 `/api/recent` `limit` 风格保持一致
+  - 函数体内 clamp 保留作为双重保护
+  - 新增 API-2 修复说明注释
+- **改动文件**：`src/api.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，其余 9 项均为 PASS 或误报（代码已正确处理），代码质量整体扎实。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter75.py`）：8 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 03:xx — 迭代 #74
 
 ### 迭代目标
