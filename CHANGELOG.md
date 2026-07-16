@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-17 01:xx — 迭代 #72
+
+### 迭代目标
+main.py `lifespan` 中配置加载或数据库/调度器初始化失败时无 `try/except` 兜底，FastAPI 以无上下文的 traceback 退出
+
+### 完成内容
+- **fix: `main.py` `lifespan` startup 阶段加入异常兜底（MAIN-1）**
+  - 原实现：`get_config()`、`init_db()`、`XHSScheduler()`、`scheduler.startup()` 均无 `try/except`，任何初始化失败都以未处理异常退出，错误信息散落在 uvicorn traceback 中，难以定位
+  - 修复：将 startup 阶段整体包裹在 `try/except Exception as exc` 中；捕获后记录 `logger.critical("应用启动失败…", exc_info=True)` 输出完整 traceback，再 `raise` 重新抛出让 uvicorn 正常退出
+  - `yield` 和 shutdown 逻辑保持在 `try/except` 之外，不受影响
+  - 新增 MAIN-1 修复说明到 `lifespan` docstring
+- **改动文件**：`src/main.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter72.py`）：9 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 00:xx — 迭代 #71
 
 ### 迭代目标

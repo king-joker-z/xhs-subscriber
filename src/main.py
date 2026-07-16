@@ -4,11 +4,12 @@ main.py - 应用入口
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 
 import uvicorn
+from fastapi import FastAPI
 
 from src.config import get_config, setup_logging
 from src.database import init_db
@@ -18,51 +19,47 @@ from src.api import app, set_scheduler
 logger = logging.getLogger(__name__)
 
 
-async def _startup() -> None:
-    """应用启动钩子：初始化数据库和调度器"""
-    config = get_config()
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """FastAPI lifespan 上下文管理器，替代废弃的 @app.on_event
 
-    # 初始化数据库（路径从配置读取）
-    db_path = os.path.join(config.download_dir, ".db", "xhs.db")
-    db = await init_db(db_path=db_path)
+    MAIN-1 修复：startup 阶段加入 try/except，配置加载或数据库/调度器初始化失败时
+    记录清晰的 CRITICAL 日志并重新抛出，避免 uvicorn 以无上下文的 traceback 退出。
+    """
+    # --- startup ---
+    try:
+        config = get_config()
+        db_path = os.path.join(config.download_dir, ".db", "xhs.db")
+        db = await init_db(db_path=db_path)
 
-    # 初始化调度器
-    scheduler = XHSScheduler(config=config, db=db)
-    set_scheduler(scheduler)
+        scheduler = XHSScheduler(config=config, db=db)
+        set_scheduler(scheduler)
 
-    # 启动共享 XHS 实例（必须在 scheduler.start() 之前完成）
-    await scheduler.startup()
+        await scheduler.startup()
+        scheduler.start()
 
-    # 启动定时调度（内部会 create_task 触发首次全量检查）
-    scheduler.start()
+        application.state.scheduler = scheduler
+        application.state.db = db
 
-    # 将 scheduler 和 db 挂载到 app.state，方便后续访问
-    app.state.scheduler = scheduler
-    app.state.db = db
+        logger.info("应用启动完成，HTTP 端口：%d", config.http_port)
+    except Exception as exc:
+        # MAIN-1 修复：启动失败时输出明确错误，再重新抛出让 uvicorn 退出
+        logger.critical("应用启动失败，服务无法运行：%s", exc, exc_info=True)
+        raise
 
-    logger.info("应用启动完成，HTTP 端口：%d", config.http_port)
+    yield  # 应用运行中
 
-
-async def _shutdown() -> None:
-    """应用关闭钩子"""
-    if hasattr(app.state, "scheduler"):
-        app.state.scheduler.stop()
-        # 关闭共享 XHS 实例
-        await app.state.scheduler.shutdown()
-    if hasattr(app.state, "db"):
-        await app.state.db.close()
+    # --- shutdown ---
+    if hasattr(application.state, "scheduler"):
+        application.state.scheduler.stop()
+        await application.state.scheduler.shutdown()
+    if hasattr(application.state, "db"):
+        await application.state.db.close()
     logger.info("应用已关闭")
 
 
-# 注册 lifespan 事件
-@app.on_event("startup")
-async def on_startup() -> None:
-    await _startup()
-
-
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    await _shutdown()
+# 将 lifespan 注入到已有 app 实例
+app.router.lifespan_context = lifespan
 
 
 def main() -> None:
