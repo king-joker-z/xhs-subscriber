@@ -17,6 +17,8 @@ M4 - 下载引擎
   → 用 try/except 包裹重试块，except 中清理残留 .tmp 文件
 - DL-5: 图片扩展名推断用 'candidate in img_url.lower()'，URL query 参数含 .jpg 时误匹配
   → 改用 urlparse + Path.suffix 提取路径真实扩展名，新增 _ext_from_url() 辅助函数
+- DL-6: retry 只覆盖 TransportError/TimeoutException，HTTP 5xx 临时故障不会重试
+  → 新增 _is_retryable() 辅助函数，将 5xx HTTPStatusError 纳入重试范围（4xx 不重试）
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ from urllib.parse import urlparse
 import httpx
 from tenacity import (
     AsyncRetrying,
+    retry_if_exception,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
@@ -48,6 +51,21 @@ _PROGRESS_LOG_BYTES = 10 * 1024 * 1024
 
 # 支持的图片扩展名集合（小写）
 _SUPPORTED_IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".avif"}
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """
+    DL-6 修复：判断异常是否应触发重试。
+    - 网络层异常（TransportError / TimeoutException）：始终重试
+    - HTTP 5xx（HTTPStatusError，status_code >= 500）：服务端临时故障，重试
+    - HTTP 4xx（HTTPStatusError，status_code < 500）：客户端错误，不重试（避免无意义重试）
+    - 其他异常：不重试
+    """
+    if isinstance(exc, (httpx.TransportError, httpx.TimeoutException)):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code >= 500
+    return False
 
 
 def _ext_from_url(url: str, default: str = ".jpg") -> str:
@@ -209,15 +227,18 @@ class Downloader:
         DL-1 修复：原 @_make_retry() 装饰 async 方法在 tenacity<8.2 下静默失败（不重试）。
         改用 AsyncRetrying 上下文管理器，所有 tenacity>=8.0 版本均可正确重试 async 函数。
         DL-4 修复：reraise=True 时重试全部失败会抛出异常，.tmp 临时文件残留磁盘。
-        用 try/finally 包裹重试块，finally 中清理残留 .tmp 文件（成功时 replace() 已重命名，exists() 为 False）。
+        用 try/except 包裹重试块，except 中清理残留 .tmp 文件。
+        DL-6 修复：retry 只覆盖 TransportError/TimeoutException，HTTP 5xx 临时故障不会重试。
+        改用 retry_if_exception(_is_retryable)，将 5xx HTTPStatusError 纳入重试范围。
         """
         tmp_path = dest.with_suffix(dest.suffix + ".tmp")
         filename = dest.name
 
-        # DL-4 修复：try/finally 确保异常时清理 .tmp 临时文件
+        # DL-4 修复：try/except 确保异常时清理 .tmp 临时文件
         try:
             async for attempt in AsyncRetrying(
-                retry=retry_if_exception_type((httpx.TransportError, httpx.TimeoutException)),
+                # DL-6 修复：_is_retryable 覆盖网络层异常 + HTTP 5xx，4xx 不重试
+                retry=retry_if_exception(_is_retryable),
                 stop=stop_after_attempt(3),
                 wait=wait_exponential(multiplier=1, min=2, max=30),
                 before_sleep=before_sleep_log(logger, logging.WARNING),

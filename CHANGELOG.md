@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 19:xx — 迭代 #67
+
+### 迭代目标
+downloader.py `_stream_download` retry 只覆盖 `TransportError`/`TimeoutException`，HTTP 5xx 临时故障不会重试
+
+### 完成内容
+- **fix: `downloader.py` `_stream_download` retry 加入 HTTP 5xx 重试（DL-6）**
+  - 原实现：`retry_if_exception_type((httpx.TransportError, httpx.TimeoutException))`，`resp.raise_for_status()` 对 5xx 抛出 `HTTPStatusError`，但不在 retry 范围内，服务端临时故障（502/503/504）直接失败，无法自动恢复
+  - 修复：新增辅助函数 `_is_retryable(exc)`，覆盖网络层异常 + HTTP 5xx；4xx 不重试（避免无意义重试）；retry 配置改用 `retry_if_exception(_is_retryable)`
+  - 新增 `retry_if_exception` 到 tenacity 导入
+  - 新增 DL-6 修复说明到模块 docstring 和 `_stream_download` docstring
+- **改动文件**：`src/downloader.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter67.py`）：9 项检查全部 PASS（含 8 个 `_is_retryable` 单元测试用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 18:xx — 迭代 #66
 
 ### 迭代目标
