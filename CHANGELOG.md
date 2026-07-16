@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #58
+
+### 迭代目标
+main.py 将 _startup 内部延迟 import os 提升到模块顶层
+
+### 完成内容
+- **refactor: `main.py` 将 `import os` 提升到模块顶层（LOW）**
+  - 原 `_startup` 函数内有 `import os` 延迟导入
+  - 统一提升为顶层导入，与 #53/#54 系列重构保持一致
+- **改动文件**：`src/main.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter58.py`）：5 项检查全部 PASS
+- git commit: `44136d7`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #57
 
 ### 迭代目标
