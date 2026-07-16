@@ -339,6 +339,8 @@ _UI_HTML = """\
   nav a.nav-active { border-bottom-color: #ff2d55 !important; }
   .tab-btn { background: #888; color: #fff; }
   .tab-btn.tab-active { background: #555 !important; }
+  .btn-secondary { background: #555; color: #fff; }
+  .btn-muted     { background: #888; color: #fff; }
   @media (prefers-color-scheme: dark) {
     body { background: #1c1c1e; color: #f5f5f7; }
     header { background: #2c2c2e; border-bottom-color: #3a3a3c; }
@@ -426,10 +428,10 @@ _UI_HTML = """\
       <button class="btn btn-primary" id="btn-run" onclick="triggerRun()" title="快捷键 T">
         ▶ 立即检查
       </button>
-      <button class="btn btn-primary" onclick="loadStatus()" style="background:#555" title="快捷键 R">
+      <button class="btn btn-secondary" onclick="loadStatus()" title="快捷键 R">
         ↻ 刷新状态
       </button>
-      <button class="btn" onclick="triggerVacuum()" style="background:#888;color:#fff;padding:4px 12px;font-size:0.85em;">
+      <button class="btn btn-muted" onclick="triggerVacuum()" style="padding:4px 12px;font-size:0.85em;">
         🗜 VACUUM
       </button>
       <label style="font-size:0.85em;color:#555;margin-left:8px;">
@@ -497,7 +499,7 @@ _UI_HTML = """\
     <div id="recent-table-wrap">
     </div>
     <div style="text-align:center;margin-top:8px;">
-      <button class="btn" id="btn-load-more" onclick="loadMoreRecent()" style="background:#888;color:#fff;padding:4px 16px;font-size:0.85em;">加载更多</button>
+      <button class="btn btn-muted" id="btn-load-more" onclick="loadMoreRecent()" style="padding:4px 16px;font-size:0.85em;">加载更多</button>
     </div>
   </div>
 
