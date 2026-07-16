@@ -337,8 +337,8 @@ _UI_HTML = """\
   nav a { color: #555; text-decoration: none; transition: color .15s; }
   nav a:hover, nav a.nav-active { color: #ff2d55; }
   nav a.nav-active { border-bottom-color: #ff2d55 !important; }
-  .tab-active { background: #555 !important; }
-  .btn:not(.tab-active) { background: #888; }
+  .tab-btn { background: #888; color: #fff; }
+  .tab-btn.tab-active { background: #555 !important; }
   @media (prefers-color-scheme: dark) {
     body { background: #1c1c1e; color: #f5f5f7; }
     header { background: #2c2c2e; border-bottom-color: #3a3a3c; }
@@ -469,9 +469,9 @@ _UI_HTML = """\
       下载趋势
       <span style="font-size:0.75em;color:#aaa;font-weight:400;">今日: <span id="stat-today">—</span></span>
       <span style="margin-left:auto;display:flex;gap:4px;">
-        <button class="btn" id="stats-tab-7"  onclick="setStatsDays(7)"  style="padding:2px 8px;font-size:0.78em;color:#fff;">7天</button>
-        <button class="btn tab-active" id="stats-tab-14" onclick="setStatsDays(14)" style="padding:2px 8px;font-size:0.78em;color:#fff;">14天</button>
-        <button class="btn" id="stats-tab-30" onclick="setStatsDays(30)" style="padding:2px 8px;font-size:0.78em;color:#fff;">30天</button>
+        <button class="btn tab-btn" id="stats-tab-7"  onclick="setStatsDays(7)"  style="padding:2px 8px;font-size:0.78em;">7天</button>
+        <button class="btn tab-btn tab-active" id="stats-tab-14" onclick="setStatsDays(14)" style="padding:2px 8px;font-size:0.78em;">14天</button>
+        <button class="btn tab-btn" id="stats-tab-30" onclick="setStatsDays(30)" style="padding:2px 8px;font-size:0.78em;">30天</button>
       </span>
     </h2>
     <div id="stats-chart-wrap" style="height:80px;display:flex;align-items:flex-end;gap:2px;padding:4px 0;">
@@ -487,9 +487,9 @@ _UI_HTML = """\
   <div class="card" id="section-recent">
     <h2>最近下载</h2>
     <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      <button class="btn tab-active" id="recent-tab-all" onclick="setRecentFilter('all')" style="padding:3px 10px;font-size:0.85em;color:#fff;">全部</button>
-      <button class="btn" id="recent-tab-video" onclick="setRecentFilter('video')" style="padding:3px 10px;font-size:0.85em;color:#fff;">🎬 视频</button>
-      <button class="btn" id="recent-tab-image" onclick="setRecentFilter('image')" style="padding:3px 10px;font-size:0.85em;color:#fff;">📷 图文</button>
+      <button class="btn tab-btn tab-active" id="recent-tab-all" onclick="setRecentFilter('all')" style="padding:3px 10px;font-size:0.85em;">全部</button>
+      <button class="btn tab-btn" id="recent-tab-video" onclick="setRecentFilter('video')" style="padding:3px 10px;font-size:0.85em;">🎬 视频</button>
+      <button class="btn tab-btn" id="recent-tab-image" onclick="setRecentFilter('image')" style="padding:3px 10px;font-size:0.85em;">📷 图文</button>
       <select id="recent-user-select" onchange="setRecentUser(this.value)" style="font-size:0.85em;padding:3px 8px;border-radius:6px;border:1px solid #ccc;background:inherit;color:inherit;">
         <option value="">👤 全部博主</option>
       </select>
