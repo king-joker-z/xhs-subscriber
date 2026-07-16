@@ -9,6 +9,7 @@ M6 - APScheduler 调度器
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,6 +52,30 @@ class XHSScheduler:
         self.last_run_elapsed: float | None = None
         # 每个订阅最后检查时间（UTC ISO 字符串），key 为 sub.name
         self._sub_last_run_at: dict[str, str] = {}
+        # 持久化文件路径（与 download_dir 同级）
+        self._state_path = Path(config.download_dir).parent / ".xhs_sub_state.json"
+        self._load_state()
+
+    def _load_state(self) -> None:
+        """从 JSON 文件恢复 _sub_last_run_at 状态"""
+        try:
+            if self._state_path.exists():
+                data = json.loads(self._state_path.read_text(encoding="utf-8"))
+                self._sub_last_run_at = data.get("sub_last_run_at", {})
+                logger.info("已从 %s 恢复订阅状态（%d 条）", self._state_path, len(self._sub_last_run_at))
+        except Exception as exc:
+            logger.warning("加载订阅状态失败，将使用空状态：%s", exc)
+
+    def _save_state(self) -> None:
+        """将 _sub_last_run_at 状态持久化到 JSON 文件"""
+        try:
+            self._state_path.parent.mkdir(parents=True, exist_ok=True)
+            self._state_path.write_text(
+                json.dumps({"sub_last_run_at": self._sub_last_run_at}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            logger.warning("保存订阅状态失败：%s", exc)
 
     async def startup(self) -> None:
         """
@@ -212,11 +237,13 @@ class XHSScheduler:
             _sub_elapsed = _time_sub.monotonic() - _sub_start
             logger.info("订阅 %s 处理完成，耗时 %.1f 秒", sub.name, _sub_elapsed)
             self._sub_last_run_at[sub.name] = datetime.now(timezone.utc).isoformat()
+            self._save_state()
 
         except Exception as exc:
             _sub_elapsed = _time_sub.monotonic() - _sub_start
             logger.error("订阅 %s 处理异常（已跳过，耗时 %.1f 秒）：%s", sub.name, _sub_elapsed, exc, exc_info=True)
             self._sub_last_run_at[sub.name] = datetime.now(timezone.utc).isoformat()
+            self._save_state()
 
     def start(self) -> None:
         """启动调度器"""
