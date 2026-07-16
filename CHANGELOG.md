@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 20:xx — 迭代 #68
+
+### 迭代目标
+database.py `vacuum()` 在 WAL 模式下执行 `VACUUM` 前未做 `wal_checkpoint`，可能遗留 WAL 文件
+
+### 完成内容
+- **fix: `database.py` `vacuum()` WAL 模式下加入 `wal_checkpoint(TRUNCATE)`（DB-1）**
+  - 原实现：直接执行 `VACUUM`，SQLite WAL 模式下 `VACUUM` 不会自动清理 WAL 文件，导致磁盘空间无法真正释放
+  - 修复：先执行 `PRAGMA wal_checkpoint(TRUNCATE)` 将 WAL 内容写回主库并截断 WAL 文件，再执行 `VACUUM`，确保碎片整理和磁盘空间释放完整生效
+  - 更新完成日志包含「含 WAL checkpoint」说明
+  - 新增 DB-1 修复说明到 `vacuum()` docstring
+- **改动文件**：`src/database.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter68.py`）：7 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 19:xx — 迭代 #67
 
 ### 迭代目标

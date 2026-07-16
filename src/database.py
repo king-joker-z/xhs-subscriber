@@ -87,12 +87,19 @@ class Database:
         """
         执行 VACUUM 整理数据库碎片，释放未使用空间。
         建议在长期运行后定期调用（例如每周一次），不影响正常读写。
+
+        DB-1 修复：WAL 模式下直接执行 VACUUM 不会自动清理 WAL 文件。
+        先执行 PRAGMA wal_checkpoint(TRUNCATE) 将 WAL 内容写回主库并截断 WAL 文件，
+        再执行 VACUUM，才能真正整理碎片并释放磁盘空间。
         """
         if not self._conn:
             raise RuntimeError("数据库未初始化，请先调用 init()")
+        # DB-1 修复：WAL 模式下先 checkpoint，再 VACUUM
+        await self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+        await self._conn.commit()
         await self._conn.execute("VACUUM;")
         await self._conn.commit()
-        logger.info("数据库 VACUUM 完成：%s", self._db_path)
+        logger.info("数据库 VACUUM 完成（含 WAL checkpoint）：%s", self._db_path)
 
     async def is_downloaded(self, video_id: str) -> bool:
         """
