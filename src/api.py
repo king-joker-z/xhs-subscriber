@@ -469,9 +469,9 @@ _UI_HTML = """\
       下载趋势
       <span style="font-size:0.75em;color:#aaa;font-weight:400;">今日: <span id="stat-today">—</span></span>
       <span style="margin-left:auto;display:flex;gap:4px;">
-        <button class="btn" id="stats-tab-7"  onclick="setStatsDays(7)"  style="padding:2px 8px;font-size:0.78em;background:#888;color:#fff;">7天</button>
-        <button class="btn" id="stats-tab-14" onclick="setStatsDays(14)" style="padding:2px 8px;font-size:0.78em;background:#555;color:#fff;">14天</button>
-        <button class="btn" id="stats-tab-30" onclick="setStatsDays(30)" style="padding:2px 8px;font-size:0.78em;background:#888;color:#fff;">30天</button>
+        <button class="btn" id="stats-tab-7"  onclick="setStatsDays(7)"  style="padding:2px 8px;font-size:0.78em;color:#fff;">7天</button>
+        <button class="btn tab-active" id="stats-tab-14" onclick="setStatsDays(14)" style="padding:2px 8px;font-size:0.78em;color:#fff;">14天</button>
+        <button class="btn" id="stats-tab-30" onclick="setStatsDays(30)" style="padding:2px 8px;font-size:0.78em;color:#fff;">30天</button>
       </span>
     </h2>
     <div id="stats-chart-wrap" style="height:80px;display:flex;align-items:flex-end;gap:2px;padding:4px 0;">
@@ -739,7 +739,7 @@ function setStatsDays(n) {
   _statsDays = n;
   [7, 14, 30].forEach(function(d) {
     var btn = document.getElementById('stats-tab-' + d);
-    if (btn) btn.style.background = (d === n) ? '#555' : '#888';
+    if (btn) btn.classList.toggle('tab-active', d === n);
   });
   loadStats();
 }
