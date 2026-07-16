@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-16 18:xx — 迭代 #66
+
+### 迭代目标
+config.py `load_yaml` 中 `interval_hours`/`concurrency`/`max_batch` 直接赋值，未做范围 clamp（Field 约束不覆盖直接赋值路径）
+
+### 完成内容
+- **fix: `config.py` `load_yaml` 数值字段赋值加范围 clamp（CFG-1）**
+  - 原实现：`self.interval_hours = float(...)`、`self.download_concurrency = int(...)`、`self.max_batch = int(...)` 直接赋值，绕过了 `Field(ge=..., le=...)` 约束，非法值（如 `interval_hours: 0.001` 或 `concurrency: 999`）会静默写入
+  - 修复：新增模块级辅助函数 `_clamp(value, lo, hi, field)`，超出范围时输出 WARNING 并修正，不中断启动；三个数值字段赋值均改用 `_clamp`
+  - 范围约束与 `Field` 定义保持一致：`interval_hours` [0.1, 168.0]、`concurrency` [1, 20]、`max_batch` [1, 500]
+  - 新增 CFG-1 修复说明到辅助函数 docstring
+- **改动文件**：`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter66.py`）：8 项检查全部 PASS（含 9 个 `_clamp` 单元测试用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-16 17:xx — 迭代 #65
 
 ### 迭代目标

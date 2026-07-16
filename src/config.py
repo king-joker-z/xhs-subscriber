@@ -21,6 +21,27 @@ logger = logging.getLogger(__name__)
 # 合法日志级别集合（field_validator 与 load_yaml 共用，避免重复定义）
 _ALLOWED_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
+
+def _clamp(value: float, lo: float, hi: float, field: str) -> float:
+    """
+    将 value 限制在 [lo, hi] 范围内。
+    CFG-1 修复：load_yaml 中直接赋值绕过了 Field(ge=..., le=...) 约束，
+    用此函数做范围 clamp，超出范围时输出 WARNING 并修正，不中断启动。
+    """
+    if value < lo:
+        logger.warning(
+            "⚠️  config.yaml 中 %s=%r 低于最小值 %s，已修正为 %s",
+            field, value, lo, lo,
+        )
+        return lo
+    if value > hi:
+        logger.warning(
+            "⚠️  config.yaml 中 %s=%r 超出最大值 %s，已修正为 %s",
+            field, value, hi, hi,
+        )
+        return hi
+    return value
+
 # Python 版本检查（XHS-Downloader 要求 >= 3.12）
 if sys.version_info < (3, 12):
     print(
@@ -111,15 +132,15 @@ class AppConfig(BaseSettings):
         # 仅在环境变量未显式设置时，从 YAML 覆盖
         scheduler = data.get("scheduler", {})
         if "interval_hours" in scheduler:
-            self.interval_hours = float(scheduler["interval_hours"])
+            self.interval_hours = _clamp(float(scheduler["interval_hours"]), 0.1, 168.0, "interval_hours")
 
         downloader = data.get("downloader", {})
         if "concurrency" in downloader:
-            self.download_concurrency = int(downloader["concurrency"])
+            self.download_concurrency = int(_clamp(int(downloader["concurrency"]), 1, 20, "concurrency"))
         if "download_dir" in downloader:
             self.download_dir = downloader["download_dir"]
         if "max_batch" in downloader:
-            self.max_batch = int(downloader["max_batch"])
+            self.max_batch = int(_clamp(int(downloader["max_batch"]), 1, 500, "max_batch"))
 
         logging_cfg = data.get("logging", {})
         if "dir" in logging_cfg:
