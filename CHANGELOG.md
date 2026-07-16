@@ -20,7 +20,7 @@ downloader.py 图片扩展名推断用 `candidate in img_url.lower()`，URL quer
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter63.py`）：10 项检查全部 PASS（含 7 个 `_ext_from_url` 单元测试用例）
-- git commit: 待提交
+- git commit: `a32adbc`，已 push 到 `origin/main`
 
 ---
 
