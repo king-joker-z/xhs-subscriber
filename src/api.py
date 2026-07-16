@@ -509,8 +509,12 @@ _UI_HTML = """\
 function fmtUptime(s) {
   if (s < 60) return s + ' 秒';
   if (s < 3600) return Math.floor(s/60) + ' 分钟';
-  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
-  return h + ' 小时 ' + (m ? m + ' 分钟' : '');
+  if (s < 86400) {
+    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+    return h + ' 小时 ' + (m ? m + ' 分钟' : '');
+  }
+  const d = Math.floor(s/86400), h = Math.floor((s%86400)/3600);
+  return d + ' 天 ' + (h ? h + ' 小时' : '');
 }
 
 async function loadStatus() {
