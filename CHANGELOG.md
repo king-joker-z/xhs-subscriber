@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #56
+
+### 迭代目标
+database.py 将 assert self._conn 替换为 RuntimeError，避免 -O 优化模式下断言被跳过
+
+### 完成内容
+- **fix: `database.py` 将 7 处 `assert self._conn` 替换为 `if not self._conn: raise RuntimeError(...)`（LOW）**
+  - `assert` 在 Python 优化模式（`-O`）下会被跳过，改用显式 `RuntimeError` 更健壮
+  - 7 处前置检查全部替换，错误信息保持不变
+- **改动文件**：`src/database.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter56.py`）：9 项检查全部 PASS
+- git commit: `cbae55a`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #55
 
 ### 迭代目标
