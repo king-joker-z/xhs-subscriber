@@ -20,7 +20,7 @@ fetcher.py 将 `fetch_user_videos` 内部延迟 `import time as _time_fetch` 提
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter60.py`）：6 项检查全部 PASS
-- git commit: 待提交
+- git commit: `0c124f4`，已 push 到 `origin/main`
 
 ---
 
