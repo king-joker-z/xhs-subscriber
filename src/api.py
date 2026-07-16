@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, Header, HTTPException, Response
+from fastapi import FastAPI, Header, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -240,7 +240,12 @@ async def api_status() -> StatusResponse:
     summary="最近下载记录",
     tags=["system"],
 )
-async def api_recent(limit: int = 10, post_type: str | None = None, user_id: str | None = None) -> list[RecentDownloadItem]:
+async def api_recent(
+    # API-1 修复：limit 加入 ge=1, le=200 上下限约束，防止超大值导致内存压力
+    limit: int = Query(default=10, ge=1, le=200, description="返回条数，1-200"),
+    post_type: str | None = None,
+    user_id: str | None = None,
+) -> list[RecentDownloadItem]:
     """返回最近下载的作品记录，按下载时间倒序，默认 10 条；limit 范围限制为 1-200；post_type 仅允许 'video'/'image'/None；user_id 可选博主筛选"""
     limit = max(1, min(limit, 200))
     if post_type is not None and post_type not in ("video", "image"):

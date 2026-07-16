@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-17 03:xx — 迭代 #74
+
+### 迭代目标
+api.py `/api/recent` `limit` 参数无上限约束，超大值（如 `limit=999999`）直接传入 SQL，造成内存压力
+
+### 完成内容
+- **fix: `api.py` `/api/recent` `limit` 参数加入 `ge=1, le=200` 约束（API-1）**
+  - 原实现：`limit: int = 10`，无任何范围约束，调用方可传入任意大整数
+  - 修复：导入 `fastapi.Query`；改为 `limit: int = Query(default=10, ge=1, le=200, description="返回条数，1-200")`
+  - FastAPI 自动在 OpenAPI 文档中展示约束，超出范围时返回 422 Unprocessable Entity
+  - 新增 API-1 修复说明注释
+- **改动文件**：`src/api.py`
+
+### 诊断说明
+本轮执行了两轮共 22 项诊断扫描，其余 21 项均为 PASS 或误报，代码质量整体扎实。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter74.py`）：8 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 02:xx — 迭代 #73
 
 ### 迭代目标
