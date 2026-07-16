@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #52
+
+### 迭代目标
+将 _run_once_active 通过 StatusResponse 暴露为 is_checking，UI 检查进行中时禁用「立即检查」按钮
+
+### 完成内容
+- **feat: `api.py` `StatusResponse` 新增 `is_checking` 字段（MEDIUM）**
+  - `StatusResponse` 增加 `is_checking: bool = False`
+  - `api_status` 填充 `_scheduler._run_once_active`
+  - `loadStatus` 回调：`d.is_checking` 为 `true` 时禁用 `btn-run` 并更新 `title` 提示；恢复时还原
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter52.py`）：5 项检查全部 PASS
+- git commit: `bd8a99d`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #51
 
 ### 迭代目标
