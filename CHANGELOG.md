@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #32
+
+### 迭代目标
+last_check_at 展示本地化时间，与订阅列表 last_run_at 保持一致
+
+### 完成内容
+- **fix: `api.py` `last_check_at` 展示改为本地化时间（LOW）**
+  - 原来直接展示 UTC ISO 字符串（如 `2026-07-16T01:23:45+00:00`）
+  - 改为 `new Date(d.last_check_at).toLocaleString('zh-CN', {hour12: false}).slice(0, 16)`
+  - 与订阅列表 `last_run_at` 本地化格式完全一致
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter32.py`）：5 项检查全部 PASS
+- git commit: `e8ae4ff`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #31
 
 ### 迭代目标
