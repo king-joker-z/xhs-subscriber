@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #57
+
+### 迭代目标
+config.py 为数值字段添加 Pydantic Field 范围约束，防止非法配置值
+
+### 完成内容
+- **fix: `config.py` 数值字段添加 `Field` 范围约束（LOW）**
+  - `http_port`: `ge=1, le=65535`
+  - `interval_hours`: `ge=0.1, le=168.0`（0.1小时 ~ 7天）
+  - `download_concurrency`: `ge=1, le=20`
+  - `max_batch`: `ge=1, le=500`
+  - 新增 `from pydantic import Field` 导入
+- **改动文件**：`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter57.py`）：6 项检查全部 PASS
+- git commit: `0072cd9`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #56
 
 ### 迭代目标
