@@ -41,9 +41,12 @@ logger = logging.getLogger(__name__)
 
 
 def _text_elem(parent: etree._Element, tag: str, text: str) -> etree._Element:
-    """在 parent 下创建一个文本子元素"""
+    """在 parent 下创建一个文本子元素
+
+    SCR-5 修复：对文本做 strip()，去除前后空白和换行符，确保 NFO 字段格式规范。
+    """
     el = etree.SubElement(parent, tag)
-    el.text = text or ""
+    el.text = (text or "").strip()
     return el
 
 

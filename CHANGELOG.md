@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-17 06:xx — 迭代 #77
+
+### 迭代目标
+scraper.py `_text_elem` 未对文本做 `strip()`（SCR-5）+ fetcher.py `VideoMeta.title` 无长度限制导致路径超限（FE-5）
+
+### 完成内容
+- **fix: `scraper.py` `_text_elem` 加入 `.strip()`（SCR-5）**
+  - 原实现：`el.text = text or ""`，title/desc 含前后空白或换行符时 NFO 字段不规范
+  - 修复：改为 `el.text = (text or "").strip()`，去除前后空白和换行符
+  - 新增 SCR-5 修复说明到 `_text_elem` docstring
+- **fix: `fetcher.py` `_parse_extract_result` `title` 截断至 200 字符（FE-5）**
+  - 原实现：`title = str(raw.get("作品标题") or ...)`，无长度限制，超长标题会导致文件系统路径超限（通常 255 字节）
+  - 修复：追加 `[:200]` 截断，防止路径超限
+  - 新增 FE-5 修复说明注释
+- **改动文件**：`src/scraper.py`、`src/fetcher.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter77.py`）：10 项检查全部 PASS（含 6 个 strip 单元测试 + 5 个 title 截断单元测试）
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 05:xx — 迭代 #76
 
 ### 迭代目标

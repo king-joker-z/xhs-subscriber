@@ -111,7 +111,8 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
         logger.warning("extract 结果缺少作品ID，跳过：%s", list(raw.keys())[:5])
         return None
 
-    title = str(raw.get("作品标题") or raw.get("title") or "")
+    # FE-5 修复：title 截断至 200 字符，防止超长标题导致文件系统路径超限（通常 255 字节）
+    title = str(raw.get("作品标题") or raw.get("title") or "")[:200]
     desc = str(raw.get("作品描述") or raw.get("desc") or "")
     author = str(raw.get("作者昵称") or raw.get("author") or "unknown")
 
