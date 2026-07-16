@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-16 09:xx — 迭代 #34
+
+### 迭代目标
+dark mode 补充 nav-active 高亮 CSS 规则
+
+### 完成内容
+- **fix: `api.py` dark mode 补充 `nav a.nav-active` CSS 规则（LOW）**
+  - 深色主题下 nav 高亮链接颜色 `#ff2d55` + `border-bottom-color` 正确显示
+  - 与浅色主题 nav-active 行为保持一致
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter34.py`）：5 项检查全部 PASS
+- git commit: `fd8fb4c`，已 push 到 `origin/main`
+
+---
+
 ## 2026-07-16 09:xx — 迭代 #33
 
 ### 迭代目标
