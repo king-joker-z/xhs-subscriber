@@ -365,11 +365,11 @@ _UI_HTML = """\
   <span class="badge" id="ui-version">v1.0.0</span>
 </header>
 <nav style="background:#fff;border-bottom:1px solid #e0e0e0;padding:0 32px;display:flex;gap:0;overflow-x:auto;">
-  <a href="#section-status" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color='#555'">📊 状态</a>
-  <a href="#section-actions" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color='#555'">▶ 操作</a>
-  <a href="#section-subs" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color='#555'">📋 订阅</a>
-  <a href="#section-stats" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color='#555'">📈 趋势</a>
-  <a href="#section-recent" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color='#555'">🕐 最近</a>
+  <a href="#section-status" data-section="section-status" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color=this.classList.contains('nav-active')?'#ff2d55':'#555'">📊 状态</a>
+  <a href="#section-actions" data-section="section-actions" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color=this.classList.contains('nav-active')?'#ff2d55':'#555'">▶ 操作</a>
+  <a href="#section-subs" data-section="section-subs" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color=this.classList.contains('nav-active')?'#ff2d55':'#555'">📋 订阅</a>
+  <a href="#section-stats" data-section="section-stats" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color=this.classList.contains('nav-active')?'#ff2d55':'#555'">📈 趋势</a>
+  <a href="#section-recent" data-section="section-recent" style="padding:10px 14px;font-size:0.85em;color:#555;text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent;" onmouseover="this.style.color='#ff2d55'" onmouseout="this.style.color=this.classList.contains('nav-active')?'#ff2d55':'#555'">🕐 最近</a>
 </nav>
 <div class="container">
 
@@ -785,6 +785,44 @@ function setRefreshInterval(sec) {
     _recentTimer = setInterval(loadRecent, sec * 2000);
   }
 }
+
+// nav 滚动高亮：IntersectionObserver 监听各 section，高亮当前可见区域对应的 nav 链接
+(function() {
+  var sections = ['section-status','section-actions','section-subs','section-stats','section-recent'];
+  var navLinks = {};
+  sections.forEach(function(id) {
+    var a = document.querySelector('nav a[data-section="' + id + '"]');
+    if (a) navLinks[id] = a;
+  });
+  function setActive(id) {
+    Object.keys(navLinks).forEach(function(k) {
+      var a = navLinks[k];
+      if (k === id) {
+        a.classList.add('nav-active');
+        a.style.color = '#ff2d55';
+        a.style.borderBottomColor = '#ff2d55';
+      } else {
+        a.classList.remove('nav-active');
+        a.style.color = '#555';
+        a.style.borderBottomColor = 'transparent';
+      }
+    });
+  }
+  if ('IntersectionObserver' in window) {
+    var visible = {};
+    var observer = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) { visible[e.target.id] = e.isIntersecting; });
+      for (var i = 0; i < sections.length; i++) {
+        if (visible[sections[i]]) { setActive(sections[i]); break; }
+      }
+    }, { threshold: 0.15 });
+    sections.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+    setActive('section-status');
+  }
+})();
 </script>
   <footer style="text-align:center;margin-top:24px;padding:12px;font-size:0.8em;color:#aaa;">
     xhs-subscriber v__SERVER_VERSION__ &nbsp;·&nbsp;
