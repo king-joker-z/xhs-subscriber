@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-17 18:xx — 迭代 #89
+
+### 迭代目标
+`downloader.py` `_stream_download` 未检查 Content-Length，0 字节响应会生成空文件并被标记为已下载，导致媒体文件静默丢失
+
+### 完成内容
+- **fix: `downloader.py` `_stream_download` 加入空文件保护（DL-25）**
+  - 原实现：`tmp_path.replace(dest)` 前无任何大小校验，0 字节响应（CDN 异常、限流、URL 失效）会生成空文件并被 `mark_downloaded` 标记，后续不会重试
+  - 修复：在原子 rename 前加入 `downloaded_bytes == 0` 检查，抛出 `ValueError`（含 URL 和目标文件名），触发 tenacity 重试；重试耗尽后异常向上传播，`download()` 捕获后清理文件并返回 `False`
+  - 错误信息包含 URL 和目标文件名，便于排查
+  - 新增 DL-25 修复说明注释
+- **改动文件**：`src/downloader.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），CFG-22 为误报（AppConfig 无 db_path 字段），MAIN-5 低优先级（容器单进程为预期行为）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter89.py`）：11 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 17:xx — 迭代 #88
 
 ### 迭代目标
