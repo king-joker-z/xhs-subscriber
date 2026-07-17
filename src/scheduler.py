@@ -35,12 +35,12 @@ class XHSScheduler:
     def __init__(self, config: AppConfig, db: Database):
         self._config = config
         self._db = db
-        self._fetcher = XHSFetcher(cookie=config.xhs_cookie)
+        self._fetcher = XHSFetcher(cookie=config.xhs_cookie.get_secret_value())
         self._downloader = Downloader(
             db=db,
             download_dir=config.download_dir,
             concurrency=config.download_concurrency,
-            cookie=config.xhs_cookie,
+            cookie=config.xhs_cookie.get_secret_value(),
         )
         self._scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
         self._running = False
@@ -101,7 +101,7 @@ class XHSScheduler:
         预检失败不阻断启动，仅输出 WARNING，让用户知晓需要更新 Cookie。
         """
         probe_url = "https://www.xiaohongshu.com/api/sns/web/v2/user/me"
-        cookie = self._config.xhs_cookie
+        cookie = self._config.xhs_cookie.get_secret_value()
         if not cookie or not cookie.strip():
             logger.warning("⚠️  Cookie 预检跳过：XHS_COOKIE 为空")
             self.cookie_status = "error"

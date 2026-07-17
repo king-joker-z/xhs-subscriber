@@ -14,7 +14,7 @@ from typing import List, Optional
 from urllib.parse import urlparse
 
 import yaml
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,8 @@ class AppConfig(BaseSettings):
     )
 
     # ---- 必填 ----
-    xhs_cookie: str  # 环境变量 XHS_COOKIE
+    # CFG-16 修复：改用 SecretStr，防止日志/调试输出泄露 Cookie 明文
+    xhs_cookie: SecretStr  # 环境变量 XHS_COOKIE
 
     # ---- 可选 ----
     config_path: str = "/config/config.yaml"

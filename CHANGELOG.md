@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-17 12:xx — 迭代 #83
+
+### 迭代目标
+config.py `xhs_cookie` 字段类型为 `str`，日志/调试输出可能泄露 Cookie 明文
+
+### 完成内容
+- **fix: `config.py` `xhs_cookie` 改用 `SecretStr` 防止日志泄露（CFG-16）**
+  - 原实现：`xhs_cookie: str`，pydantic repr/str 会输出明文，日志中可能泄露 Cookie
+  - 修复：改为 `xhs_cookie: SecretStr`，repr 输出 `SecretStr('**********')`，str 输出 `**********`
+  - `validate_cookie` validator 保持 `mode="before"`，在 SecretStr 包装前运行，无需修改签名
+  - `scheduler.py` 三处 `config.xhs_cookie` 调用改为 `config.xhs_cookie.get_secret_value()`
+  - 新增 CFG-16 修复说明注释
+- **改动文件**：`src/config.py`、`src/scheduler.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，其余 9 项均为 PASS 或误报（代码已正确处理）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter83.py`）：11 项检查全部 PASS
+- SecretStr repr/str 不泄露明文验证通过：`repr=SecretStr('**********')`
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 11:xx — 迭代 #82
 
 ### 迭代目标
