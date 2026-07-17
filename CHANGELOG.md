@@ -25,7 +25,7 @@ config.py `xhs_cookie` 字段类型为 `str`，日志/调试输出可能泄露 C
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter83.py`）：11 项检查全部 PASS
 - SecretStr repr/str 不泄露明文验证通过：`repr=SecretStr('**********')`
-- git commit: 待提交
+- git commit: `8d3fcd4`，已 push 到 `origin/main`
 
 ---
 
