@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-17 17:xx — 迭代 #88
+
+### 迭代目标
+`scraper.py` NFO 文件写入无原子操作，写入中断（磁盘满、进程被杀）可能产生损坏的 NFO 文件，导致媒体库刮削失败
+
+### 完成内容
+- **fix: `scraper.py` NFO 文件写入改为原子操作（SCR-15）**
+  - 原实现：`with open(nfo_path, "wb") as f: tree.write(...)` 直接写入目标文件，写入中断会产生损坏的 NFO
+  - 修复：先写入 `nfo_path.with_suffix(".nfo.tmp")` 临时文件，成功后 `tmp_path.replace(nfo_path)` 原子替换；异常时 `tmp_path.unlink(missing_ok=True)` 清理临时文件并重新抛出
+  - 与 `_save_state` 原子写入风格保持一致
+  - 新增 SCR-15 修复说明注释
+- **改动文件**：`src/scraper.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），FE-11 为误报（_UA_POOL 已存在），MAIN-4 低优先级（uvicorn 已处理 SIGTERM）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter88.py`）：10 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 16:xx — 迭代 #87
 
 ### 迭代目标

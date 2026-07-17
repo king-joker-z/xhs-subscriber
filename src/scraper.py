@@ -161,14 +161,21 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     _text_elem(root, "website", _build_note_url(meta.video_id))
 
     # 序列化为带声明的 XML
+    # SCR-15 修复：先写临时文件，再原子 rename，避免写入中断产生损坏的 NFO 文件
     tree = etree.ElementTree(root)
-    with open(nfo_path, "wb") as f:
-        tree.write(
-            f,
-            xml_declaration=True,
-            encoding="UTF-8",
-            pretty_print=True,
-        )
+    tmp_path = nfo_path.with_suffix(".nfo.tmp")
+    try:
+        with open(tmp_path, "wb") as f:
+            tree.write(
+                f,
+                xml_declaration=True,
+                encoding="UTF-8",
+                pretty_print=True,
+            )
+        tmp_path.replace(nfo_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
     logger.debug("NFO 已生成：%s", nfo_path)
     return nfo_path
