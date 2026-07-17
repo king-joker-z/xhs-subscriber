@@ -49,6 +49,12 @@ _DEFAULT_CONCURRENCY = 3
 # 进度日志阈值：每累计下载 10MB 输出一次 INFO
 _PROGRESS_LOG_BYTES = 10 * 1024 * 1024
 
+# DL-21 修复：重试参数提取为模块级常量，提升可读性和可维护性
+_RETRY_MAX_ATTEMPTS = 3       # 最大重试次数（含首次尝试）
+_RETRY_WAIT_MIN = 2           # 指数退避最小等待秒数
+_RETRY_WAIT_MAX = 30          # 指数退避最大等待秒数
+_RETRY_WAIT_MULTIPLIER = 1    # 指数退避乘数
+
 # 支持的图片扩展名集合（小写）
 _SUPPORTED_IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".avif"}
 
@@ -242,8 +248,8 @@ class Downloader:
             async for attempt in AsyncRetrying(
                 # DL-6 修复：_is_retryable 覆盖网络层异常 + HTTP 5xx，4xx 不重试
                 retry=retry_if_exception(_is_retryable),
-                stop=stop_after_attempt(3),
-                wait=wait_exponential(multiplier=1, min=2, max=30),
+                stop=stop_after_attempt(_RETRY_MAX_ATTEMPTS),
+                wait=wait_exponential(multiplier=_RETRY_WAIT_MULTIPLIER, min=_RETRY_WAIT_MIN, max=_RETRY_WAIT_MAX),
                 before_sleep=before_sleep_log(logger, logging.WARNING),
                 reraise=True,
             ):

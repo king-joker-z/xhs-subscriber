@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-17 14:xx — 迭代 #85
+
+### 迭代目标
+downloader.py `stop_after_attempt(3)` 和 `wait_exponential(multiplier=1, min=2, max=30)` 硬编码，可读性和可维护性差
+
+### 完成内容
+- **refactor: `downloader.py` 重试参数提取为模块级常量（DL-21）**
+  - 原实现：`stop_after_attempt(3)`、`wait_exponential(multiplier=1, min=2, max=30)` 硬编码
+  - 修复：提取为 4 个模块级常量：`_RETRY_MAX_ATTEMPTS=3`、`_RETRY_WAIT_MIN=2`、`_RETRY_WAIT_MAX=30`、`_RETRY_WAIT_MULTIPLIER=1`
+  - 调用点改为 `stop_after_attempt(_RETRY_MAX_ATTEMPTS)` 和 `wait_exponential(multiplier=_RETRY_WAIT_MULTIPLIER, min=_RETRY_WAIT_MIN, max=_RETRY_WAIT_MAX)`
+  - 与 `_DEFAULT_DOWNLOAD_DIR`、`_DEFAULT_CONCURRENCY`、`_PROGRESS_LOG_BYTES` 等常量风格保持一致
+  - 新增 DL-21 修复说明注释
+- **改动文件**：`src/downloader.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，其余 9 项均为 PASS 或误报（代码已正确处理）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter85.py`）：11 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 13:xx — 迭代 #84
 
 ### 迭代目标
