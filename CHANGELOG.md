@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-17 15:xx — 迭代 #86
+
+### 迭代目标
+api.py `/api/stats` 端点无 `response_model`，与 `/api/vacuum` 修复前同类问题，OpenAPI 文档无响应结构
+
+### 完成内容
+- **fix: `api.py` `/api/stats` 加入 `DailyStatItem` response_model（API-24）**
+  - 原实现：`api_stats` 返回 `list`，无 `response_model` 声明，OpenAPI 文档无响应结构
+  - 修复：新增 `DailyStatItem(BaseModel)` 模型（`date: str`、`count: int`、`video: int = 0`、`image: int = 0`）
+  - `/api/stats` 路由加入 `response_model=list[DailyStatItem]`
+  - 字段结构与 `database.get_download_stats_by_date` 返回的 dict 完全对应
+  - 与 `VacuumResponse`、`RunResponse`、`StatusResponse` 等端点保持一致风格
+  - 新增 API-24 修复说明注释
+- **改动文件**：`src/api.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，其余 9 项均为 PASS 或误报（代码已正确处理）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter86.py`）：13 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 14:xx — 迭代 #85
 
 ### 迭代目标

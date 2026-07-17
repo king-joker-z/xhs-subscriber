@@ -67,6 +67,14 @@ class VacuumResponse(BaseModel):
     message: str | None = None
 
 
+class DailyStatItem(BaseModel):
+    # API-24 修复：为 /api/stats 提供 response_model，与其他端点保持一致
+    date: str           # YYYY-MM-DD
+    count: int          # 当日总下载数
+    video: int = 0      # 当日视频下载数
+    image: int = 0      # 当日图文下载数
+
+
 class SubscriptionInfo(BaseModel):
     name: str
     user_id: str | None
@@ -277,6 +285,7 @@ async def api_recent(
     "/api/stats",
     summary="按日期下载统计",
     tags=["system"],
+    response_model=list[DailyStatItem],
 )
 async def api_stats(
     # API-2 修复：days 加入 Query(ge=1, le=365) 声明，OpenAPI 文档展示合法范围；
