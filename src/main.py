@@ -50,11 +50,19 @@ async def lifespan(application: FastAPI):
     yield  # 应用运行中
 
     # --- shutdown ---
+    # MAIN-2 修复：shutdown 阶段加入 try/except，scheduler.stop()/shutdown() 或
+    # db.close() 抛异常时记录 ERROR 日志并继续，避免 ASGI 关闭流程中断。
     if hasattr(application.state, "scheduler"):
-        application.state.scheduler.stop()
-        await application.state.scheduler.shutdown()
+        try:
+            application.state.scheduler.stop()
+            await application.state.scheduler.shutdown()
+        except Exception as exc:
+            logger.error("调度器关闭时发生异常（已忽略）：%s", exc, exc_info=True)
     if hasattr(application.state, "db"):
-        await application.state.db.close()
+        try:
+            await application.state.db.close()
+        except Exception as exc:
+            logger.error("数据库关闭时发生异常（已忽略）：%s", exc, exc_info=True)
     logger.info("应用已关闭")
 
 

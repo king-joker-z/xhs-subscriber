@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-17 09:xx — 迭代 #80
+
+### 迭代目标
+main.py `lifespan` shutdown 阶段无 `try/except`，`scheduler.stop()` 或 `db.close()` 抛异常会导致 ASGI 关闭流程中断
+
+### 完成内容
+- **fix: `main.py` lifespan shutdown 阶段加入 `try/except`（MAIN-2）**
+  - 原实现：shutdown 阶段直接调用 `scheduler.stop()` / `scheduler.shutdown()` / `db.close()`，无异常保护
+  - 修复：为 scheduler 和 db 各加独立 `try/except Exception`，捕获异常后记录 `ERROR` 日志（含 `exc_info=True`）并继续，避免 ASGI 关闭流程中断
+  - 与 MAIN-1（startup 阶段 try/except）形成对称保护
+  - 新增 MAIN-2 修复说明注释
+- **改动文件**：`src/main.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，其余 9 项均为 PASS 或误报（代码已正确处理）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter80.py`）：11 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 08:xx — 迭代 #79
 
 ### 迭代目标
