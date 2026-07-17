@@ -24,7 +24,7 @@ config.py `download_dir` 从 YAML 加载时未做路径规范化，`~` 开头的
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter79.py`）：10 项检查全部 PASS
 - `~/xhs_downloads` → `/Users/yurongxie/xhs_downloads` 展开验证通过
-- git commit: 待提交
+- git commit: `36872f7`，已 push 到 `origin/main`
 
 ---
 
