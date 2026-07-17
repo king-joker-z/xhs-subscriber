@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-17 10:xx — 迭代 #81
+
+### 迭代目标
+config.py `log_dir` 从 YAML 加载时未做路径规范化，`~` 开头的路径不会展开（与 CFG-10 同类问题）
+
+### 完成内容
+- **fix: `config.py` `log_dir` 加入 `expanduser().resolve()` 路径规范化（CFG-11）**
+  - 原实现：`self.log_dir = logging_cfg["dir"]`，直接赋值字符串，`~/logs` 等路径不会展开
+  - 修复：改为 `str(Path(logging_cfg["dir"]).expanduser().resolve())`，与 CFG-10（download_dir）保持对称
+  - 保持 `log_dir` 类型为 `str`，下游 `setup_logging` 无需改动
+  - 新增 CFG-11 修复说明注释
+- **改动文件**：`src/config.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，其余 9 项均为 PASS 或误报（代码已正确处理）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter81.py`）：10 项检查全部 PASS
+- `~/xhs_logs` → `/Users/yurongxie/xhs_logs` 展开验证通过
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 09:xx — 迭代 #80
 
 ### 迭代目标

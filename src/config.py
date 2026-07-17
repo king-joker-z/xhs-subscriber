@@ -163,7 +163,8 @@ class AppConfig(BaseSettings):
 
         logging_cfg = data.get("logging", {})
         if "dir" in logging_cfg:
-            self.log_dir = logging_cfg["dir"]
+            # CFG-11 修复：expanduser + resolve 规范化路径，支持 ~ 开头的路径（与 CFG-10 对称）
+            self.log_dir = str(Path(logging_cfg["dir"]).expanduser().resolve())
         # log_level 环境变量优先，YAML 次之；YAML 值需验证合法性
         if "level" in logging_cfg and os.environ.get("LOG_LEVEL") is None:
             yaml_level = logging_cfg["level"].upper()
