@@ -61,6 +61,12 @@ class RunResponse(BaseModel):
     status: str
 
 
+class VacuumResponse(BaseModel):
+    # API-20 修复：为 /api/vacuum 提供 response_model，与其他端点保持一致
+    status: str
+    message: str | None = None
+
+
 class SubscriptionInfo(BaseModel):
     name: str
     user_id: str | None
@@ -292,8 +298,9 @@ async def api_stats(
     "/api/vacuum",
     summary="执行数据库 VACUUM",
     tags=["system"],
+    response_model=VacuumResponse,
 )
-async def api_vacuum(x_admin_token: str | None = Header(default=None)) -> dict:
+async def api_vacuum(x_admin_token: str | None = Header(default=None)) -> VacuumResponse:
     """执行 SQLite VACUUM，整理数据库碎片，释放未使用空间。
     若环境变量 XHS_ADMIN_TOKEN 已设置，则请求头 X-Admin-Token 必须匹配，否则返回 403。
 
@@ -304,7 +311,7 @@ async def api_vacuum(x_admin_token: str | None = Header(default=None)) -> dict:
     if admin_token and x_admin_token != admin_token:
         raise HTTPException(status_code=403, detail="X-Admin-Token 不匹配或缺失")
     if _scheduler is None:
-        return {"status": "error", "message": "调度器未初始化"}
+        return VacuumResponse(status="error", message="调度器未初始化")
     # API-6 修复：防重入保护
     if _vacuum_active:
         logger.info("/api/vacuum 被调用但 VACUUM 已在执行中，返回 409")
@@ -312,9 +319,9 @@ async def api_vacuum(x_admin_token: str | None = Header(default=None)) -> dict:
     _vacuum_active = True
     try:
         await _scheduler._db.vacuum()
-        return {"status": "ok", "message": "VACUUM 执行完成"}
+        return VacuumResponse(status="ok", message="VACUUM 执行完成")
     except Exception as exc:
-        return {"status": "error", "message": str(exc)}
+        return VacuumResponse(status="error", message=str(exc))
     finally:
         # API-6 修复：无论成功或失败，均重置防重入标志
         _vacuum_active = False

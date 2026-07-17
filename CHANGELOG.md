@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-17 13:xx — 迭代 #84
+
+### 迭代目标
+api.py `/api/vacuum` 端点返回裸 `dict`，无 `response_model`，与其他端点（`/api/run`、`/api/status`）不一致
+
+### 完成内容
+- **fix: `api.py` `/api/vacuum` 加入 `VacuumResponse` response_model（API-20）**
+  - 原实现：`api_vacuum` 返回 `dict`，无 `response_model` 声明，OpenAPI 文档无响应结构
+  - 修复：新增 `VacuumResponse(BaseModel)` 模型（`status: str`、`message: str | None`）
+  - `/api/vacuum` 路由加入 `response_model=VacuumResponse`，函数返回类型注解改为 `-> VacuumResponse`
+  - 函数体内 3 处 `return dict` 全部改为 `return VacuumResponse(...)`
+  - 与 `RunResponse`、`StatusResponse` 等端点保持一致风格
+  - 新增 API-20 修复说明注释
+- **改动文件**：`src/api.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，其余 9 项均为 PASS 或误报（代码已正确处理）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter84.py`）：11 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 12:xx — 迭代 #83
 
 ### 迭代目标
