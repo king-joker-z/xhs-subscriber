@@ -58,13 +58,16 @@ def _is_retryable(exc: BaseException) -> bool:
     DL-6 修复：判断异常是否应触发重试。
     - 网络层异常（TransportError / TimeoutException）：始终重试
     - HTTP 5xx（HTTPStatusError，status_code >= 500）：服务端临时故障，重试
-    - HTTP 4xx（HTTPStatusError，status_code < 500）：客户端错误，不重试（避免无意义重试）
+    - HTTP 429 Too Many Requests（DL-19 修复）：限流，重试（tenacity 指数退避可自然消化等待）
+    - 其他 HTTP 4xx（status_code < 500 且 != 429）：客户端错误，不重试（避免无意义重试）
     - 其他异常：不重试
     """
     if isinstance(exc, (httpx.TransportError, httpx.TimeoutException)):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code >= 500
+        code = exc.response.status_code
+        # DL-19 修复：429 限流也应重试，其余 4xx 不重试
+        return code >= 500 or code == 429
     return False
 
 

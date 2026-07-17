@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-17 11:xx — 迭代 #82
+
+### 迭代目标
+downloader.py `_is_retryable` 未覆盖 429 Too Many Requests，小红书限流时不会重试
+
+### 完成内容
+- **fix: `downloader.py` `_is_retryable` 加入 429 重试支持（DL-19）**
+  - 原实现：`return exc.response.status_code >= 500`，429 被归入 4xx 不重试
+  - 修复：改为 `return code >= 500 or code == 429`，429 限流响应也触发重试
+  - tenacity 指数退避（`wait_exponential`）可自然消化限流等待时间
+  - 其余 4xx（400/403/404 等）仍不重试，避免无意义重试
+  - 新增 DL-19 修复说明注释
+- **改动文件**：`src/downloader.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，其余 9 项均为 PASS 或误报（代码已正确处理）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter82.py`）：15 项检查全部 PASS
+- 覆盖场景：TransportError/500/503/429 → 重试；404/403/400/其他 → 不重试
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 10:xx — 迭代 #81
 
 ### 迭代目标
