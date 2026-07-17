@@ -179,6 +179,11 @@ class AppConfig(BaseSettings):
                     self.log_level,
                 )
 
+        # CFG-21 修复：解析 server.http_port，使 YAML 配置端口真正生效（环境变量 HTTP_PORT 优先）
+        server = data.get("server", {})
+        if "http_port" in server and os.environ.get("HTTP_PORT") is None:
+            self.http_port = int(_clamp(int(server["http_port"]), 1, 65535, "http_port"))
+
         # 解析订阅列表（保留全部订阅，包括 enabled=False 的，供 UI 展示）
         subs_raw = data.get("subscriptions", [])
         self.subscriptions = [SubscriptionConfig(s) for s in subs_raw]

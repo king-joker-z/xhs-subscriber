@@ -14,6 +14,10 @@ downloader:
   # 下载根目录（容器内路径，通过 volume 挂载到宿主机）
   download_dir: /data/downloads
 
+server:
+  # HTTP 服务端口，默认 8080；容器部署时通过 -p 宿主机端口:8080 映射
+  http_port: 8080
+
 logging:
   level: INFO
   dir: /data/logs

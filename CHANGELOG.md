@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-17 16:xx — 迭代 #87
+
+### 迭代目标
+`config.py` `load_yaml` 缺少 `server.http_port` 解析，用户在 YAML 中配置端口无效；`config.example.yaml` 缺少 `server.http_port` 字段，用户配置参考不完整
+
+### 完成内容
+- **fix: `config.py` `load_yaml` 补充 `server.http_port` 解析（CFG-21）**
+  - 原实现：`load_yaml` 解析 `scheduler`、`downloader`、`logging`、`subscriptions` 节，但缺少 `server` 节，`http_port` 只能通过环境变量 `HTTP_PORT` 设置，YAML 中配置无效
+  - 修复：补充 `server = data.get("server", {})` 解析，`http_port` 使用 `_clamp(1, 65535)` 范围保护，环境变量 `HTTP_PORT` 优先（与 `log_level`/`LOG_LEVEL` 优先逻辑保持一致）
+  - 新增 CFG-21 修复说明注释
+- **docs: `config.example.yaml` 补充 `server.http_port` 字段**
+  - 新增 `server:` 节，包含 `http_port: 8080` 及容器部署端口映射说明注释
+  - 用户现在可以通过 YAML 配置端口，无需依赖环境变量
+- **改动文件**：`src/config.py`、`config/config.example.yaml`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，DL-23/MAIN-3 为误报（代码已正确处理），CFG-20 为误报（logging.dir 已有），CFG-21 为新发现真实问题。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter87.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 15:xx — 迭代 #86
 
 ### 迭代目标
