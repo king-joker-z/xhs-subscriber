@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-17 08:xx — 迭代 #79
+
+### 迭代目标
+config.py `download_dir` 从 YAML 加载时未做路径规范化，`~` 开头的路径不会展开
+
+### 完成内容
+- **fix: `config.py` `download_dir` 加入 `expanduser().resolve()` 路径规范化（CFG-10）**
+  - 原实现：`self.download_dir = downloader["download_dir"]`，直接赋值字符串，`~/downloads` 等路径不会展开
+  - 修复：改为 `str(Path(downloader["download_dir"]).expanduser().resolve())`，支持 `~` 展开并规范化为绝对路径
+  - 保持 `download_dir` 类型为 `str`，下游代码无需改动
+  - 新增 CFG-10 修复说明注释
+- **改动文件**：`src/config.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，其余 9 项均为 PASS 或误报（代码已正确处理）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter79.py`）：10 项检查全部 PASS
+- `~/xhs_downloads` → `/Users/yurongxie/xhs_downloads` 展开验证通过
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 07:xx — 迭代 #78
 
 ### 迭代目标

@@ -156,7 +156,8 @@ class AppConfig(BaseSettings):
         if "concurrency" in downloader:
             self.download_concurrency = int(_clamp(int(downloader["concurrency"]), 1, 20, "concurrency"))
         if "download_dir" in downloader:
-            self.download_dir = downloader["download_dir"]
+            # CFG-10 修复：expanduser + resolve 规范化路径，支持 ~ 开头的路径
+            self.download_dir = str(Path(downloader["download_dir"]).expanduser().resolve())
         if "max_batch" in downloader:
             self.max_batch = int(_clamp(int(downloader["max_batch"]), 1, 500, "max_batch"))
 
