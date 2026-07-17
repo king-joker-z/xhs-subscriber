@@ -24,7 +24,7 @@ downloader.py `stop_after_attempt(3)` 和 `wait_exponential(multiplier=1, min=2,
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter85.py`）：11 项检查全部 PASS
-- git commit: 待提交
+- git commit: `ae6d0f0`，已 push 到 `origin/main`
 
 ---
 
