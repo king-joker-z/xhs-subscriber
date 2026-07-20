@@ -86,6 +86,9 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     # SCR-27 修复：user_id 空值保护，空 user_id 会生成路径错误的 NFO 文件
     if not user_id:
         raise ValueError(f"generate_nfo 收到空 user_id，无法生成 NFO 文件（video_id={meta.video_id!r}）")
+    # SCR-29 修复：download_dir 空值保护，空 download_dir 会生成路径错误的 NFO 文件
+    if not download_dir:
+        raise ValueError(f"generate_nfo 收到空 download_dir，无法生成 NFO 文件（video_id={meta.video_id!r}）")
     is_image_post = bool(meta.image_urls)
     if is_image_post:
         # 图文作品：NFO 写入 {video_id}/ 子目录，与图片同目录

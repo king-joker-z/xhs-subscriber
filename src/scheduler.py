@@ -208,6 +208,10 @@ class XHSScheduler:
         """
         _sub_start = time.monotonic()
         try:
+            # SC-45 修复：sub.name 空值保护，空 name 会导致日志混乱
+            if not sub.name:
+                logger.warning("_process_subscription 收到空 sub.name，跳过该订阅")
+                return
             logger.info("处理订阅：%s", sub.name)
 
             # M3 爬取

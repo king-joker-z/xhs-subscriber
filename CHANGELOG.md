@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-07-20 22:xx — 迭代 #108
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 无 `download_dir` 空值保护，空 `download_dir` 会生成路径错误的 NFO 文件
+2. `scheduler.py` `_process_subscription` 无 `sub.name` 空值保护，空 name 会导致日志混乱
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 加入 `download_dir` 空值保护（SCR-29）**
+  - 原实现：仅有 SCR-26/27 的 `video_id`/`user_id` 保护，无 `download_dir` 校验
+  - 修复：在 `user_id` 保护之后加入 `not download_dir` 检查，空值时抛出 `ValueError`
+  - 三重保护顺序：`video_id` → `user_id` → `download_dir`
+  - 新增 SCR-29 修复说明注释
+- **fix: `scheduler.py` `_process_subscription` 加入 `sub.name` 空值保护（SC-45）**
+  - 原实现：直接 `logger.info("处理订阅：%s", sub.name)`，空 name 会导致日志混乱
+  - 修复：在 `logger.info` 之前加入 `not sub.name` 检查，空值时输出 WARNING 并 `return`
+  - 新增 SC-45 修复说明注释
+- **改动文件**：`src/scraper.py`、`src/scheduler.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，FE-24（`publish_time` 取前10字符，影响极低）留待后续迭代。SC-9 遗留（改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter108.py`）：15 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 22:xx — 迭代 #107
 
 ### 迭代目标
