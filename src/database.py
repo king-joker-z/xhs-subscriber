@@ -168,6 +168,10 @@ class Database:
             rows = await cursor.fetchall()
         counts = {"video": 0, "image": 0}
         for row in rows:
+            # DB-50 修复：row[0] 空值保护，None 时 None in counts 返回 False 会把 None 计入 "video" 桶
+            if not row[0]:
+                logger.warning("get_download_count_by_type 发现空 post_type 行（count=%s），已跳过", row[1])
+                continue
             pt = row[0] if row[0] in counts else "video"
             counts[pt] = row[1]
         counts["total"] = counts["video"] + counts["image"]
@@ -255,6 +259,13 @@ class Database:
                 logger.warning(
                     "get_recent_downloads 发现空 video_id 行（downloaded_at=%s），已跳过",
                     row[1],
+                )
+                continue
+            # DB-51 修复：downloaded_at 空值保护，row[1] 为 None 时传入响应会产生 None 字段
+            if not row[1]:
+                logger.warning(
+                    "get_recent_downloads 发现空 downloaded_at 行（video_id=%s），已跳过",
+                    row[0],
                 )
                 continue
             result.append(

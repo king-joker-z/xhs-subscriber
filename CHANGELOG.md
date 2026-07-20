@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #139
+
+### 迭代目标
+1. `database.py` `get_download_count_by_type` 中 `row[0]` 无空值保护，`post_type` 为 `None` 时 `None in counts` 返回 `False`，会把 `None` 类型计入 `"video"` 桶，静默丢失数据
+2. `database.py` `get_recent_downloads` 中 `row[1]`（`downloaded_at`）无空值保护，`downloaded_at` 为 `None` 时传入响应会产生 `None` 字段
+
+### 完成内容
+- **fix: `database.py` `get_download_count_by_type` 加入 `row[0]` 空值保护（DB-50）**
+  - 原实现：直接 `pt = row[0] if row[0] in counts else "video"`，`None` 时静默计入 `"video"` 桶
+  - 修复：加入 `not row[0]` 检查，空 `post_type` 时输出 WARNING 并 `continue` 跳过
+  - 新增 DB-50 修复说明注释
+- **fix: `database.py` `get_recent_downloads` 加入 `downloaded_at` 空值保护（DB-51）**
+  - 原实现：直接 `{"downloaded_at": row[1], ...}`，`downloaded_at` 为 `None` 时传入响应产生 `None` 字段
+  - 修复：加入 `not row[1]` 检查，空 `downloaded_at` 时输出 WARNING 并 `continue` 跳过
+  - 新增 DB-51 修复说明注释
+- **改动文件**：`src/database.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter139.py`）：15 项检查全部 PASS（含 5 个 post_type 用例 + 5 个 downloaded_at 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #138
 
 ### 迭代目标
