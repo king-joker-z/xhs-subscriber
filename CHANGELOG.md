@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-21 00:xx — 迭代 #117
+
+### 迭代目标
+1. `downloader.py` `_stream_download` 无 `url` 空值保护，空 url 会导致 httpx 请求异常
+2. `api.py` `health`/`api_status` 无 `uptime` 负值保护，时钟回拨时 uptime 可能为负
+
+### 完成内容
+- **fix: `downloader.py` `_stream_download` 加入 `url` 空值保护（DL-47）**
+  - 原实现：直接构建 tmp_path，无 url 校验
+  - 修复：在 tmp_path 构建之前加入 `not url` 检查，空值时抛出 `ValueError`
+  - 新增 DL-47 修复说明注释
+- **fix: `api.py` `health`/`api_status` 加入 `uptime` 负值保护（API-69）**
+  - 原实现：`uptime = int((...).total_seconds())`，时钟回拨时可能为负
+  - 修复：两处均改为 `uptime = max(0, int((...).total_seconds()))`
+  - 新增 API-69 修复说明注释（共 2 处）
+- **改动文件**：`src/downloader.py`、`src/api.py`
+
+### 诊断说明
+剩余候选问题：SC-51（_process_subscription metas 类型保护）、DL-48（download user_id 空值保护）、SC-9（遗留，改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter117.py`）：12 项检查全部 PASS（含 4 个 uptime 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 00:xx — 迭代 #116
 
 ### 迭代目标

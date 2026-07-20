@@ -270,6 +270,9 @@ class Downloader:
         DL-6 修复：retry 只覆盖 TransportError/TimeoutException，HTTP 5xx 临时故障不会重试。
         改用 retry_if_exception(_is_retryable)，将 5xx HTTPStatusError 纳入重试范围。
         """
+        # DL-47 修复：url 空值保护，空 url 会导致 httpx 请求异常
+        if not url:
+            raise ValueError(f"_stream_download 收到空 url，无法下载（dest={dest.name!r}）")
         tmp_path = dest.with_suffix(dest.suffix + ".tmp")
         filename = dest.name
 

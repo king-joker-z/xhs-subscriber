@@ -125,7 +125,8 @@ class StatusResponse(BaseModel):
 )
 async def health() -> HealthResponse:
     """返回服务健康状态，包含版本号和运行时长"""
-    uptime = int((datetime.now(timezone.utc) - _start_time).total_seconds())
+    # API-69 修复：uptime 负值保护，时钟回拨时 uptime 可能为负
+    uptime = max(0, int((datetime.now(timezone.utc) - _start_time).total_seconds()))
     return HealthResponse(status="ok", version=_VERSION, uptime_seconds=uptime)
 
 
@@ -187,7 +188,8 @@ async def api_status() -> StatusResponse:
       max_batch                 - 每次抓取博主作品的最大条数
       last_check_at             - 上次全量检查完成时间（UTC），尚未执行时为 null
     """
-    uptime = int((datetime.now(timezone.utc) - _start_time).total_seconds())
+    # API-69 修复：uptime 负值保护，时钟回拨时 uptime 可能为负
+    uptime = max(0, int((datetime.now(timezone.utc) - _start_time).total_seconds()))
     subs: list[SubscriptionInfo] = []
     interval_hours = 6.0
     downloaded_total = 0
