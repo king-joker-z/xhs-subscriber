@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #144
+
+### 迭代目标
+1. `scheduler.py` `_probe_cookie` 中 `resp.json()` 无类型保护，API 返回非 dict 类型时 `data.get("code")` 会抛 `AttributeError`
+2. `scheduler.py` `_probe_cookie` 中 `data.get("data", {}).get("nickname", "未知")` 无类型保护，`data["data"]` 为非 dict 类型时 `.get("nickname", "未知")` 会抛 `AttributeError`
+
+### 完成内容
+- **fix: `scheduler.py` `_probe_cookie` 加入 `resp.json()` 类型保护（SC-58）**
+  - 原实现：直接 `data = resp.json()`，非 dict 时 `data.get("code")` 抛 `AttributeError`
+  - 修复：加入 `isinstance(_raw_probe_data, dict)` 检查，非 dict 时降级为空 dict 并输出 WARNING
+  - 新增 SC-58 修复说明注释
+- **fix: `scheduler.py` `_probe_cookie` 加入 `data["data"]` 类型保护（SC-59）**
+  - 原实现：直接 `data.get("data", {}).get("nickname", "未知")`，`data["data"]` 为 null/列表时抛 `AttributeError`
+  - 修复：提取 `_probe_data_inner = data.get("data", {})`，加入 `isinstance(_probe_data_inner, dict)` 检查，非 dict 时降级为空 dict
+  - 新增 SC-59 修复说明注释
+- **改动文件**：`src/scheduler.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter144.py`）：14 项检查全部 PASS（含 6 个 resp.json 用例 + 5 个 data_inner 用例 + 6 个联合用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #143
 
 ### 迭代目标

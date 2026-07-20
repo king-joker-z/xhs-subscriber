@@ -129,10 +129,28 @@ class XHSScheduler:
                 )
 
             if resp.status_code == 200:
-                data = resp.json()
+                # SC-58 修复：resp.json() 返回值类型保护，API 返回非 dict 类型时
+                # data.get("code") 会抛 AttributeError，降级为空 dict
+                _raw_probe_data = resp.json()
+                if not isinstance(_raw_probe_data, dict):
+                    logger.warning(
+                        "Cookie 预检 API 返回非 dict 类型（%s），已降级为空 dict",
+                        type(_raw_probe_data).__name__,
+                    )
+                    _raw_probe_data = {}
+                data = _raw_probe_data
                 code = data.get("code")
                 if code == 0:
-                    nickname = data.get("data", {}).get("nickname", "未知")
+                    # SC-59 修复：data["data"] 类型保护，data["data"] 为非 dict 类型时
+                    # .get("nickname", "未知") 会抛 AttributeError，降级为空 dict
+                    _probe_data_inner = data.get("data", {})
+                    if not isinstance(_probe_data_inner, dict):
+                        logger.warning(
+                            "Cookie 预检 API 返回 data.data 类型非法（%s），已降级为空 dict",
+                            type(_probe_data_inner).__name__,
+                        )
+                        _probe_data_inner = {}
+                    nickname = _probe_data_inner.get("nickname", "未知")
                     logger.info("✅ Cookie 预检通过，当前登录用户：%s", nickname)
                     self.cookie_status = "ok"
                     self.cookie_nickname = nickname
