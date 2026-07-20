@@ -127,8 +127,10 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     _text_elem(root, "sorttitle", sorttitle)
 
     # ---- 简介 ----
-    _text_elem(root, "plot", meta.desc)
-    _text_elem(root, "outline", (meta.desc[:200] + "…") if len(meta.desc) > 200 else meta.desc)
+    # SCR-36 修复：meta.desc 类型保护，None 时 len(meta.desc) 会抛 TypeError
+    _safe_desc = meta.desc if isinstance(meta.desc, str) else (str(meta.desc) if meta.desc is not None else "")
+    _text_elem(root, "plot", _safe_desc)
+    _text_elem(root, "outline", (_safe_desc[:200] + "…") if len(_safe_desc) > 200 else _safe_desc)
 
     # ---- 时间 ----
     _text_elem(root, "premiered", meta.publish_time)
@@ -137,12 +139,14 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     _text_elem(root, "dateadded", dateadded)
 
     # ---- 制作方 / 导演 ----
-    _text_elem(root, "studio", meta.author)
-    _text_elem(root, "director", meta.author)
+    # SCR-37 修复：meta.author 类型保护，None 时传入 _text_elem 会产生 None 文本节点
+    _safe_author = meta.author if isinstance(meta.author, str) else (str(meta.author) if meta.author is not None else "")
+    _text_elem(root, "studio", _safe_author)
+    _text_elem(root, "director", _safe_author)
 
     # ---- 演员（博主本人）----
     actor_el = etree.SubElement(root, "actor")
-    _text_elem(actor_el, "name", meta.author)
+    _text_elem(actor_el, "name", _safe_author)
     _text_elem(actor_el, "role", "博主")
     _text_elem(actor_el, "type", "Actor")
     _text_elem(actor_el, "sortorder", "0")

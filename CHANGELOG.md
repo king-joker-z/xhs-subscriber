@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #135
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 中 `meta.desc` 无类型保护，`None` 时 `len(meta.desc)` 会抛 `TypeError`
+2. `scraper.py` `generate_nfo` 中 `meta.author` 无类型保护，`None` 时传入 `_text_elem` 会产生 `None` 文本节点
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 加入 `meta.desc` 类型保护（SCR-36）**
+  - 原实现：直接 `len(meta.desc)`，`meta.desc` 为 `None` 时抛 `TypeError`
+  - 修复：引入 `_safe_desc`，`isinstance(meta.desc, str)` 检查，非字符串时 `str()` 转换，`None` 时降级为空字符串
+  - 新增 SCR-36 修复说明注释
+- **fix: `scraper.py` `generate_nfo` 加入 `meta.author` 类型保护（SCR-37）**
+  - 原实现：直接 `meta.author` 传入 `_text_elem`，`None` 时产生 `None` 文本节点
+  - 修复：引入 `_safe_author`，`isinstance(meta.author, str)` 检查，非字符串时 `str()` 转换，`None` 时降级为空字符串
+  - 新增 SCR-37 修复说明注释
+- **改动文件**：`src/scraper.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter135.py`）：15 项检查全部 PASS（含 4 个 _safe_desc 用例 + 5 个 outline 用例 + 5 个 author 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #134
 
 ### 迭代目标
