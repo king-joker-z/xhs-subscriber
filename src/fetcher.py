@@ -479,6 +479,12 @@ class XHSFetcher:
         :param video_url: 视频页面 URL（含 xsec_token）
         :return: VideoMeta 或 None
         """
+        # FE-15 修复：URL 格式校验，非法 URL 提前抛出 ValueError，避免传入底层产生不明确错误
+        if not video_url or not video_url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"fetch_single_video 收到非法 URL：{video_url!r}，"
+                "URL 必须以 http:// 或 https:// 开头"
+            )
         logger.info("开始爬取单视频：%s", video_url)
         try:
             raw_result = await self._extract(video_url)

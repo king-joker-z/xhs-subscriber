@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-20 14:xx — 迭代 #95
+
+### 迭代目标
+`fetcher.py` `fetch_single_video` 无 URL 格式校验，非法 URL（空字符串、相对路径、非 http/https 协议）传入底层 `_extract` 会产生不明确的错误，难以排查
+
+### 完成内容
+- **fix: `fetcher.py` `fetch_single_video` 加入 URL 格式校验（FE-15）**
+  - 原实现：直接调用 `self._extract(video_url)`，无任何入参校验
+  - 修复：在函数体开头加入 URL 格式校验，检查 `not video_url` 或不以 `http://`/`https://` 开头，提前抛出 `ValueError` 并附带清晰错误消息
+  - 校验在 `logger.info` 和 `_extract` 调用之前，确保非法 URL 不会进入底层爬取流程
+  - 新增 FE-15 修复说明注释
+- **改动文件**：`src/fetcher.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），API-45 为误报（所有路由已有 tags），其余检查均通过。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter95.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 13:xx — 迭代 #94
 
 ### 迭代目标
