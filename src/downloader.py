@@ -117,6 +117,9 @@ class Downloader:
         self._timeout = timeout
 
     def _user_dir(self, user_id: str) -> Path:
+        # DL-38 修复：user_id 空值保护，空 user_id 会构建错误路径
+        if not user_id:
+            raise ValueError("_user_dir 收到空 user_id，无法构建下载目录")
         d = self._download_dir / user_id
         d.mkdir(parents=True, exist_ok=True)
         return d

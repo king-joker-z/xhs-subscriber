@@ -187,6 +187,9 @@ def generate_nfo_batch(
     download_dir: str = "/data/downloads",
 ) -> List[Path]:
     """批量生成 NFO 文件"""
+    # SCR-25 修复：空列表保护，避免无意义的循环调用
+    if not metas:
+        return []
     paths = []
     for meta in metas:
         try:

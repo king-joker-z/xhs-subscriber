@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-20 20:xx — 迭代 #103
+
+### 迭代目标
+1. `downloader.py` `_user_dir` 无 `user_id` 空值保护，空 `user_id` 会构建错误路径
+2. `scraper.py` `generate_nfo_batch` 无空列表保护，空列表传入无早期退出
+
+### 完成内容
+- **fix: `downloader.py` `_user_dir` 加入 `user_id` 空值保护（DL-38）**
+  - 原实现：直接 `d = self._download_dir / user_id`，空 `user_id` 会构建 `download_dir/` 根路径
+  - 修复：在 `mkdir` 之前加入 `not user_id` 检查，空值时抛出 `ValueError` 并附带清晰错误消息
+  - 新增 DL-38 修复说明注释
+- **fix: `scraper.py` `generate_nfo_batch` 加入空列表保护（SCR-25）**
+  - 原实现：直接进入 `for meta in metas` 循环，空列表时无早期退出
+  - 修复：在 `for` 循环之前加入 `if not metas: return []`，空列表直接返回
+  - 新增 SCR-25 修复说明注释
+- **改动文件**：`src/downloader.py`、`src/scraper.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），FE-20 留待后续迭代。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter103.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 20:xx — 迭代 #102
 
 ### 迭代目标
