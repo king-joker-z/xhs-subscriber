@@ -130,7 +130,8 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
 
     # ---- 时间 ----
     _text_elem(root, "premiered", meta.publish_time)
-    _text_elem(root, "year", meta.publish_time[:4] if meta.publish_time else "")
+    # SCR-34 修复：publish_time 长度保护，长度不足 4 时 [:4] 会返回截断字符串（如 "202"）
+    _text_elem(root, "year", meta.publish_time[:4] if meta.publish_time and len(meta.publish_time) >= 4 else "")
     _text_elem(root, "dateadded", dateadded)
 
     # ---- 制作方 / 导演 ----

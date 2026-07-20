@@ -230,10 +230,13 @@ class Downloader:
                 logger.debug("视频 URL 和图片列表均为空，跳过媒体下载：%s", meta.video_id)
 
             # 2. 下载封面
-            if meta.cover_url:
+            # DL-53 修复：cover_url URL 格式校验，非 http/https 开头的 URL 会导致请求失败
+            if meta.cover_url and meta.cover_url.startswith(("http://", "https://")):
                 await self._stream_download(meta.cover_url, thumb_path, headers)
                 created_files.append(thumb_path)
                 logger.debug("封面下载完成：%s", thumb_path)
+            elif meta.cover_url:
+                logger.warning("_do_download 封面 URL 格式非法，已跳过（video_id=%s cover_url=%r）", meta.video_id, meta.cover_url)
 
             # 3. 写描述文件（DL-32 修复：改为原子写入，防止中途崩溃留下损坏文件）
             _desc_tmp = desc_path.with_suffix(desc_path.suffix + ".tmp")

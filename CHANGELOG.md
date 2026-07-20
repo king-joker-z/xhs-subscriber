@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #133
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 中 `meta.publish_time[:4]` 无长度保护，`publish_time` 长度不足 4 时会返回截断字符串（如 `"202"`）
+2. `downloader.py` `_do_download` 中 `meta.cover_url` 无 URL 格式校验，非 http/https 开头的 URL 会传入 `_stream_download` 导致请求失败
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 加入 `publish_time` 长度保护（SCR-34）**
+  - 原实现：`meta.publish_time[:4] if meta.publish_time else ""`，长度不足 4 时返回截断字符串
+  - 修复：改为 `meta.publish_time[:4] if meta.publish_time and len(meta.publish_time) >= 4 else ""`
+  - 新增 SCR-34 修复说明注释
+- **fix: `downloader.py` `_do_download` 加入 `cover_url` URL 格式校验（DL-53）**
+  - 原实现：`if meta.cover_url:` 直接下载，非 http/https URL 会导致请求失败
+  - 修复：改为 `if meta.cover_url and meta.cover_url.startswith(("http://", "https://"))`，格式非法时输出 WARNING 并跳过
+  - 新增 DL-53 修复说明注释
+- **改动文件**：`src/scraper.py`、`src/downloader.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter133.py`）：15 项检查全部 PASS（含 6 个 year 用例 + 6 个 cover_url 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #132
 
 ### 迭代目标
