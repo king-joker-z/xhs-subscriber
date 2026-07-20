@@ -217,10 +217,23 @@ class AppConfig(BaseSettings):
         # CFG-21 修复：解析 server.http_port，使 YAML 配置端口真正生效（环境变量 HTTP_PORT 优先）
         server = data.get("server", {})
         if "http_port" in server and os.environ.get("HTTP_PORT") is None:
-            self.http_port = int(_clamp(int(server["http_port"]), 1, 65535, "http_port"))
+            # CFG-49 修复：http_port None 值保护，None 时 int(None) 会抛 TypeError
+            _raw_port = server["http_port"]
+            if _raw_port is None:
+                logger.warning("config.yaml server.http_port 为 null，已忽略，保持当前值：%s", self.http_port)
+            else:
+                self.http_port = int(_clamp(int(_raw_port), 1, 65535, "http_port"))
 
         # 解析订阅列表（保留全部订阅，包括 enabled=False 的，供 UI 展示）
+        # CFG-48 修复：subs_raw 类型保护，YAML 中 subscriptions 为 null/非列表时降级为空列表，
+        # 避免 [SubscriptionConfig(s) for s in subs_raw] 抛 TypeError 或产生意外行为
         subs_raw = data.get("subscriptions", [])
+        if not isinstance(subs_raw, list):
+            logger.warning(
+                "config.yaml subscriptions 类型非法（%s），已降级为空列表",
+                type(subs_raw).__name__,
+            )
+            subs_raw = []
         self.subscriptions = [SubscriptionConfig(s) for s in subs_raw]
 
         # 空订阅检查：全部 disabled 或列表为空时输出 WARNING，避免服务静默运行无任何订阅
