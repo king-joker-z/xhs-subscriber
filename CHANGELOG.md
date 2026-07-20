@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-20 23:xx — 迭代 #114
+
+### 迭代目标
+1. `fetcher.py` `fetch_user_videos` 无 `max_batch` 下限保护，max_batch=0 时不下载任何内容
+2. `downloader.py` `_video_path` 无 `video_id` 空值保护，空 video_id 会构建错误路径
+
+### 完成内容
+- **fix: `fetcher.py` `fetch_user_videos` 加入 `max_batch` 下限保护（FE-26）**
+  - 原实现：`limit = max_batch if max_batch is not None else self.MAX_BATCH`，无下限校验
+  - 修复：引入 `_raw_limit` 中间变量，`limit = max(1, _raw_limit)`，小于 1 时输出 WARNING
+  - 新增 FE-26 修复说明注释
+- **fix: `downloader.py` `_video_path` 加入 `video_id` 空值保护（DL-44）**
+  - 原实现：直接构建路径，无 video_id 校验
+  - 修复：加入 `not video_id` 检查，空值时抛出 `ValueError`
+  - 新增 DL-44 修复说明注释
+- **改动文件**：`src/fetcher.py`、`src/downloader.py`
+
+### 诊断说明
+剩余候选问题：DB-45（get_recent_downloads user_id 空字符串保护）、SC-9（遗留，改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter114.py`）：13 项检查全部 PASS（含 6 个 max_batch 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 23:xx — 迭代 #113
 
 ### 迭代目标

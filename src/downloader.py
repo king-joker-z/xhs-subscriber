@@ -125,6 +125,9 @@ class Downloader:
         return d
 
     def _video_path(self, user_id: str, video_id: str) -> Path:
+        # DL-44 修复：video_id 空值保护，空 video_id 会构建错误路径
+        if not video_id:
+            raise ValueError("_video_path 收到空 video_id，无法构建视频路径")
         return self._user_dir(user_id) / f"{video_id}.mp4"
 
     def _thumb_path(self, user_id: str, video_id: str) -> Path:

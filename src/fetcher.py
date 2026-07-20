@@ -348,7 +348,11 @@ class XHSFetcher:
         # FE-17 修复：user_id 空值保护，空 user_id 会导致 API 请求异常
         if not user_id:
             raise ValueError("fetch_user_videos 收到空 user_id，无法爬取博主主页")
-        limit = max_batch if max_batch is not None else self.MAX_BATCH
+        # FE-26 修复：max_batch 下限保护，max_batch=0 时不下载任何内容
+        _raw_limit = max_batch if max_batch is not None else self.MAX_BATCH
+        limit = max(1, _raw_limit)
+        if _raw_limit != limit:
+            logger.warning("fetch_user_videos max_batch=%d 小于 1，已修正为 1（user_id=%s）", _raw_limit, user_id)
         _fetch_start = time.monotonic()
         logger.info("开始爬取博主主页：user_id=%s，最大抓取 %d 条", user_id, limit)
 
