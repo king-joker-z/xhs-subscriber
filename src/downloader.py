@@ -335,6 +335,9 @@ class Downloader:
         # DL-31 修复：空列表保护，避免创建无意义的 gather 调用
         if not metas:
             return (0, 0)
+        # DL-43 修复：user_id 空值保护，空 user_id 会导致下载目录路径错误
+        if not user_id:
+            raise ValueError("download_batch 收到空 user_id，无法构建下载目录")
         tasks = [self.download(meta, user_id) for meta in metas]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

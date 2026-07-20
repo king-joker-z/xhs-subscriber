@@ -196,6 +196,9 @@ def generate_nfo_batch(
     download_dir: str = "/data/downloads",
 ) -> List[Path]:
     """批量生成 NFO 文件"""
+    # SCR-31 修复：download_dir 空值保护，空 download_dir 会传入 generate_nfo 引发路径错误
+    if not download_dir:
+        raise ValueError(f"generate_nfo_batch 收到空 download_dir，无法生成 NFO 文件（user_id={user_id!r}）")
     # SCR-25 修复：空列表保护，避免无意义的循环调用
     if not metas:
         return []

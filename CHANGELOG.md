@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-20 23:xx — 迭代 #112
+
+### 迭代目标
+1. `downloader.py` `download_batch` 无 `user_id` 空值保护，空 user_id 会导致下载目录路径错误
+2. `scraper.py` `generate_nfo_batch` 无 `download_dir` 空值保护，空 download_dir 会传入 generate_nfo 引发路径错误
+
+### 完成内容
+- **fix: `downloader.py` `download_batch` 加入 `user_id` 空值保护（DL-43）**
+  - 原实现：空列表保护后直接构建 tasks，无 user_id 校验
+  - 修复：在 tasks 构建之前加入 `not user_id` 检查，空值时抛出 `ValueError`
+  - 新增 DL-43 修复说明注释
+- **fix: `scraper.py` `generate_nfo_batch` 加入 `download_dir` 空值保护（SCR-31）**
+  - 原实现：直接进入空列表保护，无 download_dir 校验
+  - 修复：在 SCR-25 空列表保护之前加入 `not download_dir` 检查，空值时抛出 `ValueError`
+  - 新增 SCR-31 修复说明注释
+- **改动文件**：`src/downloader.py`、`src/scraper.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，剩余候选问题：SC-48（_process_subscription download_dir 保护）、DB-44（mark_downloaded user_id 保护）、FE-26（fetch_user_videos max_batch 下限保护）、SC-9（遗留，改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter112.py`）：13 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 22:xx — 迭代 #111
 
 ### 迭代目标
