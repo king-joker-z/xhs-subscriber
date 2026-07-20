@@ -89,6 +89,13 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     # SCR-29 修复：download_dir 空值保护，空 download_dir 会生成路径错误的 NFO 文件
     if not download_dir:
         raise ValueError(f"generate_nfo 收到空 download_dir，无法生成 NFO 文件（video_id={meta.video_id!r}）")
+    # SCR-33 修复：image_urls 类型保护，非列表类型会导致 bool() 误判或后续迭代异常
+    if meta.image_urls is not None and not isinstance(meta.image_urls, list):
+        logger.warning(
+            "generate_nfo 收到非列表类型 image_urls（%s），已强制转为空列表（video_id=%s）",
+            type(meta.image_urls).__name__, meta.video_id,
+        )
+        meta = meta._replace(image_urls=[])
     is_image_post = bool(meta.image_urls)
     if is_image_post:
         # 图文作品：NFO 写入 {video_id}/ 子目录，与图片同目录

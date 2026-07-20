@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-21 00:xx — 迭代 #116
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 无 `image_urls` 类型保护，非列表类型会导致 NFO 生成异常
+2. `downloader.py` `_do_download` 无 `video_url`/`image_urls` 均空早期退出，会执行无意义的下载流程
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 加入 `image_urls` 类型保护（SCR-33）**
+  - 原实现：`is_image_post = bool(meta.image_urls)`，非列表类型会导致 bool() 误判或后续迭代异常
+  - 修复：在 `is_image_post` 之前加入 `isinstance(meta.image_urls, list)` 检查，非列表时输出 WARNING 并强制转为空列表
+  - 新增 SCR-33 修复说明注释
+- **fix: `downloader.py` `_do_download` 加入 `video_url`/`image_urls` 均空早期退出（DL-46）**
+  - 原实现：无论 video_url 和 image_urls 是否为空，均进入 try 块
+  - 修复：在 try 块之前加入 `not meta.video_url and not meta.image_urls` 检查，均空时输出 WARNING 并返回 False
+  - 新增 DL-46 修复说明注释
+- **改动文件**：`src/scraper.py`、`src/downloader.py`
+
+### 诊断说明
+本轮已清空 #115 诊断发现的所有候选问题。SC-9 遗留（改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter116.py`）：14 项检查全部 PASS（含 5 个 image_urls 类型用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 23:xx — 迭代 #115
 
 ### 迭代目标

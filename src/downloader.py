@@ -185,6 +185,14 @@ class Downloader:
         # 原先 cleanup 会把已成功下载的视频文件一起删掉，导致下次重复下载视频。
         created_files: list[Path] = []
 
+        # DL-46 修复：video_url 和 image_urls 均为空时早期退出，避免无意义的下载流程
+        if not meta.video_url and not meta.image_urls:
+            logger.warning(
+                "_do_download 收到 video_url 和 image_urls 均为空的作品，跳过下载（video_id=%s user_id=%s）",
+                meta.video_id, user_id,
+            )
+            return False
+
         try:
             # 1. 下载视频
             if meta.video_url:
