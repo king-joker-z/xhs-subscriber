@@ -105,6 +105,10 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
     """将 XHS-Downloader extract() 返回的字典转换为 VideoMeta"""
     if not raw:
         return None
+    # FE-40 修复：raw 类型保护，非 dict 类型时 raw.get() 会抛 AttributeError
+    if not isinstance(raw, dict):
+        logger.warning("_parse_extract_result 收到非 dict 类型 raw（%s），已跳过", type(raw).__name__)
+        return None
 
     video_id = str(raw.get("作品ID") or raw.get("id") or "")
     if not video_id:
@@ -527,6 +531,13 @@ class XHSFetcher:
         # 逐条调用 extract() 获取完整元数据
         results: list[VideoMeta] = []
         for note in all_notes[: limit]:
+            # FE-39 修复：note 类型保护，all_notes 中元素为非 dict 类型时 note.get() 会抛 AttributeError
+            if not isinstance(note, dict):
+                logger.warning(
+                    "all_notes 中发现非 dict 类型元素（%s），已跳过（user_id=%s）",
+                    type(note).__name__, user_id,
+                )
+                continue
             # FE-30 修复：note_id 取值改用 is not None 判断，避免整数 0 被 or 误判为空而取 id
             _raw_note_id_a = note.get("note_id")
             _raw_note_id_b = note.get("id")
