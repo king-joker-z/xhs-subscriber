@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-20 11:xx — 迭代 #92
+
+### 迭代目标
+`scheduler.py` `run_once` 的 `finally` 块只重置了 `_run_once_active = False`，未调用 `_save_state()`，异常时订阅状态不会持久化，重启后状态丢失
+
+### 完成内容
+- **fix: `scheduler.py` `run_once` finally 块加入 `_save_state()` 调用（SC-26）**
+  - 原实现：`finally` 块只有 `self._run_once_active = False`，异常时 `_sub_last_run_at` 更新不会写入磁盘
+  - 修复：在 `finally` 块中加入 `self._save_state()` 调用，确保无论成功或异常都持久化状态
+  - `_save_state()` 调用包裹在 `try/except` 中，保存失败时记录 WARNING 日志并继续，不中断 `finally` 块的其他操作
+  - 新增 SC-26 修复说明注释
+- **改动文件**：`src/scheduler.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），DL-27 低优先级（消息已足够）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter92.py`）：11 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 10:xx — 迭代 #91
 
 ### 迭代目标

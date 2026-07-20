@@ -195,6 +195,11 @@ class XHSScheduler:
             logger.info("全量检查完成，耗时 %.1f 秒", elapsed)
         finally:
             self._run_once_active = False
+            # SC-26 修复：无论成功或异常，finally 中持久化状态，避免异常时状态丢失
+            try:
+                self._save_state()
+            except Exception as _se:
+                logger.warning("run_once finally 中保存状态失败：%s", _se)
 
     async def _process_subscription(self, sub: SubscriptionConfig) -> None:
         """
