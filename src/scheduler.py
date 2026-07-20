@@ -234,6 +234,13 @@ class XHSScheduler:
             if not metas:
                 logger.info("订阅 %s 没有获取到视频", sub.name)
                 return
+            # SC-51 修复：metas 类型保护，非列表类型会导致 len()/迭代异常
+            if not isinstance(metas, list):
+                logger.warning(
+                    "订阅 %s：metas 类型异常（%s），跳过下载",
+                    sub.name, type(metas).__name__,
+                )
+                return
 
             logger.info("订阅 %s 获取到 %d 条视频，开始下载", sub.name, len(metas))
 

@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-21 00:xx — 迭代 #118
+
+### 迭代目标
+1. `downloader.py` `download` 方法无 `user_id` 空值保护，空 user_id 会导致下载目录路径错误
+2. `scheduler.py` `_process_subscription` 无 `metas` 类型保护，非列表类型会导致 len()/迭代异常
+
+### 完成内容
+- **fix: `downloader.py` `download` 加入 `user_id` 空值保护（DL-48）**
+  - 原实现：仅有 DL-30 的 video_id 保护，无 user_id 校验
+  - 修复：在 video_id 保护之后加入 `not user_id` 检查，空值时抛出 `ValueError`
+  - 新增 DL-48 修复说明注释
+- **fix: `scheduler.py` `_process_subscription` 加入 `metas` 类型保护（SC-51）**
+  - 原实现：`if not metas:` 只检查空列表，非列表类型会导致后续迭代异常
+  - 修复：在空列表保护之后加入 `isinstance(metas, list)` 检查，类型异常时输出 WARNING 并 `return`
+  - 新增 SC-51 修复说明注释
+- **改动文件**：`src/downloader.py`、`src/scheduler.py`
+
+### 诊断说明
+本轮已清空 #117 诊断发现的所有候选问题。SC-9 遗留（改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter118.py`）：14 项检查全部 PASS（含 5 个 metas 类型用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 00:xx — 迭代 #117
 
 ### 迭代目标

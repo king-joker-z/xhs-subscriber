@@ -151,6 +151,9 @@ class Downloader:
         if not meta.video_id:
             logger.warning("download 收到空 video_id，跳过下载（user_id=%s）", user_id)
             return False
+        # DL-48 修复：user_id 空值保护，空 user_id 会导致下载目录路径错误
+        if not user_id:
+            raise ValueError(f"download 收到空 user_id，无法构建下载目录（video_id={meta.video_id!r}）")
         # D-1 修复：去重检查移入 semaphore 内部。
         # 原先在 semaphore 外检查，并发时多个协程可能同时通过检查，导致重复下载。
         # 移入 semaphore 后，同一时刻只有一个协程持有锁并执行检查+下载，消除竞态。
