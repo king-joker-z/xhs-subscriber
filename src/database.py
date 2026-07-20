@@ -235,10 +235,19 @@ class Database:
             params,
         ) as cursor:
             rows = await cursor.fetchall()
-        return [
-            {"video_id": row[0], "downloaded_at": row[1], "post_type": row[2], "user_id": row[3]}
-            for row in rows
-        ]
+        # DB-47 修复：过滤空 video_id 行，避免脏数据传递到上层导致响应异常
+        result = []
+        for row in rows:
+            if not row[0]:
+                logger.warning(
+                    "get_recent_downloads 发现空 video_id 行（downloaded_at=%s），已跳过",
+                    row[1],
+                )
+                continue
+            result.append(
+                {"video_id": row[0], "downloaded_at": row[1], "post_type": row[2], "user_id": row[3]}
+            )
+        return result
 
 
 # 全局单例

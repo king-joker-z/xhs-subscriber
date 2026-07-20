@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 01:xx — 迭代 #121
+
+### 迭代目标
+1. `database.py` `get_recent_downloads` 返回行无空 `video_id` 过滤，脏数据会传递到上层
+2. `api.py` `api_recent` 构建 `RecentDownloadItem` 无 `video_id` 空值保护，空值会导致响应数据异常
+
+### 完成内容
+- **fix: `database.py` `get_recent_downloads` 加入空 `video_id` 行过滤（DB-47）**
+  - 原实现：直接列表推导返回所有行，无空值过滤
+  - 修复：改为循环构建，`not row[0]` 时输出 WARNING 并 `continue` 跳过
+  - 新增 DB-47 修复说明注释
+- **fix: `api.py` `api_recent` 加入 `video_id` 空值保护（API-70）**
+  - 原实现：直接列表推导构建 `RecentDownloadItem`，无空值校验
+  - 修复：改为循环构建，`not r.get("video_id")` 时输出 WARNING 并 `continue` 跳过
+  - 新增 API-70 修复说明注释
+- **改动文件**：`src/database.py`、`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter121.py`）：15 项检查全部 PASS（含 3+3 个过滤用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 00:xx — 迭代 #120
 
 ### 迭代目标

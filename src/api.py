@@ -276,12 +276,19 @@ async def api_recent(
         return []
     try:
         rows = await _scheduler._db.get_recent_downloads(limit=limit, post_type=post_type, user_id=user_id)
-        return [RecentDownloadItem(
-            video_id=r["video_id"],
-            downloaded_at=r["downloaded_at"],
-            post_type=r.get("post_type", "video"),
-            user_id=r.get("user_id"),
-        ) for r in rows]
+        # API-70 修复：video_id 空值保护，数据库中若存在空 video_id 记录会导致响应数据异常
+        items = []
+        for r in rows:
+            if not r.get("video_id"):
+                logger.warning("api_recent 发现空 video_id 记录（downloaded_at=%s），已跳过", r.get("downloaded_at"))
+                continue
+            items.append(RecentDownloadItem(
+                video_id=r["video_id"],
+                downloaded_at=r["downloaded_at"],
+                post_type=r.get("post_type", "video"),
+                user_id=r.get("user_id"),
+            ))
+        return items
     except Exception as exc:
         logger.warning("api_recent 查询失败：%s", exc)
         return []
