@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-20 23:xx — 迭代 #115
+
+### 迭代目标
+1. `database.py` `get_recent_downloads` 无 `user_id` 空字符串保护，空字符串 user_id 会被 `if user_id` 跳过但无 WARNING
+2. `config.py` `SubscriptionConfig` 无 `video_url` 空字符串保护，空字符串 video_url 不会触发格式校验
+
+### 完成内容
+- **fix: `database.py` `get_recent_downloads` 加入 `user_id` 空字符串保护（DB-45）**
+  - 原实现：`if user_id:` 会跳过空字符串，但无 WARNING
+  - 修复：改为 `if user_id is not None and not user_id:` 检查，空字符串时输出 WARNING 并忽略筛选；正常值走 `elif user_id:` 分支
+  - 新增 DB-45 修复说明注释
+- **fix: `config.py` `SubscriptionConfig` 加入 `video_url` 空字符串保护（CFG-41）**
+  - 原实现：`raw_url = data.get("video_url")`，空字符串不触发格式校验
+  - 修复：在格式校验之前加入 `raw_url is not None and not raw_url` 检查，空字符串视为 None（未配置）
+  - 新增 CFG-41 修复说明注释
+- **改动文件**：`src/database.py`、`src/config.py`
+
+### 诊断说明
+剩余候选问题：SCR-33（generate_nfo image_urls 类型保护）、DL-46（_do_download url 空值保护）、SC-9（遗留，改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter115.py`）：13 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 23:xx — 迭代 #114
 
 ### 迭代目标

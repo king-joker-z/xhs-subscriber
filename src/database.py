@@ -214,7 +214,10 @@ class Database:
         if post_type:
             conditions.append("post_type = ?")
             params.append(post_type)
-        if user_id:
+        # DB-45 修复：user_id 空字符串保护，空字符串 user_id 会被 if user_id 跳过但无 WARNING
+        if user_id is not None and not user_id:
+            logger.warning("get_recent_downloads 收到空字符串 user_id，已忽略筛选条件")
+        elif user_id:
             conditions.append("user_id = ?")
             params.append(user_id)
         where = ("WHERE " + " AND ".join(conditions)) if conditions else ""

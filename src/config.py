@@ -62,6 +62,9 @@ class SubscriptionConfig:
         # 非法 URL（缺少 scheme 或 netloc）立即抛出 ValueError，
         # 避免等到运行时才报错。
         raw_url: Optional[str] = data.get("video_url")
+        # CFG-41 修复：video_url 空字符串保护，空字符串视为 None（未配置）
+        if raw_url is not None and not raw_url:
+            raw_url = None
         if raw_url is not None:
             parsed = urlparse(raw_url)
             if not parsed.scheme or not parsed.netloc:
