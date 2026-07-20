@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-20 22:xx — 迭代 #111
+
+### 迭代目标
+1. `fetcher.py` `_parse_extract_result` 无 `publish_time` 格式保护，非法时间格式会静默产生错误日期
+2. `config.py` `SubscriptionConfig` 无 `name` 非空校验，空 name 会在运行时触发 SC-45 保护
+
+### 完成内容
+- **fix: `fetcher.py` `_parse_extract_result` 加入 `publish_time` 格式校验（FE-24）**
+  - 原实现：`publish_time = raw_time[:10]`，仅截取前10字符，无格式校验
+  - 修复：加入 `YYYY-MM-DD` 格式校验（年4位数字、月1-12、日1-31），非法时清空并记录 WARNING
+  - 新增 FE-24 修复说明注释
+- **fix: `config.py` `SubscriptionConfig` 加入 `name` 空字符串 fallback（CFG-38）**
+  - 原实现：`data.get("name", self.user_id or "unknown")`，空字符串 `""` 不触发 fallback
+  - 修复：改为 `_raw_name if _raw_name else (self.user_id or "unknown")`，空字符串也 fallback
+  - 新增 CFG-38 修复说明注释
+- **改动文件**：`src/fetcher.py`、`src/config.py`
+
+### 诊断说明
+至此本轮诊断发现的所有问题均已修复（SC-9 遗留，改动较大，暂不处理）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter111.py`）：12 项检查全部 PASS（含 7 个 publish_time 格式用例 + 4 个 name fallback 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 22:xx — 迭代 #110
 
 ### 迭代目标

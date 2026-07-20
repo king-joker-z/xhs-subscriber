@@ -69,7 +69,9 @@ class SubscriptionConfig:
                     f"SubscriptionConfig: video_url 格式非法（缺少 scheme 或 netloc）：{raw_url!r}"
                 )
         self.video_url: Optional[str] = raw_url
-        self.name: str = data.get("name", self.user_id or "unknown")
+        # CFG-38 修复：name 空字符串时 fallback 到 user_id or "unknown"，避免空 name 触发 SC-45 保护
+        _raw_name = data.get("name", "")
+        self.name: str = _raw_name if _raw_name else (self.user_id or "unknown")
         self.enabled: bool = data.get("enabled", True)
         # CFG-3 修复：user_id 和 video_url 同时为 None 时，订阅配置实际无效，
         # 在加载阶段输出 warning，避免服务空转时难以排查原因。

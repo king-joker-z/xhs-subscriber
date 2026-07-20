@@ -118,7 +118,19 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
 
     # 发布时间：取日期部分
     raw_time = str(raw.get("发布时间") or raw.get("publish_time") or "")
-    publish_time = raw_time[:10] if raw_time else ""
+    # FE-24 修复：publish_time 格式保护，非合法 YYYY-MM-DD 格式时清空并记录 WARNING
+    _pt_candidate = raw_time[:10] if raw_time else ""
+    if _pt_candidate:
+        try:
+            _y, _m, _d = _pt_candidate.split("-")
+            if not (len(_y) == 4 and _y.isdigit() and
+                    len(_m) == 2 and _m.isdigit() and 1 <= int(_m) <= 12 and
+                    len(_d) == 2 and _d.isdigit() and 1 <= int(_d) <= 31):
+                raise ValueError("range")
+        except (ValueError, AttributeError):
+            logger.warning("publish_time 格式非法，已清空（原始值：%r）", raw_time)
+            _pt_candidate = ""
+    publish_time = _pt_candidate
 
     # 封面
     # 修复：cover_list 为空列表时，str([]) = "[]" 是无效 URL，应返回空字符串
