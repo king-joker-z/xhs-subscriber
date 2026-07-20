@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #128
+
+### 迭代目标
+1. `fetcher.py` `extract` `else` 分支 `video_url = str(dl_list) if dl_list else ""`，`dl_list` 为 dict/int 等非字符串类型时 `str()` 会产生无效 URL
+2. `scheduler.py` `_load_state` 中 `sub_last_run_at` 读取无类型保护，JSON 损坏时 `data.get` 可能返回非 dict 类型导致后续操作异常
+
+### 完成内容
+- **fix: `fetcher.py` `extract` else 分支加入 `video_url` 类型保护（FE-33）**
+  - 原实现：`video_url = str(dl_list) if dl_list else ""`，非字符串类型会产生无效 URL
+  - 修复：改为 `str(dl_list) if dl_list and isinstance(dl_list, str) else ""`，非字符串类型返回空字符串
+  - 新增 FE-33 修复说明注释
+- **fix: `scheduler.py` `_load_state` 加入 `sub_last_run_at` 类型保护（SC-55）**
+  - 原实现：直接 `self._sub_last_run_at = data.get("sub_last_run_at", {})`，JSON 损坏时可能赋值非 dict
+  - 修复：先取 `_raw_state`，非 dict 时输出 WARNING 并重置为空 dict
+  - 新增 SC-55 修复说明注释
+- **改动文件**：`src/fetcher.py`、`src/scheduler.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter128.py`）：15 项检查全部 PASS（含 6 个 video_url 用例 + 6 个 state 类型用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #127
 
 ### 迭代目标

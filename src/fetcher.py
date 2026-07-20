@@ -160,7 +160,8 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
         else:
             image_urls = []
     else:
-        video_url = str(dl_list) if dl_list else ""
+        # FE-33 修复：dl_list 非列表时类型保护，dict/int 等类型 str() 会产生无效 URL
+        video_url = str(dl_list) if dl_list and isinstance(dl_list, str) else ""
         image_urls = []
 
     # 标签

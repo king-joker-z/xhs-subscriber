@@ -65,7 +65,12 @@ class XHSScheduler:
         try:
             if self._state_path.exists():
                 data = json.loads(self._state_path.read_text(encoding="utf-8"))
-                self._sub_last_run_at = data.get("sub_last_run_at", {})
+                # SC-55 修复：sub_last_run_at 类型保护，JSON 损坏时 data.get 可能返回非 dict 类型
+                _raw_state = data.get("sub_last_run_at", {})
+                if not isinstance(_raw_state, dict):
+                    logger.warning("_load_state sub_last_run_at 类型非法（%s），已重置为空状态", type(_raw_state).__name__)
+                    _raw_state = {}
+                self._sub_last_run_at = _raw_state
                 logger.info("已从 %s 恢复订阅状态（%d 条）", self._state_path, len(self._sub_last_run_at))
         except Exception as exc:
             logger.warning("加载订阅状态失败，将使用空状态：%s", exc)
