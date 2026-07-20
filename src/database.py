@@ -129,6 +129,10 @@ class Database:
         if not video_id:
             logger.warning("mark_downloaded 收到空 video_id，跳过写入（user_id=%s）", user_id)
             return
+        # DB-44 修复：user_id 空字符串保护，None 是合法值（单视频订阅），但空字符串 "" 不合法
+        if user_id is not None and not user_id:
+            logger.warning("mark_downloaded 收到空字符串 user_id，已置为 None（video_id=%s）", video_id)
+            user_id = None
         if not self._conn:
             raise RuntimeError("数据库未初始化，请先调用 init()")
         now = datetime.now(timezone.utc).isoformat()

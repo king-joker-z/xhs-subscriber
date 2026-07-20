@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-20 23:xx — 迭代 #113
+
+### 迭代目标
+1. `scheduler.py` `_process_subscription` 无 `download_dir` 空值保护，空 download_dir 会传入 generate_nfo_batch 引发路径错误
+2. `database.py` `mark_downloaded` 无 `user_id` 空字符串保护，空字符串 user_id 会写入数据库
+
+### 完成内容
+- **fix: `scheduler.py` `_process_subscription` 加入 `download_dir` 空值保护（SC-48）**
+  - 原实现：直接进入 `if downloaded_metas:` 分支，无 download_dir 校验
+  - 修复：在 `generate_nfo_batch` 调用之前加入 `not self._config.download_dir` 检查，空值时输出 WARNING 并跳过刮削
+  - 新增 SC-48 修复说明注释
+- **fix: `database.py` `mark_downloaded` 加入 `user_id` 空字符串保护（DB-44）**
+  - 原实现：`user_id` 为 `str | None`，None 是合法值，但空字符串 `""` 不合法，会写入数据库
+  - 修复：加入 `user_id is not None and not user_id` 检查，空字符串时输出 WARNING 并置为 None
+  - 新增 DB-44 修复说明注释
+- **改动文件**：`src/scheduler.py`、`src/database.py`
+
+### 诊断说明
+剩余候选问题：FE-26（fetch_user_videos max_batch 下限保护）、SC-9（遗留，改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter113.py`）：14 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 23:xx — 迭代 #112
 
 ### 迭代目标

@@ -255,7 +255,10 @@ class XHSScheduler:
                 if video_path.exists() or desc_path.exists():
                     downloaded_metas.append(meta)
 
-            if downloaded_metas:
+            # SC-48 修复：download_dir 空值保护，空 download_dir 会传入 generate_nfo_batch 引发路径错误
+            if not self._config.download_dir:
+                logger.warning("订阅 %s：download_dir 为空，跳过刮削", sub.name)
+            elif downloaded_metas:
                 nfo_paths = generate_nfo_batch(
                     downloaded_metas,
                     user_id,
