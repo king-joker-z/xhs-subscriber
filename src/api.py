@@ -166,6 +166,7 @@ async def run_now(response: Response) -> RunResponse:
     "/api/status",
     response_model=StatusResponse,
     summary="服务状态（供 UI 轮询）",
+    response_description="200 OK：返回服务运行状态、调度器就绪状态、订阅列表及下载统计",
     tags=["system"],
 )
 async def api_status() -> StatusResponse:

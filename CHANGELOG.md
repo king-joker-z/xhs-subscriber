@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-20 21:xx — 迭代 #105
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 无 `user_id` 空值保护，空 `user_id` 会生成路径错误的 NFO 文件
+2. `api.py` `/api/status` 端点装饰器缺少 `response_description`，OpenAPI 文档响应说明缺失
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 加入 `user_id` 空值保护（SCR-27）**
+  - 原实现：仅有 SCR-26 的 `video_id` 保护，无 `user_id` 校验
+  - 修复：在 `video_id` 保护之后加入 `not user_id` 检查，空值时抛出 `ValueError` 并附带清晰错误消息
+  - 新增 SCR-27 修复说明注释
+- **fix: `api.py` `/api/status` 端点加入 `response_description`（API-57）**
+  - 原实现：`@app.get("/api/status", ...)` 装饰器无 `response_description` 字段
+  - 修复：加入 `response_description="200 OK：返回服务运行状态、调度器就绪状态、订阅列表及下载统计"`
+  - 原有字段 `response_model`、`summary`、`tags` 均未改动
+- **改动文件**：`src/scraper.py`、`src/api.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，DL-40（所有调用方已有 `if meta.video_url:` 保护）为误报，已关闭。SC-9 遗留（改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter105.py`）：15 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 21:xx — 迭代 #104
 
 ### 迭代目标
