@@ -169,6 +169,13 @@ class Downloader:
 
     async def _do_download(self, meta: VideoMeta, user_id: str) -> bool:
         """实际执行下载（在 semaphore 内）"""
+        # DL-50 修复：meta.video_id 空值保护，空 video_id 会导致 img_dir 路径构建异常
+        if not meta.video_id:
+            logger.warning(
+                "_do_download 收到空 meta.video_id，跳过下载（user_id=%s）",
+                user_id,
+            )
+            return False
         is_image_post = bool(meta.image_urls)
         video_path = self._video_path(user_id, meta.video_id)
         # 图文作品：封面放在 {video_id}/ 子目录内，与图片同目录

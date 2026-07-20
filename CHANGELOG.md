@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 01:xx — 迭代 #123
+
+### 迭代目标
+1. `downloader.py` `_do_download` 无 `meta.video_id` 空值保护，空 video_id 会导致 `img_dir` 路径构建异常
+2. `fetcher.py` `fetch_user_videos` 中 `xsec_token` 无类型保护，非字符串类型会导致 URL 格式化异常
+
+### 完成内容
+- **fix: `downloader.py` `_do_download` 加入 `meta.video_id` 空值保护（DL-50）**
+  - 原实现：直接构建 `video_path` 和 `img_dir`，无 video_id 校验
+  - 修复：在路径构建之前加入 `not meta.video_id` 检查，空值时输出 WARNING 并 `return False`
+  - 新增 DL-50 修复说明注释
+- **fix: `fetcher.py` `fetch_user_videos` 加入 `xsec_token` 类型保护（FE-28）**
+  - 原实现：`xsec_token = note.get("xsec_token", "")`，非字符串类型会导致 URL 格式化异常
+  - 修复：先取 `_raw_token`，`None` 时降级为 `""`，否则 `str()` 转换
+  - 新增 FE-28 修复说明注释
+- **改动文件**：`src/downloader.py`、`src/fetcher.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter123.py`）：15 项检查全部 PASS（含 6 个 token 用例 + 4 个 video_id 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 01:xx — 迭代 #122
 
 ### 迭代目标

@@ -493,7 +493,9 @@ class XHSFetcher:
         results: list[VideoMeta] = []
         for note in all_notes[: limit]:
             note_id = note.get("note_id") or note.get("id")
-            xsec_token = note.get("xsec_token", "")
+            # FE-28 修复：xsec_token 类型保护，非字符串类型会导致 URL 格式化异常
+            _raw_token = note.get("xsec_token", "")
+            xsec_token = str(_raw_token) if _raw_token is not None else ""
             if not note_id:
                 continue
 
