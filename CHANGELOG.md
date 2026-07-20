@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #132
+
+### 迭代目标
+1. `downloader.py` `_do_download` 图片循环中 `img_url` 无空值保护，空字符串会传入 `_stream_download` 抛 `ValueError` 中断整个下载
+2. `api.py` `api_status` 中 `counts["total"]`/`counts["video"]`/`counts["image"]` 无键缺失保护，`get_download_count_by_type` 返回不完整 dict 时会抛 `KeyError`
+
+### 完成内容
+- **fix: `downloader.py` `_do_download` 图片循环加入 `img_url` 空值保护（DL-52）**
+  - 原实现：直接 `_ext_from_url(img_url)` + `_stream_download(img_url, ...)`，空 URL 会抛 `ValueError`
+  - 修复：加入 `not img_url` 检查，空 URL 时输出 WARNING 并 `continue` 跳过
+  - 新增 DL-52 修复说明注释
+- **fix: `api.py` `api_status` 加入 `counts` 键缺失保护（API-73）**
+  - 原实现：`counts["total"]`/`counts["video"]`/`counts["image"]`，键缺失时抛 `KeyError`
+  - 修复：改为 `counts.get("total", 0)` 等，键缺失时降级为 0
+  - 新增 API-73 修复说明注释
+- **改动文件**：`src/downloader.py`、`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter132.py`）：15 项检查全部 PASS（含 5 个 img_url 用例 + 4 个 counts 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #131
 
 ### 迭代目标

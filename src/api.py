@@ -223,9 +223,10 @@ async def api_status() -> StatusResponse:
         # 从数据库读取已下载总数及分类统计
         try:
             counts = await _scheduler._db.get_download_count_by_type()
-            downloaded_total = counts["total"]
-            video_count = counts["video"]
-            image_count = counts["image"]
+            # API-73 修复：counts 键缺失保护，get_download_count_by_type 返回不完整 dict 时会抛 KeyError
+            downloaded_total = counts.get("total", 0)
+            video_count = counts.get("video", 0)
+            image_count = counts.get("image", 0)
         except Exception as exc:
             logger.warning("get_download_count_by_type 失败，已降级为零：%s", exc)
             downloaded_total = 0

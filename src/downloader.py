@@ -215,6 +215,10 @@ class Downloader:
             elif meta.image_urls:
                 # 图文作品：批量下载图片到 {video_id}/ 子目录（img_dir 已在上方创建）
                 for idx, img_url in enumerate(meta.image_urls, start=1):
+                    # DL-52 修复：img_url 空值保护，空字符串会传入 _stream_download 抛 ValueError 中断下载
+                    if not img_url:
+                        logger.warning("图文作品第 %d 张图片 URL 为空，已跳过（video_id=%s）", idx, meta.video_id)
+                        continue
                     # DL-5 修复：改用 urlparse + Path.suffix 推断扩展名，
                     # 避免 URL query 参数中含 .jpg 时误匹配（如 ?format=jpg&...）
                     ext = _ext_from_url(img_url)
