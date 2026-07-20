@@ -133,9 +133,11 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     _text_elem(root, "outline", (_safe_desc[:200] + "…") if len(_safe_desc) > 200 else _safe_desc)
 
     # ---- 时间 ----
-    _text_elem(root, "premiered", meta.publish_time)
+    # SCR-40 修复：meta.publish_time 类型保护，None 时传入 _text_elem 会产生 None 文本节点
+    _safe_publish_time = meta.publish_time if isinstance(meta.publish_time, str) else (str(meta.publish_time) if meta.publish_time is not None else "")
+    _text_elem(root, "premiered", _safe_publish_time)
     # SCR-34 修复：publish_time 长度保护，长度不足 4 时 [:4] 会返回截断字符串（如 "202"）
-    _text_elem(root, "year", meta.publish_time[:4] if meta.publish_time and len(meta.publish_time) >= 4 else "")
+    _text_elem(root, "year", _safe_publish_time[:4] if _safe_publish_time and len(_safe_publish_time) >= 4 else "")
     _text_elem(root, "dateadded", dateadded)
 
     # ---- 制作方 / 导演 ----

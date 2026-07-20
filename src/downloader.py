@@ -199,7 +199,9 @@ class Downloader:
         created_files: list[Path] = []
 
         # DL-46 修复：video_url 和 image_urls 均为空时早期退出，避免无意义的下载流程
-        if not meta.video_url and not meta.image_urls:
+        # DL-55 修复：image_urls 类型保护，非列表类型时 not meta.image_urls 可能误判
+        _image_urls_safe = meta.image_urls if isinstance(meta.image_urls, list) else []
+        if not meta.video_url and not _image_urls_safe:
             logger.warning(
                 "_do_download 收到 video_url 和 image_urls 均为空的作品，跳过下载（video_id=%s user_id=%s）",
                 meta.video_id, user_id,

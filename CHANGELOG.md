@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #137
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 中 `_text_elem(root, "premiered", meta.publish_time)` 无类型保护，`meta.publish_time` 为 `None` 时传入 `_text_elem` 会产生 `None` 文本节点
+2. `downloader.py` `_do_download` 中 `not meta.image_urls` 无类型保护，`meta.image_urls` 为非列表类型时可能误判
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 加入 `meta.publish_time` 类型保护（SCR-40）**
+  - 原实现：直接 `_text_elem(root, "premiered", meta.publish_time)`，`None` 时产生 `None` 文本节点
+  - 修复：引入 `_safe_publish_time`，`isinstance(meta.publish_time, str)` 检查，非字符串时 `str()` 转换，`None` 时降级为空字符串；同步修正 `year` 字段使用 `_safe_publish_time`
+  - 新增 SCR-40 修复说明注释
+- **fix: `downloader.py` `_do_download` 加入 `image_urls` 类型保护（DL-55）**
+  - 原实现：`not meta.image_urls`，非列表类型时可能误判
+  - 修复：引入 `_image_urls_safe`，`isinstance(meta.image_urls, list)` 检查，非列表时降级为空列表
+  - 新增 DL-55 修复说明注释
+- **改动文件**：`src/scraper.py`、`src/downloader.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter137.py`）：15 项检查全部 PASS（含 6 个 publish_time 用例 + 6 个 image_urls 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #136
 
 ### 迭代目标
