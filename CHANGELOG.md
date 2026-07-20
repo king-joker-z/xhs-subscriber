@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-20 09:xx — 迭代 #90
+
+### 迭代目标
+`downloader.py` `_is_retryable` 未处理 `ValueError`，DL-25 加入的空文件保护抛出 `ValueError` 后不会重试，直接失败——上一轮修复的遗留缺陷
+
+### 完成内容
+- **fix: `downloader.py` `_is_retryable` 将 `ValueError` 纳入重试范围（DL-26）**
+  - 原实现：`_is_retryable` 只处理 `httpx.TransportError`、`httpx.TimeoutException`、`httpx.HTTPStatusError`，DL-25 空文件保护抛出的 `ValueError` 不在重试范围，直接失败
+  - 修复：在 `_is_retryable` 中加入 `isinstance(exc, ValueError): return True`，使空文件触发 tenacity 重试（最多 `_RETRY_MAX_ATTEMPTS` 次）
+  - `ValueError` 处理位于 `HTTPStatusError` 之前，优先级正确
+  - 更新 docstring，补充 `ValueError（DL-26 修复）` 说明
+  - 新增 DL-26 修复说明注释
+- **改动文件**：`src/downloader.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），DB-22 低优先级（API 层已有 Query(ge=1, le=365) 保护）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter90.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-17 18:xx — 迭代 #89
 
 ### 迭代目标

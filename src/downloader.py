@@ -66,9 +66,13 @@ def _is_retryable(exc: BaseException) -> bool:
     - HTTP 5xx（HTTPStatusError，status_code >= 500）：服务端临时故障，重试
     - HTTP 429 Too Many Requests（DL-19 修复）：限流，重试（tenacity 指数退避可自然消化等待）
     - 其他 HTTP 4xx（status_code < 500 且 != 429）：客户端错误，不重试（避免无意义重试）
+    - ValueError（DL-26 修复）：DL-25 空文件保护抛出，视为临时故障，重试
     - 其他异常：不重试
     """
     if isinstance(exc, (httpx.TransportError, httpx.TimeoutException)):
+        return True
+    # DL-26 修复：ValueError 由 DL-25 空文件保护抛出，视为临时故障纳入重试范围
+    if isinstance(exc, ValueError):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
         code = exc.response.status_code
