@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #146
+
+### 迭代目标
+1. `api.py` `api_recent` 中 `for r in rows` 无类型保护，`rows` 中元素为非 dict 类型时 `r.get("video_id")` 会抛 `AttributeError`
+2. `api.py` `api_stats` 中 `for r in rows` 无类型保护，`rows` 中元素为非 dict 类型时 `r.get("date")` 会抛 `AttributeError`
+
+### 完成内容
+- **fix: `api.py` `api_recent` 加入 `r` 类型保护（API-74）**
+  - 原实现：直接 `r.get("video_id")`，非 dict 时抛 `AttributeError`
+  - 修复：加入 `isinstance(r, dict)` 检查，非 dict 时跳过并输出 WARNING
+  - 新增 API-74 修复说明注释
+- **fix: `api.py` `api_stats` 加入 `r` 类型保护（API-75）**
+  - 原实现：直接 `r.get("date")`，非 dict 时抛 `AttributeError`
+  - 修复：加入 `isinstance(r, dict)` 检查，非 dict 时跳过并输出 WARNING
+  - 新增 API-75 修复说明注释
+- **改动文件**：`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter146.py`）：14 项检查全部 PASS（含 7 个 api_recent 用例 + 7 个 api_stats 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #145
 
 ### 迭代目标

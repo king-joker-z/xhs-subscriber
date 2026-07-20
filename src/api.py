@@ -281,6 +281,10 @@ async def api_recent(
         # API-70 修复：video_id 空值保护，数据库中若存在空 video_id 记录会导致响应数据异常
         items = []
         for r in rows:
+            # API-74 修复：r 类型保护，rows 中元素为非 dict 类型时 r.get() 会抛 AttributeError
+            if not isinstance(r, dict):
+                logger.warning("api_recent 发现非 dict 类型行（%s），已跳过", type(r).__name__)
+                continue
             if not r.get("video_id"):
                 logger.warning("api_recent 发现空 video_id 记录（downloaded_at=%s），已跳过", r.get("downloaded_at"))
                 continue
@@ -317,6 +321,10 @@ async def api_stats(
         # API-71 修复：空 date 保护，数据库计算异常时 date 可能为 None
         items = []
         for r in rows:
+            # API-75 修复：r 类型保护，rows 中元素为非 dict 类型时 r.get() 会抛 AttributeError
+            if not isinstance(r, dict):
+                logger.warning("api_stats 发现非 dict 类型行（%s），已跳过", type(r).__name__)
+                continue
             if not r.get("date"):
                 logger.warning("api_stats 发现空 date 记录（count=%s），已跳过", r.get("count"))
                 continue
