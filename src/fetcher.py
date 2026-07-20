@@ -136,7 +136,9 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
     # 修复：cover_list 为空列表时，str([]) = "[]" 是无效 URL，应返回空字符串
     cover_list = raw.get("封面地址") or raw.get("cover") or []
     if isinstance(cover_list, list):
-        cover_url = cover_list[0] if cover_list else ""
+        # FE-31 修复：cover_list[0] 类型保护，非字符串类型会导致封面 URL 格式化异常
+        _raw_cover = cover_list[0] if cover_list else None
+        cover_url = str(_raw_cover) if _raw_cover is not None else ""
     else:
         cover_url = str(cover_list) if cover_list else ""
 

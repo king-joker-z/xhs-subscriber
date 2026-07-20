@@ -286,8 +286,10 @@ class XHSScheduler:
                 logger.info("订阅 %s：无新内容需要刮削", sub.name)
             _sub_elapsed = time.monotonic() - _sub_start
             logger.info("订阅 %s 处理完成，耗时 %.1f 秒", sub.name, _sub_elapsed)
-            self._sub_last_run_at[sub.name] = datetime.now(timezone.utc).isoformat()
-            self._save_state()
+            # SC-54 修复：try 分支末尾 sub.name 空值保护，SC-45 保护在更早位置，try 末尾不受保护
+            if sub.name:
+                self._sub_last_run_at[sub.name] = datetime.now(timezone.utc).isoformat()
+                self._save_state()
 
         except Exception as exc:
             _sub_elapsed = time.monotonic() - _sub_start

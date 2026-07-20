@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #127
+
+### 迭代目标
+1. `fetcher.py` `extract` 中 `cover_list[0]` 无类型保护，非字符串类型会导致封面 URL 格式化异常
+2. `scheduler.py` `_process_subscription` try 分支末尾 `_sub_last_run_at` 写入时 `sub.name` 无空值保护（SC-45 保护在更早位置，try 末尾不受保护）
+
+### 完成内容
+- **fix: `fetcher.py` `extract` 加入 `cover_url` 类型保护（FE-31）**
+  - 原实现：`cover_url = cover_list[0] if cover_list else ""`，非字符串类型直接赋值
+  - 修复：先取 `_raw_cover`，`None` 时降级为 `""`，否则 `str()` 转换
+  - 新增 FE-31 修复说明注释
+- **fix: `scheduler.py` `_process_subscription` try 分支末尾加入 `sub.name` 空值保护（SC-54）**
+  - 原实现：try 末尾直接写入 `_sub_last_run_at[sub.name]`，SC-45 保护不覆盖此处
+  - 修复：加入 `if sub.name:` 保护，空 name 时跳过写入
+  - 新增 SC-54 修复说明注释
+- **改动文件**：`src/fetcher.py`、`src/scheduler.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter127.py`）：15 项检查全部 PASS（含 5 个 cover_url 用例 + 4 个 sub.name 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #126
 
 ### 迭代目标
