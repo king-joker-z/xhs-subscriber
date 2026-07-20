@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-20 12:xx — 迭代 #93
+
+### 迭代目标
+`downloader.py` `_stream_download` 中 `ValueError` 消息硬编码 `"0 字节"`，未使用 `downloaded_bytes` 实际变量值，排查时信息不足
+
+### 完成内容
+- **fix: `downloader.py` `ValueError` 消息补充 `downloaded_bytes` 实际值（DL-27）**
+  - 原实现：`raise ValueError(f"下载结果为空文件（0 字节），URL：{url}，目标：{dest.name}")`，消息中 `0 字节` 为硬编码字符串
+  - 修复：改为 `f"下载结果为空文件（{downloaded_bytes} 字节）"`，使用实际变量值，便于未来扩展（如检测到极小文件时也能显示真实大小）
+  - 新增 DL-27 修复说明注释
+- **改动文件**：`src/downloader.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），SCR-20/CFG-26 为误报（代码已正确处理），FE-15 低优先级。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter93.py`）：11 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 11:xx — 迭代 #92
 
 ### 迭代目标

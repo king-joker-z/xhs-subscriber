@@ -280,8 +280,11 @@ class Downloader:
                                         last_log_bytes = downloaded_bytes
 
             # DL-25 修复：空文件保护，0 字节响应视为下载失败，避免生成空文件并被标记已下载
+            # DL-27 修复：消息补充 downloaded_bytes 实际值，便于排查（正常情况下始终为 0）
             if downloaded_bytes == 0:
-                raise ValueError(f"下载结果为空文件（0 字节），URL：{url}，目标：{dest.name}")
+                raise ValueError(
+                    f"下载结果为空文件（{downloaded_bytes} 字节），URL：{url}，目标：{dest.name}"
+                )
 
             # 原子重命名（仅在全部重试成功后执行）
             tmp_path.replace(dest)
