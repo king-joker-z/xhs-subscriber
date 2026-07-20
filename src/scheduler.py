@@ -292,8 +292,10 @@ class XHSScheduler:
         except Exception as exc:
             _sub_elapsed = time.monotonic() - _sub_start
             logger.error("订阅 %s 处理异常（已跳过，耗时 %.1f 秒）：%s", sub.name, _sub_elapsed, exc, exc_info=True)
-            self._sub_last_run_at[sub.name] = datetime.now(timezone.utc).isoformat()
-            self._save_state()
+            # SC-53 修复：except 分支中 sub.name 空值保护，SC-45 保护在 try 块内，except 分支不受保护
+            if sub.name:
+                self._sub_last_run_at[sub.name] = datetime.now(timezone.utc).isoformat()
+                self._save_state()
 
     def start(self) -> None:
         """启动调度器"""

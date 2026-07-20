@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 01:xx — 迭代 #124
+
+### 迭代目标
+1. `fetcher.py` `fetch_user_videos` 中 `note_id` 无类型保护，非字符串类型会导致 URL 格式化异常
+2. `scheduler.py` `_process_subscription` `except` 分支中 `_sub_last_run_at` 写入时 `sub.name` 无空值保护
+
+### 完成内容
+- **fix: `fetcher.py` `fetch_user_videos` 加入 `note_id` 类型保护（FE-29）**
+  - 原实现：`note_id = note.get("note_id") or note.get("id")`，非字符串类型会导致 URL 格式化异常
+  - 修复：先取 `_raw_note_id`，`None` 时降级为 `""`，否则 `str()` 转换
+  - 新增 FE-29 修复说明注释
+- **fix: `scheduler.py` `_process_subscription` `except` 分支加入 `sub.name` 空值保护（SC-53）**
+  - 原实现：`except` 分支直接写入 `_sub_last_run_at[sub.name]`，SC-45 保护在 `try` 块内不覆盖此处
+  - 修复：加入 `if sub.name:` 保护，空 name 时跳过写入
+  - 新增 SC-53 修复说明注释
+- **改动文件**：`src/fetcher.py`、`src/scheduler.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter124.py`）：15 项检查全部 PASS（含 5 个 note_id 用例 + 4 个 sub.name 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 01:xx — 迭代 #123
 
 ### 迭代目标
