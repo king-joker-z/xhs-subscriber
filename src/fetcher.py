@@ -333,6 +333,9 @@ class XHSFetcher:
         :param max_batch: 最大抓取条数，None 时使用 MAX_BATCH 类常量
         :return: VideoMeta 列表
         """
+        # FE-17 修复：user_id 空值保护，空 user_id 会导致 API 请求异常
+        if not user_id:
+            raise ValueError("fetch_user_videos 收到空 user_id，无法爬取博主主页")
         limit = max_batch if max_batch is not None else self.MAX_BATCH
         _fetch_start = time.monotonic()
         logger.info("开始爬取博主主页：user_id=%s，最大抓取 %d 条", user_id, limit)

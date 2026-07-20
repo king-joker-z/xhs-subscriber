@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-20 20:xx — 迭代 #101
+
+### 迭代目标
+1. `downloader.py` `download_batch` 无空列表保护，空列表传入会创建无意义的 `gather` 调用
+2. `fetcher.py` `fetch_user_videos` 无 `user_id` 空值保护，空 `user_id` 会导致 API 请求异常
+
+### 完成内容
+- **fix: `downloader.py` `download_batch` 加入空列表保护（DL-31）**
+  - 原实现：直接 `tasks = [self.download(meta, user_id) for meta in metas]`，空列表时创建无意义 gather
+  - 修复：在 `tasks` 创建之前加入 `if not metas: return (0, 0)`，空列表直接返回
+  - 新增 DL-31 修复说明注释
+- **fix: `fetcher.py` `fetch_user_videos` 加入 `user_id` 空值保护（FE-17）**
+  - 原实现：直接进入 `limit` 赋值和 API 请求，无任何入参校验
+  - 修复：在函数体开头加入 `not user_id` 检查，空值时抛出 `ValueError` 并附带清晰错误消息
+  - 新增 FE-17 修复说明注释
+- **改动文件**：`src/downloader.py`、`src/fetcher.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），SC-32/API-50 低优先级留待后续迭代。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter101.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 19:xx — 迭代 #100
 
 ### 迭代目标

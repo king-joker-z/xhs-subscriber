@@ -320,8 +320,12 @@ class Downloader:
         """
         批量下载。
         DL-3 修复：区分「已跳过（去重）」「成功」「异常失败」三类，日志更清晰。
+        DL-31 修复：空列表保护，避免创建无意义的 gather 调用。
         :return: (成功数, 跳过数)  — 异常失败单独计数并打印 ERROR
         """
+        # DL-31 修复：空列表保护，避免创建无意义的 gather 调用
+        if not metas:
+            return (0, 0)
         tasks = [self.download(meta, user_id) for meta in metas]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
