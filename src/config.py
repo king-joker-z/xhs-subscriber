@@ -183,7 +183,12 @@ class AppConfig(BaseSettings):
                 self.log_dir = str(Path(_raw_ld).expanduser().resolve())
         # log_level 环境变量优先，YAML 次之；YAML 值需验证合法性
         if "level" in logging_cfg and os.environ.get("LOG_LEVEL") is None:
-            yaml_level = logging_cfg["level"].upper()
+            # CFG-44 修复：log_level None 值保护，logging_cfg["level"] 为 None 时 .upper() 会抛 AttributeError
+            _raw_ll = logging_cfg["level"]
+            if _raw_ll is None:
+                logger.warning("config.yaml logging.level 为 null，已忽略，保持当前值：%s", self.log_level)
+                _raw_ll = ""
+            yaml_level = str(_raw_ll).upper()
             if yaml_level in _ALLOWED_LOG_LEVELS:
                 self.log_level = yaml_level
             else:

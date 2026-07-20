@@ -492,7 +492,10 @@ class XHSFetcher:
         # 逐条调用 extract() 获取完整元数据
         results: list[VideoMeta] = []
         for note in all_notes[: limit]:
-            _raw_note_id = note.get("note_id") or note.get("id")
+            # FE-30 修复：note_id 取值改用 is not None 判断，避免整数 0 被 or 误判为空而取 id
+            _raw_note_id_a = note.get("note_id")
+            _raw_note_id_b = note.get("id")
+            _raw_note_id = _raw_note_id_a if _raw_note_id_a is not None else _raw_note_id_b
             # FE-29 修复：note_id 类型保护，非字符串类型会导致 URL 格式化异常
             note_id = str(_raw_note_id) if _raw_note_id is not None else ""
             # FE-28 修复：xsec_token 类型保护，非字符串类型会导致 URL 格式化异常
