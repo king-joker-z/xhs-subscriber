@@ -194,6 +194,9 @@ _UA_POOL = [
 # 兼容旧引用（保留单一 UA 常量，值取池中第一个）
 _UA = _UA_POOL[0]
 
+# FE-16 修复：_extract 超时常量，防止底层爬取挂起阻塞整个调度循环
+_EXTRACT_TIMEOUT: int = 120  # 秒
+
 
 def _random_ua() -> str:
     """从 UA 池中随机选取一个 User-Agent"""
@@ -297,7 +300,11 @@ class XHSFetcher:
         """
         async with self._extract_sem:
             if self._xhs_instance is not None:
-                return await self._xhs_instance.extract(url, False)
+                # FE-16 修复：加入超时保护，防止底层爬取挂起阻塞整个调度循环
+                return await asyncio.wait_for(
+                    self._xhs_instance.extract(url, False),
+                    timeout=_EXTRACT_TIMEOUT,
+                )
             # 降级：共享实例未就绪时临时创建
             logger.warning("共享 XHS 实例未就绪，临时创建一次性实例（url=%s）", url)
             # 临时实例也需要清除单例
@@ -306,7 +313,11 @@ class XHSFetcher:
             except AttributeError:
                 pass
             async with _XHS(**self._make_xhs_kwargs()) as xhs:
-                return await xhs.extract(url, False)
+                # FE-16 修复：降级路径同样加入超时保护
+                return await asyncio.wait_for(
+                    xhs.extract(url, False),
+                    timeout=_EXTRACT_TIMEOUT,
+                )
 
     async def fetch_user_videos(self, user_id: str, max_batch: int | None = None) -> list[VideoMeta]:
         """

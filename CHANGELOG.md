@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-20 16:xx — 迭代 #97
+
+### 迭代目标
+`fetcher.py` `_extract` 无超时保护，底层 `extract()` 挂起时整个调度循环会被阻塞，无法自动恢复
+
+### 完成内容
+- **fix: `fetcher.py` `_extract` 加入超时保护（FE-16）**
+  - 原实现：直接 `await self._xhs_instance.extract(url, False)`，无任何超时限制
+  - 修复：新增模块级常量 `_EXTRACT_TIMEOUT = 120`（秒），对主路径和降级路径两处 `extract()` 调用均用 `asyncio.wait_for` 包裹
+  - 超时时抛出 `asyncio.TimeoutError`，调用方（`fetch_single_video`/`fetch_user_videos`）已有 `except Exception` 兜底，会记录 ERROR 日志并返回 `None`/空列表，不影响其他订阅
+  - 新增 FE-16 修复说明注释
+- **改动文件**：`src/fetcher.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，FE-16 优先级最高（MED），SC-9 遗留（改动较大），其余 LOW 优先级问题留待后续迭代。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter97.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 15:xx — 迭代 #96
 
 ### 迭代目标
