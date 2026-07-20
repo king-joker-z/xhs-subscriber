@@ -162,8 +162,13 @@ class AppConfig(BaseSettings):
         if "concurrency" in downloader:
             self.download_concurrency = int(_clamp(int(downloader["concurrency"]), 1, 20, "concurrency"))
         if "download_dir" in downloader:
-            # CFG-10 修复：expanduser + resolve 规范化路径，支持 ~ 开头的路径
-            self.download_dir = str(Path(downloader["download_dir"]).expanduser().resolve())
+            # CFG-42 修复：download_dir 空字符串保护，空字符串会绕过路径规范化写入空路径
+            _raw_dd = str(downloader["download_dir"]).strip()
+            if not _raw_dd:
+                logger.warning("config.yaml download_dir 为空字符串，已忽略，保持当前值：%s", self.download_dir)
+            else:
+                # CFG-10 修复：expanduser + resolve 规范化路径，支持 ~ 开头的路径
+                self.download_dir = str(Path(_raw_dd).expanduser().resolve())
         if "max_batch" in downloader:
             self.max_batch = int(_clamp(int(downloader["max_batch"]), 1, 500, "max_batch"))
 

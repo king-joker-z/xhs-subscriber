@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 00:xx — 迭代 #120
+
+### 迭代目标
+1. `downloader.py` `Downloader.__init__` 无 `download_dir` 空值保护，空字符串会导致 `Path("")` 构建相对路径，下载到意外目录
+2. `config.py` `load_yaml` 无 `download_dir` 空字符串保护，空字符串会绕过路径规范化写入空路径
+
+### 完成内容
+- **fix: `downloader.py` `Downloader.__init__` 加入 `download_dir` 空值保护（DL-49）**
+  - 原实现：直接 `Path(download_dir)`，无空值校验
+  - 修复：在 `Path(download_dir)` 构建之前加入 `not download_dir` 检查，空值时抛出 `ValueError`
+  - 新增 DL-49 修复说明注释
+- **fix: `config.py` `load_yaml` 加入 `download_dir` 空字符串保护（CFG-42）**
+  - 原实现：直接 `Path(downloader["download_dir"]).expanduser().resolve()`，无空值校验
+  - 修复：先 `strip()` 处理，空字符串时输出 WARNING 并保持当前值，非空时才执行路径规范化
+  - 新增 CFG-42 修复说明注释
+- **改动文件**：`src/downloader.py`、`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter120.py`）：15 项检查全部 PASS（含 5 个 download_dir 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 00:xx — 迭代 #119
 
 ### 迭代目标

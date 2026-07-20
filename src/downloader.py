@@ -111,6 +111,9 @@ class Downloader:
         timeout: float = 120.0,
     ):
         self._db = db
+        # DL-49 修复：download_dir 空值保护，空字符串会导致 Path("") 构建相对路径，下载到意外目录
+        if not download_dir:
+            raise ValueError(f"Downloader.__init__ 收到空 download_dir，无法初始化下载目录")
         self._download_dir = Path(download_dir)
         self._semaphore = asyncio.Semaphore(concurrency)
         self._cookie = cookie
