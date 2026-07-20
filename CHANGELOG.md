@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-20 19:xx — 迭代 #100
+
+### 迭代目标
+`fetcher.py` `_parse_extract_result` 中 `image_urls` 赋值无去重处理，小红书 API 返回重复 URL 时会导致重复下载同一张图片
+
+### 完成内容
+- **fix: `fetcher.py` `_parse_extract_result` image_urls 加入保序去重（SCR-24）**
+  - 原实现：`image_urls = [u for u in dl_list if isinstance(u, str) and u]`，无去重
+  - 修复：改为 `list(dict.fromkeys(u for u in dl_list if isinstance(u, str) and u))`，使用 `dict.fromkeys` 保序去重，保留第一次出现的 URL，去除后续重复项
+  - 空字符串过滤条件 `isinstance(u, str) and u` 保持不变
+  - 新增 SCR-24 修复说明注释
+- **改动文件**：`src/fetcher.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），DL-31/FE-17/API-50 低优先级留待后续迭代。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter100.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 18:xx — 迭代 #99
 
 ### 迭代目标

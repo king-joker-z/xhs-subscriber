@@ -141,7 +141,8 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
         video_url = video_candidates[0] if video_candidates else ""
         # 图文作品：dl_list 中非视频的 URL 即为图片列表
         if not video_candidates and dl_list:
-            image_urls = [u for u in dl_list if isinstance(u, str) and u]
+            # SCR-24 修复：image_urls 保序去重，防止重复 URL 导致重复下载图片
+            image_urls = list(dict.fromkeys(u for u in dl_list if isinstance(u, str) and u))
         else:
             image_urls = []
     else:
