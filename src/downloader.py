@@ -264,6 +264,14 @@ class Downloader:
                     ) as client:
                         async with client.stream("GET", url, headers=headers) as resp:
                             resp.raise_for_status()
+                            # DL-28 修复：检查 Content-Type，拒绝 HTML 错误页面被保存为媒体文件
+                            # CDN 有时返回 200 OK 但 body 是 HTML（如防盗链拦截页、WAF 拦截页）
+                            ct = resp.headers.get("content-type", "")
+                            if ct.startswith("text/html"):
+                                raise ValueError(
+                                    f"响应 Content-Type 为 text/html，疑似 HTML 错误页面，"
+                                    f"URL：{url}，目标：{dest.name}"
+                                )
                             downloaded_bytes = 0
                             last_log_bytes = 0
                             with open(tmp_path, "wb") as f:

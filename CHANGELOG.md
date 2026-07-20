@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-20 13:xx — 迭代 #94
+
+### 迭代目标
+`downloader.py` `_stream_download` 无 Content-Type 检查，CDN 返回 200 OK 但 body 是 HTML 错误页面（防盗链拦截、WAF 拦截等）时，HTML 内容会被保存为媒体文件
+
+### 完成内容
+- **fix: `downloader.py` `_stream_download` 加入 Content-Type 检查（DL-28）**
+  - 原实现：只有 `resp.raise_for_status()`，无 Content-Type 检查，200 OK 的 HTML 响应会被保存为媒体文件
+  - 修复：在 `raise_for_status()` 之后、写文件之前，检查 `Content-Type` 是否以 `text/html` 开头，若是则抛出 `ValueError`
+  - `ValueError` 会被 DL-26 的 `_is_retryable` 纳入重试范围，重试失败后正确上报错误
+  - 新增 DL-28 修复说明注释
+- **改动文件**：`src/downloader.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），FE-15 低优先级，MAIN-7 生产环境不需要。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter94.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 12:xx — 迭代 #93
 
 ### 迭代目标
