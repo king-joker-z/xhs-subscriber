@@ -174,8 +174,13 @@ class AppConfig(BaseSettings):
 
         logging_cfg = data.get("logging", {})
         if "dir" in logging_cfg:
-            # CFG-11 修复：expanduser + resolve 规范化路径，支持 ~ 开头的路径（与 CFG-10 对称）
-            self.log_dir = str(Path(logging_cfg["dir"]).expanduser().resolve())
+            # CFG-43 修复：log_dir 空字符串保护，空字符串会绕过路径规范化写入空路径（与 CFG-42 对称）
+            _raw_ld = str(logging_cfg["dir"]).strip()
+            if not _raw_ld:
+                logger.warning("config.yaml logging.dir 为空字符串，已忽略，保持当前值：%s", self.log_dir)
+            else:
+                # CFG-11 修复：expanduser + resolve 规范化路径，支持 ~ 开头的路径（与 CFG-10 对称）
+                self.log_dir = str(Path(_raw_ld).expanduser().resolve())
         # log_level 环境变量优先，YAML 次之；YAML 值需验证合法性
         if "level" in logging_cfg and os.environ.get("LOG_LEVEL") is None:
             yaml_level = logging_cfg["level"].upper()

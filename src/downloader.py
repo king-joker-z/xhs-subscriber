@@ -256,6 +256,10 @@ class Downloader:
                         logger.warning("清理文件失败：%s，错误：%s", p, oe)
             # 图文作品：若子目录为空则一并清理，避免留下脏目录
             if is_image_post:
+                # DL-51 修复：meta.video_id 空值保护，空 video_id 会导致清理分支路径构建异常
+                if not meta.video_id:
+                    logger.warning("_do_download 清理分支收到空 meta.video_id，跳过子目录清理（user_id=%s）", user_id)
+                    return False
                 img_dir = self._user_dir(user_id) / meta.video_id
                 try:
                     if img_dir.exists() and not any(img_dir.iterdir()):
