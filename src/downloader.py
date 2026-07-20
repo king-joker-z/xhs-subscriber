@@ -128,9 +128,15 @@ class Downloader:
         return self._user_dir(user_id) / f"{video_id}.mp4"
 
     def _thumb_path(self, user_id: str, video_id: str) -> Path:
+        # DL-42 修复：video_id 空值保护，空 video_id 会构建错误路径
+        if not video_id:
+            raise ValueError("_thumb_path 收到空 video_id，无法构建封面路径")
         return self._user_dir(user_id) / f"{video_id}-thumb.jpg"
 
     def _desc_path(self, user_id: str, video_id: str) -> Path:
+        # DL-42 修复：video_id 空值保护，空 video_id 会构建错误路径
+        if not video_id:
+            raise ValueError("_desc_path 收到空 video_id，无法构建描述文件路径")
         return self._user_dir(user_id) / f"{video_id}.description"
 
     async def download(self, meta: VideoMeta, user_id: str) -> bool:

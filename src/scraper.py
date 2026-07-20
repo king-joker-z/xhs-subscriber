@@ -205,5 +205,6 @@ def generate_nfo_batch(
             p = generate_nfo(meta, user_id, download_dir)
             paths.append(p)
         except Exception as exc:
-            logger.error("NFO 生成失败 video_id=%s：%s", meta.video_id, exc)
+            # SCR-30 修复：错误日志加入 user_id，便于排查问题
+            logger.error("NFO 生成失败 user_id=%s video_id=%s：%s", user_id, meta.video_id, exc)
     return paths

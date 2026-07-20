@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-20 22:xx — 迭代 #110
+
+### 迭代目标
+1. `downloader.py` `_thumb_path`/`_desc_path` 无 video_id 空值保护，空 video_id 会构建错误路径
+2. `scraper.py` `generate_nfo_batch` 错误日志无 user_id，排查时难以定位问题
+
+### 完成内容
+- **fix: `downloader.py` `_thumb_path`/`_desc_path` 加入 video_id 空值保护（DL-42）**
+  - 原实现：直接构建路径，无 video_id 校验
+  - 修复：两处均加入 `not video_id` 检查，空值时抛出 `ValueError`
+  - 新增 DL-42 修复说明注释
+- **fix: `scraper.py` `generate_nfo_batch` 错误日志加入 user_id（SCR-30）**
+  - 原实现：`logger.error("NFO 生成失败 video_id=%s：%s", meta.video_id, exc)`
+  - 修复：改为 `logger.error("NFO 生成失败 user_id=%s video_id=%s：%s", user_id, meta.video_id, exc)`
+  - 新增 SCR-30 修复说明注释
+- **改动文件**：`src/downloader.py`、`src/scraper.py`
+
+### 诊断说明
+剩余候选问题：FE-24（publish_time 格式保护）、CFG-38（SubscriptionConfig name 非空校验）、SC-9（遗留，改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter110.py`）：13 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 22:xx — 迭代 #109
 
 ### 迭代目标
