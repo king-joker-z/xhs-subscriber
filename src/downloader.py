@@ -198,11 +198,13 @@ class Downloader:
                 created_files.append(thumb_path)
                 logger.debug("封面下载完成：%s", thumb_path)
 
-            # 3. 写描述文件
-            desc_path.write_text(
+            # 3. 写描述文件（DL-32 修复：改为原子写入，防止中途崩溃留下损坏文件）
+            _desc_tmp = desc_path.with_suffix(desc_path.suffix + ".tmp")
+            _desc_tmp.write_text(
                 f"{meta.title}\n\n{meta.desc}\n",
                 encoding="utf-8",
             )
+            _desc_tmp.replace(desc_path)
             created_files.append(desc_path)
 
             # 4. 标记已下载（传入 post_type 和 user_id 供数据库精确统计）

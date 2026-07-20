@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-20 18:xx — 迭代 #99
+
+### 迭代目标
+`downloader.py` `_do_download` 中 `description` 文件写入使用 `write_text` 直接写入，非原子操作，中途崩溃会留下损坏的 `.description` 文件
+
+### 完成内容
+- **fix: `downloader.py` `_do_download` description 文件写入改为原子操作（DL-32）**
+  - 原实现：`desc_path.write_text(...)` 直接写入，中途崩溃留下损坏文件
+  - 修复：改为 `_desc_tmp = desc_path.with_suffix(desc_path.suffix + ".tmp")` → `_desc_tmp.write_text(...)` → `_desc_tmp.replace(desc_path)`，与 SCR-15 原子 NFO 写入策略一致
+  - `created_files.append(desc_path)` 保持在 `replace` 之后，确保只有写入成功才记录
+  - 新增 DL-32 修复说明注释
+- **改动文件**：`src/downloader.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，DL-33（thumb 封面）为误报（`_stream_download` 已有原子操作），SC-9 遗留（改动较大），其余 LOW 优先级问题留待后续迭代。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter99.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 17:xx — 迭代 #98
 
 ### 迭代目标
