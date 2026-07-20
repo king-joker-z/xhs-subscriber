@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 00:xx — 迭代 #119
+
+### 迭代目标
+1. `scheduler.py` `_process_subscription` 循环中 `meta.video_id` 无空值保护，空 video_id 会导致路径构建异常
+2. `database.py` `mark_downloaded` 无 `post_type` 合法值校验，非法值会写入脏数据影响统计
+
+### 完成内容
+- **fix: `scheduler.py` `_process_subscription` 加入 `meta.video_id` 空值保护（SC-52）**
+  - 原实现：直接用 `meta.video_id` 构建路径，无空值校验
+  - 修复：在路径构建之前加入 `not meta.video_id` 检查，空值时输出 WARNING 并 `continue` 跳过当前 meta
+  - 新增 SC-52 修复说明注释
+- **fix: `database.py` `mark_downloaded` 加入 `post_type` 合法值校验（DB-46）**
+  - 原实现：直接写入 post_type，无合法值校验
+  - 修复：加入 `_VALID_POST_TYPES = ("video", "image")` 校验，非法值输出 WARNING 并降级为 `"video"`
+  - 新增 DB-46 修复说明注释
+- **改动文件**：`src/scheduler.py`、`src/database.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter119.py`）：15 项检查全部 PASS（含 6 个 post_type 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 00:xx — 迭代 #118
 
 ### 迭代目标

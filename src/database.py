@@ -129,6 +129,14 @@ class Database:
         if not video_id:
             logger.warning("mark_downloaded 收到空 video_id，跳过写入（user_id=%s）", user_id)
             return
+        # DB-46 修复：post_type 合法值校验，非法值会写入脏数据影响统计
+        _VALID_POST_TYPES = ("video", "image")
+        if post_type not in _VALID_POST_TYPES:
+            logger.warning(
+                "mark_downloaded 收到非法 post_type=%r，已降级为 'video'（video_id=%s）",
+                post_type, video_id,
+            )
+            post_type = "video"
         # DB-44 修复：user_id 空字符串保护，None 是合法值（单视频订阅），但空字符串 "" 不合法
         if user_id is not None and not user_id:
             logger.warning("mark_downloaded 收到空字符串 user_id，已置为 None（video_id=%s）", video_id)

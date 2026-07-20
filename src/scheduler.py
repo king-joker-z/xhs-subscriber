@@ -253,6 +253,13 @@ class XHSScheduler:
             #   图文作品：{video_id}/description.txt 存在（图文下载到子目录）
             downloaded_metas = []
             for meta in metas:
+                # SC-52 修复：meta.video_id 空值保护，空 video_id 会导致路径构建异常
+                if not meta.video_id:
+                    logger.warning(
+                        "订阅 %s：meta.video_id 为空，跳过刮削路径构建（title=%s）",
+                        sub.name, meta.title,
+                    )
+                    continue
                 video_path = Path(self._config.download_dir) / user_id / f"{meta.video_id}.mp4"
                 # 图文作品 description 路径已改为子目录
                 if meta.image_urls:
