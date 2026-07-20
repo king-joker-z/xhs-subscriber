@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #130
+
+### 迭代目标
+1. `config.py` `load_yaml` 中 `concurrency` 无 `None` 值保护，`downloader["concurrency"]` 为 `None` 时 `int()` 会抛 `TypeError`
+2. `config.py` `load_yaml` 中 `max_batch` 无 `None` 值保护，`downloader["max_batch"]` 为 `None` 时 `int()` 会抛 `TypeError`
+
+### 完成内容
+- **fix: `config.py` `load_yaml` 加入 `concurrency` None 值保护（CFG-46）**
+  - 原实现：`int(_clamp(int(downloader["concurrency"]), ...))`，`None` 时抛 `TypeError`
+  - 修复：先取 `_raw_conc`，`None` 时输出 WARNING 并保持当前值，否则 `int()` 转换
+  - 新增 CFG-46 修复说明注释
+- **fix: `config.py` `load_yaml` 加入 `max_batch` None 值保护（CFG-47）**
+  - 原实现：`int(_clamp(int(downloader["max_batch"]), ...))`，`None` 时抛 `TypeError`
+  - 修复：先取 `_raw_mb`，`None` 时输出 WARNING 并保持当前值，否则 `int()` 转换
+  - 新增 CFG-47 修复说明注释
+- **改动文件**：`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter130.py`）：15 项检查全部 PASS（含 6 个 concurrency 用例 + 6 个 max_batch 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #129
 
 ### 迭代目标

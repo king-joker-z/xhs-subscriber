@@ -165,7 +165,12 @@ class AppConfig(BaseSettings):
 
         downloader = data.get("downloader", {})
         if "concurrency" in downloader:
-            self.download_concurrency = int(_clamp(int(downloader["concurrency"]), 1, 20, "concurrency"))
+            # CFG-46 修复：concurrency None 值保护，None 时 int() 会抛 TypeError
+            _raw_conc = downloader["concurrency"]
+            if _raw_conc is None:
+                logger.warning("config.yaml downloader.concurrency 为 null，已忽略，保持当前值：%s", self.download_concurrency)
+            else:
+                self.download_concurrency = int(_clamp(int(_raw_conc), 1, 20, "concurrency"))
         if "download_dir" in downloader:
             # CFG-42 修复：download_dir 空字符串保护，空字符串会绕过路径规范化写入空路径
             _raw_dd = str(downloader["download_dir"]).strip()
@@ -175,7 +180,12 @@ class AppConfig(BaseSettings):
                 # CFG-10 修复：expanduser + resolve 规范化路径，支持 ~ 开头的路径
                 self.download_dir = str(Path(_raw_dd).expanduser().resolve())
         if "max_batch" in downloader:
-            self.max_batch = int(_clamp(int(downloader["max_batch"]), 1, 500, "max_batch"))
+            # CFG-47 修复：max_batch None 值保护，None 时 int() 会抛 TypeError
+            _raw_mb = downloader["max_batch"]
+            if _raw_mb is None:
+                logger.warning("config.yaml downloader.max_batch 为 null，已忽略，保持当前值：%s", self.max_batch)
+            else:
+                self.max_batch = int(_clamp(int(_raw_mb), 1, 500, "max_batch"))
 
         logging_cfg = data.get("logging", {})
         if "dir" in logging_cfg:
