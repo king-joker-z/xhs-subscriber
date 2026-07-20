@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-20 20:xx — 迭代 #102
+
+### 迭代目标
+`api.py` `/api/run` 端点装饰器缺少 `response_description`，OpenAPI 文档响应说明缺失，调用方无法从文档了解各状态码含义
+
+### 完成内容
+- **fix: `api.py` `/api/run` 端点加入 `response_description`（API-50）**
+  - 原实现：`@app.post("/run", ...)` 装饰器无 `response_description` 字段
+  - 修复：加入 `response_description="202 Accepted：任务已在后台触发；409 Conflict：任务已在执行中；503 Service Unavailable：调度器未就绪"`
+  - 原有字段 `response_model`、`status_code`、`summary`、`tags` 均未改动
+- **改动文件**：`src/api.py`
+
+### 诊断说明
+本轮重新扫描确认 SC-32（`interval_hours` 已有 `ge=0.1` 保护）实为误报，已关闭。SC-9 遗留（改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter102.py`）：11 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 20:xx — 迭代 #101
 
 ### 迭代目标

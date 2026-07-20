@@ -133,6 +133,7 @@ async def health() -> HealthResponse:
     response_model=RunResponse,
     status_code=202,
     summary="立即触发一次全量检查",
+    response_description="202 Accepted：任务已在后台触发；409 Conflict：任务已在执行中；503 Service Unavailable：调度器未就绪",
     tags=["control"],
 )
 async def run_now(response: Response) -> RunResponse:
