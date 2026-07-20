@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-20 15:xx — 迭代 #96
+
+### 迭代目标
+`downloader.py` `download` 无 `video_id` 空值保护，空 `video_id` 会跳过去重检查，导致重复下载或路径异常
+
+### 完成内容
+- **fix: `downloader.py` `download` 加入 `video_id` 空值保护（DL-30）**
+  - 原实现：直接进入 `semaphore` 并调用 `is_downloaded(meta.video_id)`，无任何空值保护
+  - 修复：在函数体开头加入 `not meta.video_id` 检查，空值时记录 WARNING 日志并返回 `False`（跳过下载）
+  - 保护在 `semaphore` 和 `is_downloaded` 调用之前，确保空 `video_id` 不会进入去重检查和下载流程
+  - 新增 DL-30 修复说明注释
+- **改动文件**：`src/downloader.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），API-47/FE-16/MAIN-9 低优先级。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter96.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 14:xx — 迭代 #95
 
 ### 迭代目标

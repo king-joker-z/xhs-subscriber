@@ -135,6 +135,10 @@ class Downloader:
         下载单个视频及封面、描述文件。
         :return: True=成功下载，False=跳过或失败
         """
+        # DL-30 修复：video_id 空值保护，空 video_id 会跳过去重检查导致重复下载或路径异常
+        if not meta.video_id:
+            logger.warning("download 收到空 video_id，跳过下载（user_id=%s）", user_id)
+            return False
         # D-1 修复：去重检查移入 semaphore 内部。
         # 原先在 semaphore 外检查，并发时多个协程可能同时通过检查，导致重复下载。
         # 移入 semaphore 后，同一时刻只有一个协程持有锁并执行检查+下载，消除竞态。
