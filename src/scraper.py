@@ -157,17 +157,25 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     thumb_el.text = local_thumb
     fanart_el = etree.SubElement(root, "fanart")
     thumb2 = etree.SubElement(fanart_el, "thumb")
-    thumb2.text = meta.cover_url if meta.cover_url else local_thumb
+    # SCR-38 修复：cover_url URL 格式校验，非 http/https 开头的 URL 不写入 NFO，降级为本地封面路径
+    _valid_cover = (
+        meta.cover_url
+        if meta.cover_url and meta.cover_url.startswith(("http://", "https://"))
+        else None
+    )
+    thumb2.text = _valid_cover if _valid_cover else local_thumb
 
     # ---- 唯一 ID ----
     uid_el = etree.SubElement(root, "uniqueid", type="xhs", default="true")
     uid_el.text = meta.video_id
 
     # ---- 标签 / 分类 ----
+    # SCR-39 修复：tag 类型保护，非字符串类型时强制转为 str，避免 _text_elem 产生意外结果
     for tag in meta.tags:
-        if tag:
-            _text_elem(root, "tag", tag)
-            _text_elem(root, "genre", tag)
+        _safe_tag = tag if isinstance(tag, str) else (str(tag) if tag is not None else "")
+        if _safe_tag:
+            _text_elem(root, "tag", _safe_tag)
+            _text_elem(root, "genre", _safe_tag)
     # 固定分类：小红书；图文作品额外加「图文」分类
     _text_elem(root, "genre", "小红书")
     if is_image_post:

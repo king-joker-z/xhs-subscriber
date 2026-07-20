@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #136
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 中 `thumb2.text = meta.cover_url if meta.cover_url else local_thumb`，`meta.cover_url` 为非 http/https URL 时会写入非法 URL 到 NFO 文件
+2. `scraper.py` `generate_nfo` 中 `_text_elem(root, "tag", tag)` 无类型保护，`tag` 为非字符串类型时会产生意外结果
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 加入 `cover_url` URL 格式校验（SCR-38）**
+  - 原实现：`meta.cover_url if meta.cover_url else local_thumb`，非 http/https URL 会写入 NFO
+  - 修复：引入 `_valid_cover`，`startswith(("http://", "https://"))` 校验，格式非法时降级为 `local_thumb`
+  - 新增 SCR-38 修复说明注释
+- **fix: `scraper.py` `generate_nfo` 加入 `tag` 类型保护（SCR-39）**
+  - 原实现：`if tag:` 直接传入 `_text_elem`，非字符串类型时产生意外结果
+  - 修复：引入 `_safe_tag`，`isinstance(tag, str)` 检查，非字符串时 `str()` 转换，`None` 时降级为空字符串
+  - 新增 SCR-39 修复说明注释
+- **改动文件**：`src/scraper.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter136.py`）：15 项检查全部 PASS（含 6 个 cover_url 用例 + 5 个 tag 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #135
 
 ### 迭代目标
