@@ -120,6 +120,7 @@ class StatusResponse(BaseModel):
     "/health",
     response_model=HealthResponse,
     summary="健康检查",
+    response_description="200 OK：服务正常运行，返回版本号和运行时长",
     tags=["system"],
 )
 async def health() -> HealthResponse:

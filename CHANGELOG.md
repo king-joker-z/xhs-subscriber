@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-20 21:xx — 迭代 #104
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 无 `video_id` 空值保护，空 `video_id` 会生成路径错误的 NFO 文件
+2. `api.py` `/api/health` 端点装饰器缺少 `response_description`，OpenAPI 文档响应说明缺失
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 加入 `video_id` 空值保护（SCR-26）**
+  - 原实现：直接进入 `is_image_post = bool(meta.image_urls)`，无 `video_id` 校验
+  - 修复：在函数体开头加入 `not meta.video_id` 检查，空值时抛出 `ValueError` 并附带清晰错误消息
+  - 新增 SCR-26 修复说明注释
+- **fix: `api.py` `/api/health` 端点加入 `response_description`（API-55）**
+  - 原实现：`@app.get("/health", ...)` 装饰器无 `response_description` 字段
+  - 修复：加入 `response_description="200 OK：服务正常运行，返回版本号和运行时长"`
+  - 原有字段 `response_model`、`summary`、`tags` 均未改动
+- **改动文件**：`src/scraper.py`、`src/api.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，FE-20（fetch_single_video 已有 `if meta:` 保护）、DL-39（已有 `bool(meta.image_urls)` 双重保护）均为误报，已关闭。SC-9 遗留（改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter104.py`）：14 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 20:xx — 迭代 #103
 
 ### 迭代目标
