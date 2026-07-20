@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-20 17:xx — 迭代 #98
+
+### 迭代目标
+`database.py` `is_downloaded` 和 `mark_downloaded` 均无 `video_id` 空值保护：空 `video_id` 传入 `is_downloaded` 会执行无意义 SQL 查询；传入 `mark_downloaded` 会写入数据库导致去重污染
+
+### 完成内容
+- **fix: `database.py` `is_downloaded` + `mark_downloaded` 加入 `video_id` 空值保护（DB-31 + DB-30）**
+  - `is_downloaded`（DB-31）：空 `video_id` 直接返回 `False`，不执行 SQL 查询
+  - `mark_downloaded`（DB-30）：空 `video_id` 记录 WARNING 日志并 `return`，不写入数据库
+  - 两处保护均在 `_conn` 检查之前，确保空值在最早阶段被拦截
+  - 新增 DB-30 / DB-31 修复说明注释
+- **改动文件**：`src/database.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），DL-31/SCR-24/FE-17/DL-32 留待后续迭代。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter98.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 16:xx — 迭代 #97
 
 ### 迭代目标

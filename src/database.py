@@ -107,6 +107,9 @@ class Database:
         :param video_id: 视频唯一 ID
         :return: True 表示已下载，False 表示未下载
         """
+        # DB-31 修复：video_id 空值保护，空 video_id 无法匹配任何记录，直接返回 False
+        if not video_id:
+            return False
         if not self._conn:
             raise RuntimeError("数据库未初始化，请先调用 init()")
         async with self._conn.execute(
@@ -122,6 +125,10 @@ class Database:
         :param post_type: 作品类型，'video' 或 'image'，默认 'video'
         :param user_id: 博主 user_id，单视频订阅时为 None
         """
+        # DB-30 修复：video_id 空值保护，空 video_id 写入数据库会导致去重污染
+        if not video_id:
+            logger.warning("mark_downloaded 收到空 video_id，跳过写入（user_id=%s）", user_id)
+            return
         if not self._conn:
             raise RuntimeError("数据库未初始化，请先调用 init()")
         now = datetime.now(timezone.utc).isoformat()
