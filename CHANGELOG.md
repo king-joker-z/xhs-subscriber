@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-20 22:xx — 迭代 #109
+
+### 迭代目标
+1. `scheduler.py` `run_once` 无 subscriptions 空列表早期退出，空订阅时仍执行 gather
+2. `database.py` `get_recent_downloads` 无 limit 下限保护，limit=0 时 SQL 返回 0 条
+
+### 完成内容
+- **fix: `scheduler.py` `run_once` 加入 subscriptions 空列表早期退出（SC-47）**
+  - 原实现：无论订阅列表是否为空，均执行 `asyncio.gather`
+  - 修复：在 `logger.info("开始全量检查")` 之前加入 `not self._config.subscriptions` 检查，空列表时输出 INFO 并 `return`
+  - 新增 SC-47 修复说明注释
+- **fix: `database.py` `get_recent_downloads` 加入 limit 下限保护（DB-42）**
+  - 原实现：`limit` 参数无下限校验，`limit=0` 时 SQL 返回 0 条
+  - 修复：在 `conditions` 构建之前加入 `limit = max(1, limit)`
+  - 新增 DB-42 修复说明注释
+- **改动文件**：`src/scheduler.py`、`src/database.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，剩余候选问题：FE-24（publish_time 格式保护）、DL-42（_thumb_path/_desc_path video_id 保护）、SCR-30（generate_nfo_batch 错误日志加 user_id）、CFG-38（SubscriptionConfig name 非空校验）、SC-9（遗留，改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter109.py`）：13 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 22:xx — 迭代 #108
 
 ### 迭代目标

@@ -203,6 +203,8 @@ class Database:
         """
         if not self._conn:
             raise RuntimeError("数据库未初始化，请先调用 init()")
+        # DB-42 修复：limit 下限保护，limit=0 时 SQL 返回 0 条，无意义
+        limit = max(1, limit)
         conditions: list[str] = []
         params: list = []
         if post_type:

@@ -168,6 +168,10 @@ class XHSScheduler:
         self._run_once_active = True
         try:
             _start = time.monotonic()
+            # SC-47 修复：subscriptions 空列表早期退出，避免执行无意义的 gather 调用
+            if not self._config.subscriptions:
+                logger.info("run_once：无订阅配置，跳过全量检查")
+                return
             logger.info("开始全量检查，共 %d 个订阅", len(self._config.subscriptions))
             tasks = [
                 self._process_subscription(sub)
