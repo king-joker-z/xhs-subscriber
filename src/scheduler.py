@@ -200,7 +200,8 @@ class XHSScheduler:
                     )
             self.last_check_at = datetime.now(timezone.utc)
             elapsed = time.monotonic() - _start
-            self.last_run_elapsed = elapsed
+            # SC-56 修复：elapsed 负值保护，与 API-69 uptime 保护对称（monotonic 理论不回拨，但防御性保护）
+            self.last_run_elapsed = max(0.0, elapsed)
             logger.info("全量检查完成，耗时 %.1f 秒", elapsed)
         finally:
             self._run_once_active = False

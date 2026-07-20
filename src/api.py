@@ -209,7 +209,8 @@ async def api_status() -> StatusResponse:
             db_counts = {}
         for s in cfg.subscriptions:
             dl_count = db_counts.get(s.user_id, 0) if s.user_id else 0
-            last_run_at = _scheduler._sub_last_run_at.get(s.name)
+            # API-72 修复：s.name 空值保护，空 name 时 dict.get("") 语义不明确，直接置 None
+            last_run_at = _scheduler._sub_last_run_at.get(s.name) if s.name else None
             subs.append(SubscriptionInfo(
                 name=s.name,
                 user_id=s.user_id,

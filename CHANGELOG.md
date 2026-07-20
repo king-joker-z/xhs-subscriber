@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #131
+
+### 迭代目标
+1. `scheduler.py` `run_once` 中 `self.last_run_elapsed = elapsed` 无负值保护（与 API-69 uptime 保护对称）
+2. `api.py` `api_status` 中 `_scheduler._sub_last_run_at.get(s.name)` 无 `s.name` 空值保护，空 name 时语义不明确
+
+### 完成内容
+- **fix: `scheduler.py` `run_once` 加入 `last_run_elapsed` 负值保护（SC-56）**
+  - 原实现：`self.last_run_elapsed = elapsed`，理论不回拨但无防御性保护
+  - 修复：改为 `self.last_run_elapsed = max(0.0, elapsed)`，与 API-69 uptime 保护对称
+  - 新增 SC-56 修复说明注释
+- **fix: `api.py` `api_status` 加入 `s.name` 空值保护（API-72）**
+  - 原实现：`_scheduler._sub_last_run_at.get(s.name)`，空 name 时 `dict.get("")` 语义不明确
+  - 修复：改为 `_scheduler._sub_last_run_at.get(s.name) if s.name else None`
+  - 新增 API-72 修复说明注释
+- **改动文件**：`src/scheduler.py`、`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter131.py`）：15 项检查全部 PASS（含 4 个 elapsed 用例 + 4 个 last_run_at 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #130
 
 ### 迭代目标
