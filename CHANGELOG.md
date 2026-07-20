@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #140
+
+### 迭代目标
+1. `database.py` `get_download_stats_by_date` 中 `{"count": row[1], "video": row[2], "image": row[3]}` 无空值保护，SQLite SUM 在无匹配行时返回 NULL，传入响应会产生 `None` 字段
+2. `database.py` `get_recent_downloads` 中 `row[2]`（`post_type`）无空值保护，`post_type` 为 `None` 时传入响应会产生 `None` 字段
+
+### 完成内容
+- **fix: `database.py` `get_download_stats_by_date` 加入 `row[1]/row[2]/row[3]` 空值保护（DB-52）**
+  - 原实现：直接 `{"count": row[1], "video": row[2], "image": row[3]}`，SQLite SUM 返回 NULL 时产生 `None` 字段
+  - 修复：改为 `row[1] or 0`、`row[2] or 0`、`row[3] or 0`，NULL 时降级为 0
+  - 新增 DB-52 修复说明注释
+- **fix: `database.py` `get_recent_downloads` 加入 `post_type` 空值保护（DB-53）**
+  - 原实现：直接 `{"post_type": row[2], ...}`，`post_type` 为 `None` 时传入响应产生 `None` 字段
+  - 修复：改为 `row[2] or "video"`，NULL 时降级为 `"video"`
+  - 新增 DB-53 修复说明注释
+- **改动文件**：`src/database.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter140.py`）：15 项检查全部 PASS（含 5 个 stats 用例 + 5 个 post_type 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #139
 
 ### 迭代目标

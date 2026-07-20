@@ -212,8 +212,9 @@ class Database:
                     row[1],
                 )
                 continue
+            # DB-52 修复：row[1]/row[2]/row[3] 空值保护，SQLite SUM 在无匹配行时返回 NULL
             result.append(
-                {"date": row[0], "count": row[1], "video": row[2], "image": row[3]}
+                {"date": row[0], "count": row[1] or 0, "video": row[2] or 0, "image": row[3] or 0}
             )
         return result
 
@@ -268,8 +269,9 @@ class Database:
                     row[0],
                 )
                 continue
+            # DB-53 修复：post_type 空值保护，row[2] 为 None 时传入响应会产生 None 字段，降级为 "video"
             result.append(
-                {"video_id": row[0], "downloaded_at": row[1], "post_type": row[2], "user_id": row[3]}
+                {"video_id": row[0], "downloaded_at": row[1], "post_type": row[2] or "video", "user_id": row[3]}
             )
         return result
 
