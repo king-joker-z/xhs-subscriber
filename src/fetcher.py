@@ -475,12 +475,24 @@ class XHSFetcher:
                     )
                 break
 
-            notes: list[dict] = data.get("data", {}).get("notes", [])
+            # FE-35 修复：notes 类型保护，API 返回 notes 为非列表类型（null/字符串等）时
+            # all_notes.extend(notes) 会抛 TypeError，降级为空列表并跳出分页
+            _raw_notes = data.get("data", {}).get("notes", [])
+            if not isinstance(_raw_notes, list):
+                logger.warning(
+                    "博主主页 API 返回 notes 类型非法（%s），已降级为空列表（user_id=%s）",
+                    type(_raw_notes).__name__, user_id,
+                )
+                _raw_notes = []
+            notes: list[dict] = _raw_notes
             if not notes:
                 break
 
             all_notes.extend(notes)
-            cursor = data.get("data", {}).get("cursor", "")
+            # FE-36 修复：cursor 类型保护，API 返回 cursor 为非字符串类型（null/整数等）时
+            # 传入下次请求 params["cursor"] 会产生类型错误，强制转为字符串
+            _raw_cursor = data.get("data", {}).get("cursor", "")
+            cursor = str(_raw_cursor) if _raw_cursor is not None else ""
             if not data.get("data", {}).get("has_more"):
                 break
 
