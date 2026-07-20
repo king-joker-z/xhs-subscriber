@@ -156,7 +156,12 @@ class AppConfig(BaseSettings):
         # 仅在环境变量未显式设置时，从 YAML 覆盖
         scheduler = data.get("scheduler", {})
         if "interval_hours" in scheduler:
-            self.interval_hours = _clamp(float(scheduler["interval_hours"]), 0.1, 168.0, "interval_hours")
+            # CFG-45 修复：interval_hours None 值保护，None 时 float() 会抛 TypeError
+            _raw_ih = scheduler["interval_hours"]
+            if _raw_ih is None:
+                logger.warning("config.yaml scheduler.interval_hours 为 null，已忽略，保持当前值：%s", self.interval_hours)
+            else:
+                self.interval_hours = _clamp(float(_raw_ih), 0.1, 168.0, "interval_hours")
 
         downloader = data.get("downloader", {})
         if "concurrency" in downloader:

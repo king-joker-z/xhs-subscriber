@@ -169,7 +169,8 @@ def _parse_extract_result(raw: dict[str, Any]) -> Optional[VideoMeta]:
     if isinstance(tags_raw, list):
         tags = [str(t) for t in tags_raw if t]
     else:
-        tags = [str(tags_raw)] if tags_raw else []
+        # FE-34 修复：tags_raw 非列表时类型保护，dict/int 等类型 str() 会产生无效标签，只接受字符串类型
+        tags = [str(tags_raw)] if tags_raw and isinstance(tags_raw, str) else []
 
     return VideoMeta(
         video_id=video_id,

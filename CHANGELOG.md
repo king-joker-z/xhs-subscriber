@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #129
+
+### 迭代目标
+1. `fetcher.py` `extract` 中 `tags_raw` 非列表时 `tags = [str(tags_raw)] if tags_raw else []`，`tags_raw` 为 dict/int 等非字符串类型时 `str()` 会产生无效标签
+2. `config.py` `load_yaml` 中 `interval_hours` 无 `None` 值保护，`scheduler["interval_hours"]` 为 `None` 时 `float()` 会抛 `TypeError`
+
+### 完成内容
+- **fix: `fetcher.py` `extract` tags_raw else 分支加入类型保护（FE-34）**
+  - 原实现：`tags = [str(tags_raw)] if tags_raw else []`，非字符串类型会产生无效标签
+  - 修复：改为 `[str(tags_raw)] if tags_raw and isinstance(tags_raw, str) else []`，非字符串类型返回空列表
+  - 新增 FE-34 修复说明注释
+- **fix: `config.py` `load_yaml` 加入 `interval_hours` None 值保护（CFG-45）**
+  - 原实现：`float(scheduler["interval_hours"])`，`None` 时抛 `TypeError`
+  - 修复：先取 `_raw_ih`，`None` 时输出 WARNING 并保持当前值，否则 `float()` 转换
+  - 新增 CFG-45 修复说明注释
+- **改动文件**：`src/fetcher.py`、`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter129.py`）：15 项检查全部 PASS（含 7 个 tags 用例 + 6 个 interval_hours 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #128
 
 ### 迭代目标
