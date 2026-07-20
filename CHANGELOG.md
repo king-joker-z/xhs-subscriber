@@ -24,7 +24,7 @@
 ### 测试结果
 - Python 3.12 语法检查：全部 8 个模块通过
 - 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter122.py`）：15 项检查全部 PASS（含 3+3 个过滤用例）
-- git commit: 待提交
+- git commit: `7b1fd53`，已 push 到 `origin/main`
 
 ---
 
