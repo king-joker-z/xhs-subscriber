@@ -453,7 +453,16 @@ class XHSFetcher:
 
                 # 成功响应，重置退避计数
                 _backoff_count = 0
-                data = resp.json()
+                # FE-37 修复：resp.json() 返回值类型保护，API 返回非 dict 类型（数组/字符串等）时
+                # data.get("code") 会抛 AttributeError，降级为空 dict 并跳出分页
+                _raw_data = resp.json()
+                if not isinstance(_raw_data, dict):
+                    logger.warning(
+                        "博主主页 API 返回非 dict 类型（%s），已降级为空 dict（user_id=%s）",
+                        type(_raw_data).__name__, user_id,
+                    )
+                    _raw_data = {}
+                data = _raw_data
             except Exception as exc:
                 logger.error("博主主页 API 请求失败 user_id=%s：%s", user_id, exc)
                 break
@@ -475,9 +484,19 @@ class XHSFetcher:
                     )
                 break
 
+            # FE-38 修复：data["data"] 类型保护，API 返回 data["data"] 为非 dict 类型（null/列表等）时
+            # .get("notes", []) 会抛 AttributeError，降级为空 dict
+            _data_inner = data.get("data", {})
+            if not isinstance(_data_inner, dict):
+                logger.warning(
+                    "博主主页 API 返回 data.data 类型非法（%s），已降级为空 dict（user_id=%s）",
+                    type(_data_inner).__name__, user_id,
+                )
+                _data_inner = {}
+
             # FE-35 修复：notes 类型保护，API 返回 notes 为非列表类型（null/字符串等）时
             # all_notes.extend(notes) 会抛 TypeError，降级为空列表并跳出分页
-            _raw_notes = data.get("data", {}).get("notes", [])
+            _raw_notes = _data_inner.get("notes", [])
             if not isinstance(_raw_notes, list):
                 logger.warning(
                     "博主主页 API 返回 notes 类型非法（%s），已降级为空列表（user_id=%s）",
@@ -491,9 +510,9 @@ class XHSFetcher:
             all_notes.extend(notes)
             # FE-36 修复：cursor 类型保护，API 返回 cursor 为非字符串类型（null/整数等）时
             # 传入下次请求 params["cursor"] 会产生类型错误，强制转为字符串
-            _raw_cursor = data.get("data", {}).get("cursor", "")
+            _raw_cursor = _data_inner.get("cursor", "")
             cursor = str(_raw_cursor) if _raw_cursor is not None else ""
-            if not data.get("data", {}).get("has_more"):
+            if not _data_inner.get("has_more"):
                 break
 
             await _random_delay()

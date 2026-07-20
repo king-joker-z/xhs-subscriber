@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #143
+
+### 迭代目标
+1. `fetcher.py` `fetch_user_videos` 中 `resp.json()` 无类型保护，API 返回非 dict 类型（数组/字符串等）时 `data.get("code")` 会抛 `AttributeError`
+2. `fetcher.py` `fetch_user_videos` 中 `data.get("data", {})` 无类型保护，`data["data"]` 为非 dict 类型（null/列表等）时 `.get("notes", [])` 会抛 `AttributeError`
+
+### 完成内容
+- **fix: `fetcher.py` `fetch_user_videos` 加入 `resp.json()` 类型保护（FE-37）**
+  - 原实现：直接 `data = resp.json()`，非 dict 时 `data.get("code")` 抛 `AttributeError`
+  - 修复：加入 `isinstance(_raw_data, dict)` 检查，非 dict 时降级为空 dict 并输出 WARNING
+  - 新增 FE-37 修复说明注释
+- **fix: `fetcher.py` `fetch_user_videos` 加入 `data["data"]` 类型保护（FE-38）**
+  - 原实现：直接 `data.get("data", {}).get("notes", [])`，`data["data"]` 为 null/列表时抛 `AttributeError`
+  - 修复：提取 `_data_inner = data.get("data", {})`，加入 `isinstance(_data_inner, dict)` 检查，非 dict 时降级为空 dict
+  - 同步更新 FE-35/FE-36 使用 `_data_inner` 替代 `data.get("data", {})`
+  - 新增 FE-38 修复说明注释
+- **改动文件**：`src/fetcher.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter143.py`）：13 项检查全部 PASS（含 6 个 resp.json 用例 + 5 个 data_inner 用例 + 6 个联合用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #142
 
 ### 迭代目标
