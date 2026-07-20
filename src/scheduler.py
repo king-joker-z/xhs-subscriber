@@ -268,7 +268,9 @@ class XHSScheduler:
                     continue
                 video_path = Path(self._config.download_dir) / user_id / f"{meta.video_id}.mp4"
                 # 图文作品 description 路径已改为子目录
-                if meta.image_urls:
+                # SC-57 修复：meta.image_urls 类型保护，非列表类型时 bool() 可能误判路径分支
+                _image_urls_safe = meta.image_urls if isinstance(meta.image_urls, list) else []
+                if _image_urls_safe:
                     desc_path = Path(self._config.download_dir) / user_id / meta.video_id / "description.txt"
                 else:
                     desc_path = Path(self._config.download_dir) / user_id / f"{meta.video_id}.description"

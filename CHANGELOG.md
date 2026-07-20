@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #138
+
+### 迭代目标
+1. `scheduler.py` `_process_subscription` 中 `if meta.image_urls:` 无类型保护，`meta.image_urls` 为非列表类型时可能误判路径分支
+2. `database.py` `get_download_count_by_user` 中 `user_ids` 无类型保护，传入非列表类型时 `len(user_ids)` 会抛 `TypeError`
+
+### 完成内容
+- **fix: `scheduler.py` `_process_subscription` 加入 `meta.image_urls` 类型保护（SC-57）**
+  - 原实现：`if meta.image_urls:` 直接判断路径分支，非列表类型时可能误判
+  - 修复：引入 `_image_urls_safe`，`isinstance(meta.image_urls, list)` 检查，非列表时降级为空列表
+  - 新增 SC-57 修复说明注释
+- **fix: `database.py` `get_download_count_by_user` 加入 `user_ids` 类型保护（DB-49）**
+  - 原实现：`if not user_ids:` 直接判断，非列表类型时 `len(user_ids)` 会抛 `TypeError`
+  - 修复：加入 `isinstance(user_ids, list)` 检查，非列表时输出 WARNING 并降级为空字典
+  - 新增 DB-49 修复说明注释
+- **改动文件**：`src/scheduler.py`、`src/database.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter138.py`）：15 项检查全部 PASS（含 5 个 image_urls 用例 + 5 个 user_ids 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #137
 
 ### 迭代目标

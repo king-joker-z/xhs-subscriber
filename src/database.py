@@ -69,6 +69,10 @@ class Database:
         """
         if not self._conn:
             raise RuntimeError("数据库未初始化，请先调用 init()")
+        # DB-49 修复：user_ids 类型保护，非列表类型时 len(user_ids) 会抛 TypeError
+        if not isinstance(user_ids, list):
+            logger.warning("get_download_count_by_user 收到非列表类型 user_ids（%s），已降级为空字典", type(user_ids).__name__)
+            return {}
         if not user_ids:
             return {}
         placeholders = ",".join("?" * len(user_ids))
