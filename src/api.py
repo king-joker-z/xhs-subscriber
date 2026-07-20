@@ -311,7 +311,15 @@ async def api_stats(
     if _scheduler is None:
         return []
     try:
-        return await _scheduler._db.get_download_stats_by_date(days=days)
+        rows = await _scheduler._db.get_download_stats_by_date(days=days)
+        # API-71 修复：空 date 保护，数据库计算异常时 date 可能为 None
+        items = []
+        for r in rows:
+            if not r.get("date"):
+                logger.warning("api_stats 发现空 date 记录（count=%s），已跳过", r.get("count"))
+                continue
+            items.append(r)
+        return items
     except Exception as exc:
         logger.warning("api_stats 查询失败：%s", exc)
         return []

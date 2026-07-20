@@ -195,10 +195,19 @@ class Database:
             (f"-{days}",),
         ) as cursor:
             rows = await cursor.fetchall()
-        return [
-            {"date": row[0], "count": row[1], "video": row[2], "image": row[3]}
-            for row in rows
-        ]
+        # DB-48 修复：过滤空 date 行，避免 SQLite datetime 计算异常时脏数据传递到上层
+        result = []
+        for row in rows:
+            if not row[0]:
+                logger.warning(
+                    "get_download_stats_by_date 发现空 date 行（count=%s），已跳过",
+                    row[1],
+                )
+                continue
+            result.append(
+                {"date": row[0], "count": row[1], "video": row[2], "image": row[3]}
+            )
+        return result
 
     async def get_recent_downloads(
         self,

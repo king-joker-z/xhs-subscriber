@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 01:xx — 迭代 #122
+
+### 迭代目标
+1. `database.py` `get_download_stats_by_date` 返回行无空 `date` 过滤，SQLite datetime 计算异常时脏数据传递到上层
+2. `api.py` `api_stats` 直接返回查询结果，无空 `date` 保护
+
+### 完成内容
+- **fix: `database.py` `get_download_stats_by_date` 加入空 `date` 行过滤（DB-48）**
+  - 原实现：直接列表推导返回所有行，无空值过滤
+  - 修复：改为循环构建，`not row[0]` 时输出 WARNING 并 `continue` 跳过
+  - 新增 DB-48 修复说明注释
+- **fix: `api.py` `api_stats` 加入空 `date` 保护（API-71）**
+  - 原实现：直接 `return await ...get_download_stats_by_date(...)`，无空值校验
+  - 修复：改为循环构建，`not r.get("date")` 时输出 WARNING 并 `continue` 跳过
+  - 新增 API-71 修复说明注释
+- **改动文件**：`src/database.py`、`src/api.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter122.py`）：15 项检查全部 PASS（含 3+3 个过滤用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 01:xx — 迭代 #121
 
 ### 迭代目标
