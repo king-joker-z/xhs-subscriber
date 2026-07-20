@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-20 22:xx — 迭代 #107
+
+### 迭代目标
+`api.py` `/api/recent`、`/api/stats`、`/api/vacuum` 三个端点装饰器缺少 `response_description`，OpenAPI 文档响应说明缺失
+
+### 完成内容
+- **fix: `api.py` 批量加入 `response_description`（API-60 + API-61 + API-62）**
+  - `/api/recent`：加入 `response_description="200 OK：返回最近下载的作品列表，按下载时间倒序；调度器未就绪时返回空列表"`
+  - `/api/stats`：加入 `response_description="200 OK：返回最近 N 天每日下载数量，按日期升序；调度器未就绪时返回空列表"`
+  - `/api/vacuum`：加入 `response_description="200 OK：VACUUM 执行成功；503 Service Unavailable：调度器未就绪"`
+  - 各端点原有字段 `response_model`、`summary`、`tags` 均未改动
+- **改动文件**：`src/api.py`
+
+### 诊断说明
+本轮确认 `/api/subscribe`、`/api/unsubscribe` 端点不存在（项目通过配置文件管理订阅，无动态订阅 API）。至此 `api.py` 所有 API 端点均已补全 `response_description`。SC-9 遗留（改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter107.py`）：18 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 21:xx — 迭代 #106
 
 ### 迭代目标

@@ -257,6 +257,7 @@ async def api_status() -> StatusResponse:
     "/api/recent",
     response_model=list[RecentDownloadItem],
     summary="最近下载记录",
+    response_description="200 OK：返回最近下载的作品列表，按下载时间倒序；调度器未就绪时返回空列表",
     tags=["system"],
 )
 async def api_recent(
@@ -287,6 +288,7 @@ async def api_recent(
 @app.get(
     "/api/stats",
     summary="按日期下载统计",
+    response_description="200 OK：返回最近 N 天每日下载数量，按日期升序；调度器未就绪时返回空列表",
     tags=["system"],
     response_model=list[DailyStatItem],
 )
@@ -309,6 +311,7 @@ async def api_stats(
 @app.post(
     "/api/vacuum",
     summary="执行数据库 VACUUM",
+    response_description="200 OK：VACUUM 执行成功；503 Service Unavailable：调度器未就绪",
     tags=["system"],
     response_model=VacuumResponse,
 )
