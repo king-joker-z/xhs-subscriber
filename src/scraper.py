@@ -114,7 +114,9 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     dateadded = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     # 排序标题：发布时间前缀 + 标题，便于 Jellyfin 按时间排序
-    sorttitle = f"{meta.publish_time} {meta.title}" if meta.publish_time else (meta.title or meta.video_id)
+    # SCR-35 修复：meta.title 类型保护，非字符串类型时强制转为 str，避免 f-string 产生意外结果
+    _safe_title = meta.title if isinstance(meta.title, str) else (str(meta.title) if meta.title is not None else "")
+    sorttitle = f"{meta.publish_time} {_safe_title}" if meta.publish_time else (_safe_title or meta.video_id)
 
     # 构建 XML 树
     root = etree.Element("movie")

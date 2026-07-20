@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 02:xx — 迭代 #134
+
+### 迭代目标
+1. `downloader.py` `_do_download` 中 `meta.video_url` 无 URL 格式校验，非 http/https 开头的 URL 会传入 `_stream_download` 导致请求失败
+2. `scraper.py` `generate_nfo` 中 `sorttitle` 构建时 `meta.title` 无类型保护，非字符串类型时 f-string 会产生意外结果
+
+### 完成内容
+- **fix: `downloader.py` `_do_download` 加入 `video_url` URL 格式校验（DL-54）**
+  - 原实现：`if meta.video_url:` 直接下载，非 http/https URL 会导致请求失败
+  - 修复：改为 `if meta.video_url and meta.video_url.startswith(("http://", "https://"))`，格式非法时输出 WARNING 并跳过
+  - 新增 DL-54 修复说明注释
+- **fix: `scraper.py` `generate_nfo` 加入 `sorttitle` 中 `meta.title` 类型保护（SCR-35）**
+  - 原实现：`f"{meta.publish_time} {meta.title}"`，`meta.title` 为非字符串类型时 f-string 产生意外结果
+  - 修复：引入 `_safe_title`，`isinstance(meta.title, str)` 检查，非字符串时 `str()` 转换，`None` 时降级为空字符串
+  - 新增 SCR-35 修复说明注释
+- **改动文件**：`src/downloader.py`、`src/scraper.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter134.py`）：15 项检查全部 PASS（含 6 个 video_url 用例 + 6 个 sorttitle 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #133
 
 ### 迭代目标

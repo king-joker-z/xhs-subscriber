@@ -208,10 +208,13 @@ class Downloader:
 
         try:
             # 1. 下载视频
-            if meta.video_url:
+            # DL-54 修复：video_url URL 格式校验，非 http/https 开头的 URL 会导致请求失败
+            if meta.video_url and meta.video_url.startswith(("http://", "https://")):
                 await self._stream_download(meta.video_url, video_path, headers)
                 created_files.append(video_path)
                 logger.info("视频下载完成：%s -> %s", meta.video_id, video_path)
+            elif meta.video_url:
+                logger.warning("_do_download 视频 URL 格式非法，已跳过（video_id=%s video_url=%r）", meta.video_id, meta.video_url)
             elif meta.image_urls:
                 # 图文作品：批量下载图片到 {video_id}/ 子目录（img_dir 已在上方创建）
                 for idx, img_url in enumerate(meta.image_urls, start=1):
