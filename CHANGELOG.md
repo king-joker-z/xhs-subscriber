@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-20 21:xx — 迭代 #106
+
+### 迭代目标
+`fetcher.py` `fetch_user_videos` 无空列表早期退出，`all_notes` 为空时继续执行无意义的逐条获取循环
+
+### 完成内容
+- **fix: `fetcher.py` `fetch_user_videos` 加入空列表早期退出（FE-23）**
+  - 原实现：`logger.info` 打印 API 返回数量后直接进入 `for note in all_notes` 循环，空列表时无早期退出
+  - 修复：在 `logger.info` 之后、`for` 循环之前加入 `if not all_notes: return []`，并输出明确的跳过日志
+  - 新增 FE-23 修复说明注释
+- **改动文件**：`src/fetcher.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大）。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter106.py`）：12 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 21:xx — 迭代 #105
 
 ### 迭代目标

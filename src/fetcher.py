@@ -468,6 +468,11 @@ class XHSFetcher:
 
         logger.info("博主 %s API 返回 %d 条作品，开始逐条获取元数据", user_id, len(all_notes))
 
+        # FE-23 修复：空列表早期退出，避免执行无意义的逐条获取循环
+        if not all_notes:
+            logger.info("博主 %s API 返回 0 条作品，跳过逐条获取", user_id)
+            return []
+
         # 逐条调用 extract() 获取完整元数据
         results: list[VideoMeta] = []
         for note in all_notes[: limit]:
