@@ -156,6 +156,8 @@ class Database:
         :param days: 统计天数，默认 14 天
         :return: [{"date": "YYYY-MM-DD", "count": int, "video": int, "image": int}, ...]，按日期升序
         """
+        # DB-22 修复：days 范围保护，与 API 层 Query(ge=1, le=365) 双重防御，防止负数或超大值导致异常 SQL
+        days = max(1, min(days, 365))
         if not self._conn:
             raise RuntimeError("数据库未初始化，请先调用 init()")
         # SQLite datetime() 默认 UTC；通过 '+8 hours' 偏移转换为 UTC+8 本地日期

@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-20 10:xx — 迭代 #91
+
+### 迭代目标
+`database.py` `get_download_stats_by_date` 无 `days` 范围保护，负数或超大值可能导致异常 SQL；API 层已有 `Query(ge=1, le=365)` 保护，但数据库层缺乏防御性校验
+
+### 完成内容
+- **fix: `database.py` `get_download_stats_by_date` 加入 `days` 范围保护（DB-22）**
+  - 原实现：`days` 参数直接传入 SQL，无范围校验，负数会导致 `datetime('now', '+8 hours', '-N days')` 查询未来数据，超大值会导致全表扫描
+  - 修复：加入 `days = max(1, min(days, 365))`，下限 1 防止负数，上限 365 与 API 层 `Query(ge=1, le=365)` 保持一致，形成双重防御
+  - 新增 DB-22 修复说明注释
+- **改动文件**：`src/database.py`
+
+### 诊断说明
+本轮执行了 10 项诊断扫描，SC-9 遗留（改动较大），DL-27 低优先级（ValueError 消息已足够），SC-25/DB-23 低优先级。
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter91.py`）：11 项检查全部 PASS
+- git commit: 待提交
+
+---
+
 ## 2026-07-20 09:xx — 迭代 #90
 
 ### 迭代目标
