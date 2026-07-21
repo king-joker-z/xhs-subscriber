@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #148
+
+### 迭代目标
+1. `config.py` 中 `scheduler = data.get("scheduler", {})` 后直接 `"interval_hours" in scheduler`，若 YAML 中 `scheduler` 为非 dict 类型（如字符串、列表），`"interval_hours" in scheduler` 会抛 `TypeError`
+2. `config.py` 中 `downloader = data.get("downloader", {})` 后直接 `"concurrency" in downloader`，若 YAML 中 `downloader` 为非 dict 类型，`"concurrency" in downloader` 会抛 `TypeError`
+
+### 完成内容
+- **fix: `config.py` `scheduler` 加入类型保护（CFG-51）**
+  - 原实现：直接 `"interval_hours" in scheduler`，非 dict 时抛 `TypeError`
+  - 修复：加入 `isinstance(scheduler, dict)` 检查，非 dict 时重置为空 dict 并输出 WARNING
+  - 新增 CFG-51 修复说明注释
+- **fix: `config.py` `downloader` 加入类型保护（CFG-52）**
+  - 原实现：直接 `"concurrency" in downloader`，非 dict 时抛 `TypeError`
+  - 修复：加入 `isinstance(downloader, dict)` 检查，非 dict 时重置为空 dict 并输出 WARNING
+  - 新增 CFG-52 修复说明注释
+- **改动文件**：`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter148.py`）：14 项检查全部 PASS（含 7 个 CFG-51 用例 + 7 个 CFG-52 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #147
 
 ### 迭代目标

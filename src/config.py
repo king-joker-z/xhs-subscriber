@@ -163,7 +163,14 @@ class AppConfig(BaseSettings):
             return self
 
         # 仅在环境变量未显式设置时，从 YAML 覆盖
+        # CFG-51 修复：scheduler 类型保护，YAML 中 scheduler 为非 dict 类型时 "key" in scheduler 会抛 TypeError
         scheduler = data.get("scheduler", {})
+        if not isinstance(scheduler, dict):
+            logger.warning(
+                "config.yaml scheduler 类型非法（%s），已忽略 scheduler 配置，保持当前值",
+                type(scheduler).__name__,
+            )
+            scheduler = {}
         if "interval_hours" in scheduler:
             # CFG-45 修复：interval_hours None 值保护，None 时 float() 会抛 TypeError
             _raw_ih = scheduler["interval_hours"]
@@ -172,7 +179,14 @@ class AppConfig(BaseSettings):
             else:
                 self.interval_hours = _clamp(float(_raw_ih), 0.1, 168.0, "interval_hours")
 
+        # CFG-52 修复：downloader 类型保护，YAML 中 downloader 为非 dict 类型时 "key" in downloader 会抛 TypeError
         downloader = data.get("downloader", {})
+        if not isinstance(downloader, dict):
+            logger.warning(
+                "config.yaml downloader 类型非法（%s），已忽略 downloader 配置，保持当前值",
+                type(downloader).__name__,
+            )
+            downloader = {}
         if "concurrency" in downloader:
             # CFG-46 修复：concurrency None 值保护，None 时 int() 会抛 TypeError
             _raw_conc = downloader["concurrency"]
