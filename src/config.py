@@ -68,7 +68,14 @@ class SubscriptionConfig:
         # CFG-2 修复：video_url 在配置加载阶段做格式校验，
         # 非法 URL（缺少 scheme 或 netloc）立即抛出 ValueError，
         # 避免等到运行时才报错。
-        raw_url: Optional[str] = data.get("video_url")
+        # CFG-57 修复：video_url 类型保护，非字符串类型时 urlparse() 会抛 TypeError
+        _raw_url_val = data.get("video_url")
+        raw_url: Optional[str] = _raw_url_val if isinstance(_raw_url_val, str) else (str(_raw_url_val) if _raw_url_val is not None else None)
+        if _raw_url_val is not None and not isinstance(_raw_url_val, str):
+            logger.warning(
+                "SubscriptionConfig video_url 类型非法（%s），已强制转为字符串",
+                type(_raw_url_val).__name__,
+            )
         # CFG-41 修复：video_url 空字符串保护，空字符串视为 None（未配置）
         if raw_url is not None and not raw_url:
             raw_url = None
