@@ -83,6 +83,10 @@ class Database:
             rows = await cursor.fetchall()
         result = {uid: 0 for uid in user_ids}
         for row in rows:
+            # DB-54 修复：row 类型保护，aiosqlite fetchall 理论返回 Row 对象，但防御性保护避免 row[0] 抛 TypeError
+            if not isinstance(row, (tuple, list)) and not hasattr(row, "__getitem__"):
+                logger.warning("get_download_count_by_user 发现非序列类型行（%s），已跳过", type(row).__name__)
+                continue
             if row[0] in result:
                 result[row[0]] = row[1]
         return result
@@ -168,6 +172,10 @@ class Database:
             rows = await cursor.fetchall()
         counts = {"video": 0, "image": 0}
         for row in rows:
+            # DB-55 修复：row 类型保护，aiosqlite fetchall 理论返回 Row 对象，但防御性保护避免 row[0] 抛 TypeError
+            if not isinstance(row, (tuple, list)) and not hasattr(row, "__getitem__"):
+                logger.warning("get_download_count_by_type 发现非序列类型行（%s），已跳过", type(row).__name__)
+                continue
             # DB-50 修复：row[0] 空值保护，None 时 None in counts 返回 False 会把 None 计入 "video" 桶
             if not row[0]:
                 logger.warning("get_download_count_by_type 发现空 post_type 行（count=%s），已跳过", row[1])

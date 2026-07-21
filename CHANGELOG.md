@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #150
+
+### 迭代目标
+1. `database.py` `get_download_count_by_user` 中 `for row in rows` 无类型保护，若 `row` 为非序列类型，`row[0]` 会抛 `TypeError`
+2. `database.py` `get_download_count_by_type` 中 `for row in rows` 无类型保护，若 `row` 为非序列类型，`row[0]` 会抛 `TypeError`
+
+### 完成内容
+- **fix: `database.py` `get_download_count_by_user` 加入 `row` 类型保护（DB-54）**
+  - 原实现：直接 `row[0]`，非序列类型时抛 `TypeError`
+  - 修复：加入 `isinstance(row, (tuple, list)) or hasattr(row, "__getitem__")` 检查，非序列时跳过并输出 WARNING
+  - 新增 DB-54 修复说明注释
+- **fix: `database.py` `get_download_count_by_type` 加入 `row` 类型保护（DB-55）**
+  - 原实现：直接 `row[0]`，非序列类型时抛 `TypeError`
+  - 修复：加入 `isinstance(row, (tuple, list)) or hasattr(row, "__getitem__")` 检查，非序列时跳过并输出 WARNING
+  - 新增 DB-55 修复说明注释
+- **改动文件**：`src/database.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter150.py`）：14 项检查全部 PASS（含 6 个 DB-54 用例 + 6 个 DB-55 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #149
 
 ### 迭代目标
