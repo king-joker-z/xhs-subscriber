@@ -210,7 +210,14 @@ class AppConfig(BaseSettings):
             else:
                 self.max_batch = int(_clamp(int(_raw_mb), 1, 500, "max_batch"))
 
+        # CFG-53 修复：logging_cfg 类型保护，YAML 中 logging 为非 dict 类型时 "key" in logging_cfg 会抛 TypeError
         logging_cfg = data.get("logging", {})
+        if not isinstance(logging_cfg, dict):
+            logger.warning(
+                "config.yaml logging 类型非法（%s），已忽略 logging 配置，保持当前值",
+                type(logging_cfg).__name__,
+            )
+            logging_cfg = {}
         if "dir" in logging_cfg:
             # CFG-43 修复：log_dir 空字符串保护，空字符串会绕过路径规范化写入空路径（与 CFG-42 对称）
             _raw_ld = str(logging_cfg["dir"]).strip()
@@ -238,7 +245,14 @@ class AppConfig(BaseSettings):
                 )
 
         # CFG-21 修复：解析 server.http_port，使 YAML 配置端口真正生效（环境变量 HTTP_PORT 优先）
+        # CFG-54 修复：server 类型保护，YAML 中 server 为非 dict 类型时 "key" in server 会抛 TypeError
         server = data.get("server", {})
+        if not isinstance(server, dict):
+            logger.warning(
+                "config.yaml server 类型非法（%s），已忽略 server 配置，保持当前值",
+                type(server).__name__,
+            )
+            server = {}
         if "http_port" in server and os.environ.get("HTTP_PORT") is None:
             # CFG-49 修复：http_port None 值保护，None 时 int(None) 会抛 TypeError
             _raw_port = server["http_port"]

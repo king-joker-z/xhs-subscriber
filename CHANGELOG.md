@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #149
+
+### 迭代目标
+1. `config.py` 中 `logging_cfg = data.get("logging", {})` 后直接 `"dir" in logging_cfg`，若 YAML 中 `logging` 为非 dict 类型，`"dir" in logging_cfg` 会抛 `TypeError`
+2. `config.py` 中 `server = data.get("server", {})` 后直接 `"http_port" in server`，若 YAML 中 `server` 为非 dict 类型，`"http_port" in server` 会抛 `TypeError`
+
+### 完成内容
+- **fix: `config.py` `logging_cfg` 加入类型保护（CFG-53）**
+  - 原实现：直接 `"dir" in logging_cfg`，非 dict 时抛 `TypeError`
+  - 修复：加入 `isinstance(logging_cfg, dict)` 检查，非 dict 时重置为空 dict 并输出 WARNING
+  - 新增 CFG-53 修复说明注释
+- **fix: `config.py` `server` 加入类型保护（CFG-54）**
+  - 原实现：直接 `"http_port" in server`，非 dict 时抛 `TypeError`
+  - 修复：加入 `isinstance(server, dict)` 检查，非 dict 时重置为空 dict 并输出 WARNING
+  - 新增 CFG-54 修复说明注释
+- **改动文件**：`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter149.py`）：14 项检查全部 PASS（含 7 个 CFG-53 用例 + 7 个 CFG-54 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #148
 
 ### 迭代目标
