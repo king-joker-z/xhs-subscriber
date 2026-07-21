@@ -164,9 +164,11 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     fanart_el = etree.SubElement(root, "fanart")
     thumb2 = etree.SubElement(fanart_el, "thumb")
     # SCR-38 修复：cover_url URL 格式校验，非 http/https 开头的 URL 不写入 NFO，降级为本地封面路径
+    # SCR-44 修复：meta.cover_url 类型保护，非字符串类型时 .startswith() 会抛 AttributeError
+    _safe_cover_url_scr = meta.cover_url if isinstance(meta.cover_url, str) else ""
     _valid_cover = (
-        meta.cover_url
-        if meta.cover_url and meta.cover_url.startswith(("http://", "https://"))
+        _safe_cover_url_scr
+        if _safe_cover_url_scr and _safe_cover_url_scr.startswith(("http://", "https://"))
         else None
     )
     thumb2.text = _valid_cover if _valid_cover else local_thumb

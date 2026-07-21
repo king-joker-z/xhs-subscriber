@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #160
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 中 `meta.cover_url.startswith(...)` 无类型保护，若 `meta.cover_url` 为非字符串类型（如整数），`.startswith(...)` 会抛 `AttributeError`
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 加入 `meta.cover_url` 类型保护（SCR-44）**
+  - 原实现：直接 `meta.cover_url.startswith(...)`，非字符串类型时抛 `AttributeError`
+  - 修复：加入 `isinstance(meta.cover_url, str)` 检查，非字符串时降级为空字符串
+  - 新增 `_safe_cover_url_scr` 变量
+- **改动文件**：`src/scraper.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter160.py`）：14 项检查全部 PASS（含 7 个 SCR-44 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #159
 
 ### 迭代目标
