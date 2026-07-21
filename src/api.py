@@ -288,9 +288,15 @@ async def api_recent(
             if not r.get("video_id"):
                 logger.warning("api_recent 发现空 video_id 记录（downloaded_at=%s），已跳过", r.get("downloaded_at"))
                 continue
+            # API-76 修复：downloaded_at 空值保护，r["downloaded_at"] 为 None 时
+            # RecentDownloadItem.downloaded_at: str 会收到 None，导致 pydantic 验证错误
+            _downloaded_at = r.get("downloaded_at") or ""
+            if not _downloaded_at:
+                logger.warning("api_recent 发现空 downloaded_at 记录（video_id=%s），已跳过", r.get("video_id"))
+                continue
             items.append(RecentDownloadItem(
                 video_id=r["video_id"],
-                downloaded_at=r["downloaded_at"],
+                downloaded_at=_downloaded_at,
                 post_type=r.get("post_type", "video"),
                 user_id=r.get("user_id"),
             ))
