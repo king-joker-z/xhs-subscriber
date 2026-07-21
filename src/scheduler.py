@@ -65,6 +65,13 @@ class XHSScheduler:
         try:
             if self._state_path.exists():
                 data = json.loads(self._state_path.read_text(encoding="utf-8"))
+                # SC-60 修复：JSON 顶层类型保护，JSON 文件顶层为非 dict 类型时 data.get() 会抛 AttributeError
+                if not isinstance(data, dict):
+                    logger.warning(
+                        "_load_state JSON 顶层类型非法（%s），已重置为空状态",
+                        type(data).__name__,
+                    )
+                    data = {}
                 # SC-55 修复：sub_last_run_at 类型保护，JSON 损坏时 data.get 可能返回非 dict 类型
                 _raw_state = data.get("sub_last_run_at", {})
                 if not isinstance(_raw_state, dict):

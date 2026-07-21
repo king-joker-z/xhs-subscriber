@@ -153,6 +153,15 @@ class AppConfig(BaseSettings):
             logger.error("读取配置文件失败：%s，错误：%s", path, exc)
             return self
 
+        # CFG-50 修复：YAML 顶层类型保护，yaml.safe_load 返回非 dict 类型时 data.get() 会抛 AttributeError
+        # yaml.safe_load(f) or {} 只处理 None/空文档，不处理列表等非 dict 类型
+        if not isinstance(data, dict):
+            logger.warning(
+                "config.yaml 顶层类型非法（%s），已忽略全部 YAML 配置，保持当前值",
+                type(data).__name__,
+            )
+            return self
+
         # 仅在环境变量未显式设置时，从 YAML 覆盖
         scheduler = data.get("scheduler", {})
         if "interval_hours" in scheduler:

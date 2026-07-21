@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #147
+
+### 迭代目标
+1. `scheduler.py` `_load_state` 中 `data = json.loads(...)` 后直接 `data.get("sub_last_run_at", {})` 无类型保护，若 JSON 文件顶层为非 dict 类型（如数组、字符串），`data.get(...)` 会抛 `AttributeError`
+2. `config.py` `_load_yaml` 中 `data = yaml.safe_load(f) or {}` 后直接 `data.get("scheduler", {})` 无类型保护，若 YAML 文件顶层为非 dict 类型（如列表），`data.get(...)` 会抛 `AttributeError`
+
+### 完成内容
+- **fix: `scheduler.py` `_load_state` 加入 JSON 顶层类型保护（SC-60）**
+  - 原实现：直接 `data.get("sub_last_run_at", {})`，JSON 顶层为非 dict 时抛 `AttributeError`
+  - 修复：加入 `isinstance(data, dict)` 检查，非 dict 时重置为空 dict 并输出 WARNING
+  - 新增 SC-60 修复说明注释
+- **fix: `config.py` `_load_yaml` 加入 YAML 顶层类型保护（CFG-50）**
+  - 原实现：`yaml.safe_load(f) or {}` 只处理 None/空文档，不处理列表等非 dict 类型，后续 `data.get(...)` 会抛 `AttributeError`
+  - 修复：加入 `isinstance(data, dict)` 检查，非 dict 时忽略全部 YAML 配置并输出 WARNING
+  - 新增 CFG-50 修复说明注释
+- **改动文件**：`src/scheduler.py`、`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter147.py`）：14 项检查全部 PASS（含 10 个 SC-60 用例 + 7 个 CFG-50 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 02:xx — 迭代 #146
 
 ### 迭代目标
