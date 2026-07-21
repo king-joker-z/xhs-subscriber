@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #154
+
+### 迭代目标
+1. `downloader.py` `_do_download` 中 `for idx, img_url in enumerate(meta.image_urls, start=1)` 中 `img_url` 无类型保护，非字符串类型时 `_ext_from_url(img_url)` 会抛 `AttributeError`
+2. `downloader.py` `_do_download` 中 `elif meta.image_urls:` 分支使用原始 `meta.image_urls` 进行迭代，若为非列表类型，`enumerate(meta.image_urls, ...)` 会抛 `TypeError`
+
+### 完成内容
+- **fix: `downloader.py` `_do_download` 加入 `img_url` 类型保护（DL-56）**
+  - 原实现：直接 `_ext_from_url(img_url)`，非字符串类型时抛 `AttributeError`
+  - 修复：加入 `isinstance(img_url, str)` 检查，非字符串时跳过并输出 WARNING
+  - 新增 DL-56 修复说明注释
+- **fix: `downloader.py` `_do_download` 使用 `_image_urls_safe` 替代 `meta.image_urls` 进行迭代（DL-57）**
+  - 原实现：直接 `enumerate(meta.image_urls, start=1)`，非列表类型时抛 `TypeError`
+  - 修复：使用已有的 `_image_urls_safe` 变量（已有 DL-55 类型保护）进行迭代
+  - 新增 DL-57 修复说明注释
+- **改动文件**：`src/downloader.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter154.py`）：14 项检查全部 PASS（含 6 个 DL-56 用例 + 7 个 DL-57 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #153
 
 ### 迭代目标

@@ -219,10 +219,18 @@ class Downloader:
                 logger.warning("_do_download 视频 URL 格式非法，已跳过（video_id=%s video_url=%r）", meta.video_id, meta.video_url)
             elif meta.image_urls:
                 # 图文作品：批量下载图片到 {video_id}/ 子目录（img_dir 已在上方创建）
-                for idx, img_url in enumerate(meta.image_urls, start=1):
+                # DL-57 修复：使用 _image_urls_safe 替代 meta.image_urls，避免非列表类型时 enumerate() 抛 TypeError
+                for idx, img_url in enumerate(_image_urls_safe, start=1):
                     # DL-52 修复：img_url 空值保护，空字符串会传入 _stream_download 抛 ValueError 中断下载
                     if not img_url:
                         logger.warning("图文作品第 %d 张图片 URL 为空，已跳过（video_id=%s）", idx, meta.video_id)
+                        continue
+                    # DL-56 修复：img_url 类型保护，非字符串类型时 _ext_from_url(img_url) 会抛 AttributeError
+                    if not isinstance(img_url, str):
+                        logger.warning(
+                            "图文作品第 %d 张图片 URL 类型非法（%s），已跳过（video_id=%s）",
+                            idx, type(img_url).__name__, meta.video_id,
+                        )
                         continue
                     # DL-5 修复：改用 urlparse + Path.suffix 推断扩展名，
                     # 避免 URL query 参数中含 .jpg 时误匹配（如 ?format=jpg&...）
@@ -230,7 +238,7 @@ class Downloader:
                     img_path = img_dir / f"{idx:03d}{ext}"
                     await self._stream_download(img_url, img_path, headers)
                     created_files.append(img_path)
-                logger.info("图文作品图片下载完成：%s，共 %d 张", meta.video_id, len(meta.image_urls))
+                logger.info("图文作品图片下载完成：%s，共 %d 张", meta.video_id, len(_image_urls_safe))
             else:
                 logger.debug("视频 URL 和图片列表均为空，跳过媒体下载：%s", meta.video_id)
 
