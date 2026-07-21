@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #155
+
+### 迭代目标
+1. `downloader.py` `_do_download` 中 `f"{meta.title}\n\n{meta.desc}\n"` 无类型保护，`meta.title`/`meta.desc` 为 `None` 时会写入 `"None"` 字符串
+2. `downloader.py` `_do_download` 中 `meta.cover_url.startswith(...)` 无类型保护，若 `meta.cover_url` 为非字符串类型，`.startswith(...)` 会抛 `AttributeError`
+
+### 完成内容
+- **fix: `downloader.py` `_do_download` 加入 `meta.title`/`meta.desc` 类型保护（DL-58）**
+  - 原实现：直接 `f"{meta.title}\n\n{meta.desc}\n"`，`None` 时写入 `"None"` 字符串
+  - 修复：加入 `isinstance(meta.title/desc, str)` 检查，`None` 时降级为空字符串
+  - 新增 DL-58 修复说明注释
+- **fix: `downloader.py` `_do_download` 加入 `meta.cover_url` 类型保护（DL-59）**
+  - 原实现：直接 `meta.cover_url.startswith(...)`，非字符串类型时抛 `AttributeError`
+  - 修复：加入 `isinstance(meta.cover_url, str)` 检查，非字符串时降级为空字符串
+  - 新增 DL-59 修复说明注释
+- **改动文件**：`src/downloader.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter155.py`）：14 项检查全部 PASS（含 6 个 DL-58 用例 + 7 个 DL-59 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #154
 
 ### 迭代目标

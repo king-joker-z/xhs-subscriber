@@ -244,17 +244,22 @@ class Downloader:
 
             # 2. 下载封面
             # DL-53 修复：cover_url URL 格式校验，非 http/https 开头的 URL 会导致请求失败
-            if meta.cover_url and meta.cover_url.startswith(("http://", "https://")):
-                await self._stream_download(meta.cover_url, thumb_path, headers)
+            # DL-59 修复：meta.cover_url 类型保护，非字符串类型时 .startswith() 会抛 AttributeError
+            _safe_cover_url = meta.cover_url if isinstance(meta.cover_url, str) else ""
+            if _safe_cover_url and _safe_cover_url.startswith(("http://", "https://")):
+                await self._stream_download(_safe_cover_url, thumb_path, headers)
                 created_files.append(thumb_path)
                 logger.debug("封面下载完成：%s", thumb_path)
-            elif meta.cover_url:
-                logger.warning("_do_download 封面 URL 格式非法，已跳过（video_id=%s cover_url=%r）", meta.video_id, meta.cover_url)
+            elif _safe_cover_url:
+                logger.warning("_do_download 封面 URL 格式非法，已跳过（video_id=%s cover_url=%r）", meta.video_id, _safe_cover_url)
 
             # 3. 写描述文件（DL-32 修复：改为原子写入，防止中途崩溃留下损坏文件）
+            # DL-58 修复：meta.title/meta.desc 类型保护，None 时 f-string 会写入 "None" 字符串
+            _safe_title_dl = meta.title if isinstance(meta.title, str) else (str(meta.title) if meta.title is not None else "")
+            _safe_desc_dl = meta.desc if isinstance(meta.desc, str) else (str(meta.desc) if meta.desc is not None else "")
             _desc_tmp = desc_path.with_suffix(desc_path.suffix + ".tmp")
             _desc_tmp.write_text(
-                f"{meta.title}\n\n{meta.desc}\n",
+                f"{_safe_title_dl}\n\n{_safe_desc_dl}\n",
                 encoding="utf-8",
             )
             _desc_tmp.replace(desc_path)
