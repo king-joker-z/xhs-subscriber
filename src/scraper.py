@@ -83,6 +83,8 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     # SCR-26 修复：video_id 空值保护，空 video_id 会生成路径错误的 NFO 文件
     if not meta.video_id:
         raise ValueError(f"generate_nfo 收到空 video_id，无法生成 NFO 文件（title={meta.title!r}）")
+    # SCR-47 修复：meta.video_id 路径类型保护，非字符串类型时 Path / meta.video_id 会抛 TypeError
+    _safe_video_id_path = meta.video_id if isinstance(meta.video_id, str) else str(meta.video_id)
     # SCR-27 修复：user_id 空值保护，空 user_id 会生成路径错误的 NFO 文件
     if not user_id:
         raise ValueError(f"generate_nfo 收到空 user_id，无法生成 NFO 文件（video_id={meta.video_id!r}）")
@@ -99,7 +101,7 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     is_image_post = bool(meta.image_urls)
     if is_image_post:
         # 图文作品：NFO 写入 {video_id}/ 子目录，与图片同目录
-        nfo_dir = Path(download_dir) / user_id / meta.video_id
+        nfo_dir = Path(download_dir) / user_id / _safe_video_id_path
         nfo_dir.mkdir(parents=True, exist_ok=True)
         nfo_path = nfo_dir / "movie.nfo"
         local_thumb = "thumb.jpg"  # 图文作品封面放在子目录内
@@ -107,8 +109,8 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
         # 视频作品：NFO 写在 {user_id}/ 目录下
         nfo_dir = Path(download_dir) / user_id
         nfo_dir.mkdir(parents=True, exist_ok=True)
-        nfo_path = nfo_dir / f"{meta.video_id}.nfo"
-        local_thumb = f"{meta.video_id}-thumb.jpg"
+        nfo_path = nfo_dir / f"{_safe_video_id_path}.nfo"
+        local_thumb = f"{_safe_video_id_path}-thumb.jpg"
 
     # 入库时间（UTC → ISO 8601）
     dateadded = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")

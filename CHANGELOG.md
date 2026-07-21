@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #164
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 中路径构建 `Path(download_dir) / user_id / meta.video_id`、`f"{meta.video_id}.nfo"`、`f"{meta.video_id}-thumb.jpg"` 无类型保护，若 `meta.video_id` 为非字符串类型（如整数），`Path / meta.video_id` 会抛 `TypeError`
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 路径构建加入 `meta.video_id` 类型保护（SCR-47）**
+  - 原实现：直接 `Path(download_dir) / user_id / meta.video_id`，非字符串类型时抛 `TypeError`
+  - 修复：在路径构建之前引入 `_safe_video_id_path = meta.video_id if isinstance(meta.video_id, str) else str(meta.video_id)`，路径构建改用 `_safe_video_id_path`
+  - 新增 SCR-47 修复说明注释
+- **改动文件**：`src/scraper.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter164.py`）：15 项检查全部 PASS（含 7 个 SCR-47 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #163
 
 ### 迭代目标
