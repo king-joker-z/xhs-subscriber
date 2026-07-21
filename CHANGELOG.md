@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #152
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 中 `for tag in meta.tags` 无类型保护，若 `meta.tags` 为非可迭代类型（如 `None`、整数），`for tag in meta.tags` 会抛 `TypeError`
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 加入 `meta.tags` 类型保护（SCR-41）**
+  - 原实现：直接 `for tag in meta.tags`，非列表类型时抛 `TypeError`
+  - 修复：加入 `isinstance(meta.tags, list)` 检查，非列表时降级为空列表并输出 WARNING
+  - 新增 SCR-41 修复说明注释
+- **改动文件**：`src/scraper.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter152.py`）：14 项检查全部 PASS（含 8 个 SCR-41 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #151
 
 ### 迭代目标

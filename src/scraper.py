@@ -172,8 +172,15 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     uid_el.text = meta.video_id
 
     # ---- 标签 / 分类 ----
+    # SCR-41 修复：meta.tags 类型保护，非可迭代类型时 for tag in meta.tags 会抛 TypeError
+    _safe_tags = meta.tags if isinstance(meta.tags, list) else []
+    if not isinstance(meta.tags, list) and meta.tags is not None:
+        logger.warning(
+            "generate_nfo meta.tags 类型非法（%s），已降级为空列表（video_id=%s）",
+            type(meta.tags).__name__, meta.video_id,
+        )
     # SCR-39 修复：tag 类型保护，非字符串类型时强制转为 str，避免 _text_elem 产生意外结果
-    for tag in meta.tags:
+    for tag in _safe_tags:
         _safe_tag = tag if isinstance(tag, str) else (str(tag) if tag is not None else "")
         if _safe_tag:
             _text_elem(root, "tag", _safe_tag)
