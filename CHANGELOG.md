@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #159
+
+### 迭代目标
+1. `scraper.py` `generate_nfo` 中 `_text_elem(root, "title", meta.title or meta.video_id)` 无类型保护，若 `meta.title` 为非字符串类型，`or` 运算符会将非空值直接传入 `_text_elem`
+2. `scraper.py` `generate_nfo` 中 `sorttitle = f"{meta.publish_time} {_safe_title}"` 无类型保护，若 `meta.publish_time` 为非字符串类型，f-string 会产生意外结果
+
+### 完成内容
+- **fix: `scraper.py` `generate_nfo` 加入 `meta.title` 类型保护（SCR-42）**
+  - 原实现：直接 `meta.title or meta.video_id`，非字符串类型时 `or` 运算符会将非空值直接传入
+  - 修复：使用已有 `_safe_title` 变量构建 `_title_for_elem = _safe_title or meta.video_id`
+- **fix: `scraper.py` `generate_nfo` 加入 `meta.publish_time` 类型保护（SCR-43）**
+  - 原实现：直接 `f"{meta.publish_time} {_safe_title}"`，非字符串类型时 f-string 会产生意外结果
+  - 修复：加入 `isinstance(meta.publish_time, str)` 检查，非字符串时强制转为字符串
+  - 新增 `_safe_publish_time_scr` 变量
+- **改动文件**：`src/scraper.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter159.py`）：14 项检查全部 PASS（含 6 个 SCR-42 用例 + 6 个 SCR-43 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #158
 
 ### 迭代目标

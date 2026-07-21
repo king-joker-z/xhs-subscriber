@@ -116,14 +116,18 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     # 排序标题：发布时间前缀 + 标题，便于 Jellyfin 按时间排序
     # SCR-35 修复：meta.title 类型保护，非字符串类型时强制转为 str，避免 f-string 产生意外结果
     _safe_title = meta.title if isinstance(meta.title, str) else (str(meta.title) if meta.title is not None else "")
-    sorttitle = f"{meta.publish_time} {_safe_title}" if meta.publish_time else (_safe_title or meta.video_id)
+    # SCR-43 修复：meta.publish_time 类型保护，非字符串类型时 f-string 会产生意外结果
+    _safe_publish_time_scr = meta.publish_time if isinstance(meta.publish_time, str) else (str(meta.publish_time) if meta.publish_time is not None else "")
+    sorttitle = f"{_safe_publish_time_scr} {_safe_title}" if _safe_publish_time_scr else (_safe_title or meta.video_id)
 
     # 构建 XML 树
     root = etree.Element("movie")
 
     # ---- 基础标题 ----
-    _text_elem(root, "title", meta.title or meta.video_id)
-    _text_elem(root, "originaltitle", meta.title or meta.video_id)
+    # SCR-42 修复：meta.title 类型保护，非字符串类型时 or 运算符会将非空值直接传入 _text_elem
+    _title_for_elem = _safe_title or meta.video_id
+    _text_elem(root, "title", _title_for_elem)
+    _text_elem(root, "originaltitle", _title_for_elem)
     _text_elem(root, "sorttitle", sorttitle)
 
     # ---- 简介 ----
