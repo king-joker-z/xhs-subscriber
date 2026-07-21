@@ -57,6 +57,13 @@ class SubscriptionConfig:
     """单个订阅配置（从 YAML 解析，不走 pydantic-settings）"""
 
     def __init__(self, data: dict):
+        # CFG-56 修复：data 类型保护，非 dict 类型时 data.get() 会抛 AttributeError
+        if not isinstance(data, dict):
+            logger.warning(
+                "SubscriptionConfig 收到非 dict 类型 data（%s），已降级为空配置",
+                type(data).__name__,
+            )
+            data = {}
         self.user_id: Optional[str] = data.get("user_id")
         # CFG-2 修复：video_url 在配置加载阶段做格式校验，
         # 非法 URL（缺少 scheme 或 netloc）立即抛出 ValueError，
@@ -271,7 +278,17 @@ class AppConfig(BaseSettings):
                 type(subs_raw).__name__,
             )
             subs_raw = []
-        self.subscriptions = [SubscriptionConfig(s) for s in subs_raw]
+        # CFG-55 修复：subs_raw 中元素类型保护，非 dict 类型时 SubscriptionConfig(s) 中 data.get() 会抛 AttributeError
+        _valid_subs = []
+        for _s in subs_raw:
+            if not isinstance(_s, dict):
+                logger.warning(
+                    "config.yaml subscriptions 中发现非 dict 类型元素（%s），已跳过",
+                    type(_s).__name__,
+                )
+                continue
+            _valid_subs.append(_s)
+        self.subscriptions = [SubscriptionConfig(s) for s in _valid_subs]
 
         # 空订阅检查：全部 disabled 或列表为空时输出 WARNING，避免服务静默运行无任何订阅
         enabled_count = sum(1 for s in self.subscriptions if s.enabled)
