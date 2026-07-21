@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #156
+
+### 迭代目标
+1. `downloader.py` `_do_download` 中 `meta.video_url.startswith(...)` 无类型保护，若 `meta.video_url` 为非字符串类型（如整数），`.startswith(...)` 会抛 `AttributeError`
+
+### 完成内容
+- **fix: `downloader.py` `_do_download` 加入 `meta.video_url` 类型保护（DL-60）**
+  - 原实现：直接 `meta.video_url.startswith(...)`，非字符串类型时抛 `AttributeError`
+  - 修复：加入 `isinstance(meta.video_url, str)` 检查，非字符串时降级为空字符串
+  - 同步将 `elif meta.video_url:` 和 `elif meta.image_urls:` 分支改为使用 `_safe_video_url` 和 `_image_urls_safe`
+  - 新增 DL-60 修复说明注释
+- **改动文件**：`src/downloader.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter156.py`）：14 项检查全部 PASS（含 7 个 DL-60 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #155
 
 ### 迭代目标

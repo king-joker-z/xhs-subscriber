@@ -201,7 +201,9 @@ class Downloader:
         # DL-46 修复：video_url 和 image_urls 均为空时早期退出，避免无意义的下载流程
         # DL-55 修复：image_urls 类型保护，非列表类型时 not meta.image_urls 可能误判
         _image_urls_safe = meta.image_urls if isinstance(meta.image_urls, list) else []
-        if not meta.video_url and not _image_urls_safe:
+        # DL-60 修复：meta.video_url 类型保护，非字符串类型时 .startswith() 会抛 AttributeError
+        _safe_video_url = meta.video_url if isinstance(meta.video_url, str) else ""
+        if not _safe_video_url and not _image_urls_safe:
             logger.warning(
                 "_do_download 收到 video_url 和 image_urls 均为空的作品，跳过下载（video_id=%s user_id=%s）",
                 meta.video_id, user_id,
@@ -211,13 +213,13 @@ class Downloader:
         try:
             # 1. 下载视频
             # DL-54 修复：video_url URL 格式校验，非 http/https 开头的 URL 会导致请求失败
-            if meta.video_url and meta.video_url.startswith(("http://", "https://")):
-                await self._stream_download(meta.video_url, video_path, headers)
+            if _safe_video_url and _safe_video_url.startswith(("http://", "https://")):
+                await self._stream_download(_safe_video_url, video_path, headers)
                 created_files.append(video_path)
                 logger.info("视频下载完成：%s -> %s", meta.video_id, video_path)
-            elif meta.video_url:
-                logger.warning("_do_download 视频 URL 格式非法，已跳过（video_id=%s video_url=%r）", meta.video_id, meta.video_url)
-            elif meta.image_urls:
+            elif _safe_video_url:
+                logger.warning("_do_download 视频 URL 格式非法，已跳过（video_id=%s video_url=%r）", meta.video_id, _safe_video_url)
+            elif _image_urls_safe:
                 # 图文作品：批量下载图片到 {video_id}/ 子目录（img_dir 已在上方创建）
                 # DL-57 修复：使用 _image_urls_safe 替代 meta.image_urls，避免非列表类型时 enumerate() 抛 TypeError
                 for idx, img_url in enumerate(_image_urls_safe, start=1):
