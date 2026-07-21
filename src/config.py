@@ -64,7 +64,15 @@ class SubscriptionConfig:
                 type(data).__name__,
             )
             data = {}
-        self.user_id: Optional[str] = data.get("user_id")
+        # CFG-58 修复：user_id 类型保护，非字符串类型时构建路径/URL 可能出错
+        _raw_user_id = data.get("user_id")
+        if _raw_user_id is not None and not isinstance(_raw_user_id, str):
+            logger.warning(
+                "SubscriptionConfig user_id 类型非法（%s），已强制转为字符串",
+                type(_raw_user_id).__name__,
+            )
+            _raw_user_id = str(_raw_user_id)
+        self.user_id: Optional[str] = _raw_user_id
         # CFG-2 修复：video_url 在配置加载阶段做格式校验，
         # 非法 URL（缺少 scheme 或 netloc）立即抛出 ValueError，
         # 避免等到运行时才报错。
@@ -89,7 +97,20 @@ class SubscriptionConfig:
         # CFG-38 修复：name 空字符串时 fallback 到 user_id or "unknown"，避免空 name 触发 SC-45 保护
         _raw_name = data.get("name", "")
         self.name: str = _raw_name if _raw_name else (self.user_id or "unknown")
-        self.enabled: bool = data.get("enabled", True)
+        # CFG-59 修复：enabled 类型保护，非 bool 类型时（如字符串 "false"）会被误判为 True
+        _raw_enabled = data.get("enabled", True)
+        if isinstance(_raw_enabled, bool):
+            self.enabled: bool = _raw_enabled
+        elif isinstance(_raw_enabled, str):
+            self.enabled = _raw_enabled.strip().lower() not in ("false", "0", "no", "off", "")
+        elif isinstance(_raw_enabled, (int, float)):
+            self.enabled = bool(_raw_enabled)
+        else:
+            logger.warning(
+                "SubscriptionConfig enabled 类型非法（%s），已降级为 True",
+                type(_raw_enabled).__name__,
+            )
+            self.enabled = True
         # CFG-3 修复：user_id 和 video_url 同时为 None 时，订阅配置实际无效，
         # 在加载阶段输出 warning，避免服务空转时难以排查原因。
         if self.user_id is None and self.video_url is None:

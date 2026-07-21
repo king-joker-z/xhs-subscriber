@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-21 09:xx — 迭代 #158
+
+### 迭代目标
+1. `config.py` `SubscriptionConfig.__init__` 中 `self.user_id = data.get("user_id")` 无类型保护，若 `user_id` 为非字符串类型（如整数），后续构建路径/URL 可能出错
+2. `config.py` `SubscriptionConfig.__init__` 中 `self.enabled = data.get("enabled", True)` 无类型保护，若 `enabled` 为字符串 `"false"` 会被误判为 `True`
+
+### 完成内容
+- **fix: `config.py` `SubscriptionConfig.__init__` 加入 `user_id` 类型保护（CFG-58）**
+  - 原实现：直接 `self.user_id = data.get("user_id")`，非字符串类型时后续操作可能出错
+  - 修复：加入 `isinstance(_raw_user_id, str)` 检查，非字符串时强制转为字符串并输出 warning
+- **fix: `config.py` `SubscriptionConfig.__init__` 加入 `enabled` 类型保护（CFG-59）**
+  - 原实现：直接 `self.enabled = data.get("enabled", True)`，字符串 `"false"` 被误判为 `True`
+  - 修复：加入类型分支处理，字符串时按 `"false"/"0"/"no"/"off"` 判断，整数/浮点数时 `bool()` 转换，其他类型降级为 `True`
+- **改动文件**：`src/config.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 8 个模块通过
+- 逻辑验证脚本（`/tmp/xhs-test-env/verify_iter158.py`）：14 项检查全部 PASS（含 6 个 CFG-58 用例 + 18 个 CFG-59 用例）
+- git commit: 待提交
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #157
 
 ### 迭代目标
