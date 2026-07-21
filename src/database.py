@@ -214,6 +214,10 @@ class Database:
         # DB-48 修复：过滤空 date 行，避免 SQLite datetime 计算异常时脏数据传递到上层
         result = []
         for row in rows:
+            # DB-56 修复：row 类型保护，aiosqlite fetchall 理论返回 Row 对象，但防御性保护避免 row[0] 抛 TypeError
+            if not isinstance(row, (tuple, list)) and not hasattr(row, "__getitem__"):
+                logger.warning("get_download_stats_by_date 发现非序列类型行（%s），已跳过", type(row).__name__)
+                continue
             if not row[0]:
                 logger.warning(
                     "get_download_stats_by_date 发现空 date 行（count=%s），已跳过",
@@ -264,6 +268,10 @@ class Database:
         # DB-47 修复：过滤空 video_id 行，避免脏数据传递到上层导致响应异常
         result = []
         for row in rows:
+            # DB-57 修复：row 类型保护，aiosqlite fetchall 理论返回 Row 对象，但防御性保护避免 row[0] 抛 TypeError
+            if not isinstance(row, (tuple, list)) and not hasattr(row, "__getitem__"):
+                logger.warning("get_recent_downloads 发现非序列类型行（%s），已跳过", type(row).__name__)
+                continue
             if not row[0]:
                 logger.warning(
                     "get_recent_downloads 发现空 video_id 行（downloaded_at=%s），已跳过",
