@@ -118,14 +118,18 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     _safe_title = meta.title if isinstance(meta.title, str) else (str(meta.title) if meta.title is not None else "")
     # SCR-43 修复：meta.publish_time 类型保护，非字符串类型时 f-string 会产生意外结果
     _safe_publish_time_scr = meta.publish_time if isinstance(meta.publish_time, str) else (str(meta.publish_time) if meta.publish_time is not None else "")
-    sorttitle = f"{_safe_publish_time_scr} {_safe_title}" if _safe_publish_time_scr else (_safe_title or meta.video_id)
+    # SCR-46 修复：meta.video_id 作为 fallback 传入 _text_elem 时，非字符串类型会导致
+    # _text_elem 内 (text or "").strip() 对非字符串调用 .strip() 抛 AttributeError
+    _safe_video_id_scr = meta.video_id if isinstance(meta.video_id, str) else str(meta.video_id)
+    sorttitle = f"{_safe_publish_time_scr} {_safe_title}" if _safe_publish_time_scr else (_safe_title or _safe_video_id_scr)
 
     # 构建 XML 树
     root = etree.Element("movie")
 
     # ---- 基础标题 ----
     # SCR-42 修复：meta.title 类型保护，非字符串类型时 or 运算符会将非空值直接传入 _text_elem
-    _title_for_elem = _safe_title or meta.video_id
+    # SCR-46 修复：meta.video_id fallback 改用 _safe_video_id_scr，避免非字符串类型传入 _text_elem
+    _title_for_elem = _safe_title or _safe_video_id_scr
     _text_elem(root, "title", _title_for_elem)
     _text_elem(root, "originaltitle", _title_for_elem)
     _text_elem(root, "sorttitle", sorttitle)
