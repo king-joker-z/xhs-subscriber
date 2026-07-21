@@ -174,8 +174,9 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
     thumb2.text = _valid_cover if _valid_cover else local_thumb
 
     # ---- 唯一 ID ----
+    # SCR-45 修复：meta.video_id 类型保护，非字符串类型时 lxml 会抛 TypeError
     uid_el = etree.SubElement(root, "uniqueid", type="xhs", default="true")
-    uid_el.text = meta.video_id
+    uid_el.text = meta.video_id if isinstance(meta.video_id, str) else str(meta.video_id)
 
     # ---- 标签 / 分类 ----
     # SCR-41 修复：meta.tags 类型保护，非可迭代类型时 for tag in meta.tags 会抛 TypeError
