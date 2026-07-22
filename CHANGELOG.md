@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-07-22 10:xx — 迭代 #2
+
+### 迭代目标
+实现无 Cookie 访客模式下载能力（优先级第2项）
+
+### 完成内容
+- **新增 `src/guest_fetcher.py`**：GuestFetcher 类，使用 xhshow 的 `generate_a1()` 生成访客设备 cookie，配合签名算法访问小红书公开笔记 feed API，无需用户登录 Cookie
+- **新增 API 端点 `POST /api/guest-download`**：访客模式获取笔记元数据和媒体 URL，可选下载到本地
+- **新增 API 端点 `GET /api/guest-info`**：返回访客模式可用状态和使用说明
+- **访客模式特性**：
+  - 每次请求自动轮换 a1 + webId，降低设备指纹关联风险
+  - 保守频率控制（3-8s 随机间隔，每 5 次额外等待 10-20s）
+  - UA 池轮换
+  - 支持视频和图文两种笔记类型解析
+  - 与主流程 VideoMeta 兼容（`fetch_note_to_meta()` 方法）
+- **更新 vendor/XHS-Downloader** submodule 至 `cdc02d0`（最新版，含脚本优化和依赖更新）
+- **修复 SCR-48**：`_build_note_url` 传入非字符串 video_id 时产生意外 URL
+
+### 访客模式限制
+- 仅支持单条笔记下载（需提供含 xsec_token 的完整 URL）
+- 不支持博主主页批量爬取（需要登录态）
+- 可能获取到较低画质的媒体文件
+- 风控更严格，触发 461 验证时无法自动通过
+- 待用户提供 Cookie 后验证完整下载流程
+
+### 测试结果
+- Python 3.12 语法检查：全部 9 个模块通过（`python3.12 -m py_compile`）
+- 单元测试：URL 解析（note_id/xsec_token 提取）、webId 生成、feed 响应解析（视频/图文）均通过
+- 网络测试：受沙箱环境限制，xhshow 包未安装，实际 API 调用待用户本地验证
+- git commit: `939e48a`，已 push 到 `origin/main`
+
+### 下次迭代建议
+- **完善博主主页订阅**：xhshow API 签名调通（需用户提供有效 Cookie 后验证）
+- **Web UI 集成访客模式**：在管理界面添加"访客下载"表单
+- **风控优化**：请求频率动态调整、响应状态自适应退避
+- **优化下载速度**：并发下载、断点续传
+
+---
+
 ## 2026-07-21 09:xx — 迭代 #164
 
 ### 迭代目标
