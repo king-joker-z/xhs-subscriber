@@ -980,3 +980,132 @@ async def web_ui() -> HTMLResponse:
     """返回 Web 管理界面 HTML 页面（版本号服务端渲染）"""
     html = _UI_HTML.replace("__SERVER_VERSION__", _VERSION)
     return HTMLResponse(content=html, status_code=200)
+
+
+# ------------------------------------------------------------------ #
+#  访客模式（无 Cookie）下载接口
+# ------------------------------------------------------------------ #
+
+class GuestDownloadRequest(BaseModel):
+    """访客模式下载请求"""
+    url: str  # 小红书笔记 URL（需含 xsec_token）
+    download: bool = False  # 是否同时下载媒体文件到本地
+
+
+class GuestDownloadResponse(BaseModel):
+    """访客模式下载响应"""
+    status: str
+    note_id: str | None = None
+    title: str | None = None
+    author: str | None = None
+    type: str | None = None  # "video" | "image"
+    video_url: str | None = None
+    image_urls: list[str] | None = None
+    cover_url: str | None = None
+    guest_mode: bool = True
+    message: str | None = None
+
+
+@app.post(
+    "/api/guest-download",
+    response_model=GuestDownloadResponse,
+    summary="访客模式获取笔记（无需 Cookie）",
+    tags=["guest"],
+)
+async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse:
+    """
+    访客模式获取笔记元数据和媒体 URL。
+    无需配置 XHS_COOKIE 即可使用，但有以下限制：
+    - 仅支持单条笔记（需提供含 xsec_token 的完整 URL）
+    - 可能获取到较低画质的媒体
+    - 风控更严格，请求频率受限
+    - 不支持博主主页批量爬取
+
+    若 download=true，会将媒体文件下载到本地（需要调度器已初始化）。
+    """
+    from .guest_fetcher import GuestFetcher
+
+    if not req.url:
+        return GuestDownloadResponse(status="error", message="URL 不能为空")
+
+    try:
+        guest = GuestFetcher()
+        result = await guest.fetch_note(req.url)
+    except Exception as exc:
+        logger.error("访客模式获取笔记失败：%s", exc)
+        return GuestDownloadResponse(
+            status="error",
+            message=f"获取失败：{exc}",
+        )
+
+    if not result:
+        return GuestDownloadResponse(
+            status="error",
+            message="获取笔记失败，可能触发风控或 URL 无效。请确认 URL 包含有效的 xsec_token。",
+        )
+
+    response = GuestDownloadResponse(
+        status="ok",
+        note_id=result.get("note_id"),
+        title=result.get("title"),
+        author=result.get("author"),
+        type=result.get("type"),
+        video_url=result.get("video_url") or None,
+        image_urls=result.get("image_urls") or None,
+        cover_url=result.get("cover_url") or None,
+        guest_mode=True,
+    )
+
+    # 可选：下载媒体文件到本地
+    if req.download and _scheduler:
+        try:
+            meta = await guest.fetch_note_to_meta(req.url)
+            if meta:
+                from .downloader import Downloader
+                db = _scheduler._db  # type: ignore[attr-defined]
+                dl = Downloader(
+                    db=db,
+                    download_dir=str(_scheduler._config.download_dir),  # type: ignore[attr-defined]
+                    cookie="",  # 访客模式无 cookie
+                )
+                author_id = result.get("author_id") or "guest"
+                success = await dl.download(meta, author_id)
+                if success:
+                    response.message = "媒体文件已下载到本地"
+                else:
+                    response.message = "媒体文件下载跳过（可能已存在或下载失败）"
+        except Exception as exc:
+            logger.warning("访客模式下载媒体文件失败：%s", exc)
+            response.message = f"元数据获取成功，但媒体下载失败：{exc}"
+
+    return response
+
+
+@app.get(
+    "/api/guest-info",
+    summary="访客模式状态信息",
+    tags=["guest"],
+)
+async def api_guest_info() -> dict:
+    """返回访客模式的可用状态和使用说明"""
+    try:
+        from xhshow import Xhshow  # type: ignore[import]
+        xhshow_available = True
+        xhshow_version = getattr(Xhshow, "__version__", "unknown")
+    except ImportError:
+        xhshow_available = False
+        xhshow_version = None
+
+    return {
+        "guest_mode_available": xhshow_available,
+        "xhshow_version": xhshow_version,
+        "description": "访客模式允许在无 XHS_COOKIE 的情况下获取公开笔记内容",
+        "limitations": [
+            "仅支持单条笔记下载（需提供含 xsec_token 的完整 URL）",
+            "不支持博主主页批量爬取",
+            "可能获取到较低画质的媒体文件",
+            "风控更严格，请求频率受限（每次间隔 3-8 秒）",
+            "触发风控验证（461）时无法自动通过",
+        ],
+        "usage": "POST /api/guest-download {\"url\": \"https://www.xiaohongshu.com/explore/xxx?xsec_token=yyy\"}",
+    }

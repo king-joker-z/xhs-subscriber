@@ -211,7 +211,9 @@ def generate_nfo(meta: VideoMeta, user_id: str, download_dir: str = "/data/downl
 
     # ---- 来源 / 链接 ----
     _text_elem(root, "source", "xiaohongshu")
-    _text_elem(root, "website", _build_note_url(meta.video_id))
+    # SCR-48 修复：_build_note_url 传入 meta.video_id 时，非字符串类型会产生意外 URL
+    # 改用已有的 _safe_video_id_scr（已在上方定义）
+    _text_elem(root, "website", _build_note_url(_safe_video_id_scr))
 
     # 序列化为带声明的 XML
     # SCR-15 修复：先写临时文件，再原子 rename，避免写入中断产生损坏的 NFO 文件
