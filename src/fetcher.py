@@ -224,6 +224,22 @@ def _random_ua() -> str:
     return random.choice(_UA_POOL)
 
 
+def _extract_a1_from_cookie(cookie_str: str) -> str:
+    """从 cookie 字符串中提取 a1 值（xhshow 新 API 需要单独传入 a1）
+
+    xhshow 0.1.x API 变更：sign_xs_get/sign_xs_post 不再接受完整 cookie 字符串，
+    而是需要单独传入 a1 值。本函数从 cookie 字符串中提取 a1 字段。
+
+    :param cookie_str: 完整 cookie 字符串，如 "a1=xxx; web_session=yyy"
+    :return: a1 值，未找到时返回空字符串
+    """
+    for part in cookie_str.split(";"):
+        part = part.strip()
+        if part.startswith("a1="):
+            return part[3:].strip()
+    return ""
+
+
 # ------------------------------------------------------------------ #
 #  随机延迟（防频率风控）
 # ------------------------------------------------------------------ #
@@ -399,18 +415,31 @@ class XHSFetcher:
                 "xsec_token": "",
                 "xsec_source": "pc_user",
             }
-            # xhshow 签名
-            signed_headers = encipher.sign_headers_get(
-                uri=_USER_POSTED_API,
-                cookies=cookie_str,
-                params=params,
-            )
-            base_headers = {
+            # xhshow 签名（0.1.x 新 API：sign_xs_get 只返回 x-s 字符串，需手动组装 headers）
+            # 从 cookie 字符串中提取 a1 值（新 API 要求单独传入）
+            _a1_value = _extract_a1_from_cookie(cookie_str)
+            if not _a1_value:
+                logger.warning(
+                    "Cookie 中未找到 a1 字段，xhshow 签名可能失效（user_id=%s）。"
+                    "请确认 XHS_COOKIE 包含 a1=xxx 字段。",
+                    user_id,
+                )
+            try:
+                _xs_signature = encipher.sign_xs_get(
+                    uri=_USER_POSTED_API,
+                    a1_value=_a1_value,
+                    params=params,
+                )
+            except Exception as _sign_exc:
+                logger.error("xhshow sign_xs_get 签名失败 user_id=%s：%s", user_id, _sign_exc)
+                break
+            request_headers = {
                 "user-agent": _random_ua(),
                 "referer": "https://www.xiaohongshu.com/",
                 "cookie": cookie_str,
+                "x-s": _xs_signature,
+                "x-t": str(int(time.time() * 1000)),
             }
-            request_headers = base_headers | signed_headers
 
             try:
                 async with httpx.AsyncClient(

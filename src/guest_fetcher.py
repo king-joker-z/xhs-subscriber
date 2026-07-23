@@ -1,8 +1,8 @@
 """
 M8 - 访客模式爬取器（无 Cookie 下载）
 
-使用 xhshow 的 generate_a1() 生成访客设备 ID，配合签名算法，
-无需用户登录 Cookie 即可访问小红书公开笔记的基本信息和媒体文件。
+使用 xhshow 签名算法，无需用户登录 Cookie 即可访问小红书公开笔记的基本信息和媒体文件。
+访客 a1 由本模块自行生成（xhshow 0.1.x 已移除 generate_a1()）。
 
 限制：
 - 仅支持单条笔记下载（需提供完整 URL 含 xsec_token）
@@ -109,15 +109,26 @@ class GuestFetcher:
         """
         生成访客 cookie 集合。
         每次调用生成新的 a1 + webId，降低设备指纹关联风险。
+
+        xhshow 0.1.x API 变更：generate_a1() 已移除，改为自行生成 52 位十六进制 a1。
+        a1 格式：52 位十六进制字符串（模拟浏览器设备 ID）。
         """
-        xhshow = self._ensure_xhshow()
-        a1 = xhshow.generate_a1()  # 52 位访客设备 ID
+        a1 = self._generate_a1()
         web_id = _generate_web_id()
         return {
             "a1": a1,
             "webId": web_id,
             "web_session": "",  # 空 session 表示未登录
         }
+
+    @staticmethod
+    def _generate_a1() -> str:
+        """
+        生成访客设备 ID（a1 cookie）。
+        xhshow 0.1.x 移除了 generate_a1()，改为自行生成。
+        格式：52 位十六进制字符串，与小红书 Web 端 a1 格式一致。
+        """
+        return "".join(random.choices("0123456789abcdef", k=52))
 
     def _build_cookie_string(self, cookies: dict[str, str]) -> str:
         """将 cookie dict 转为请求头字符串"""
@@ -194,13 +205,14 @@ class GuestFetcher:
             "xsec_source": "pc_feed",
         }
 
-        # xhshow 签名（POST 请求，启用 x-rap-param 风控头）
+        # xhshow 签名（0.1.x 新 API：sign_xs_post 只返回 x-s 字符串，需手动组装 headers）
+        # 从访客 cookie 中取 a1 值（新 API 要求单独传入）
+        _a1_value = guest_cookies.get("a1", "")
         try:
-            signed_headers = xhshow.sign_headers_post(
+            _xs_signature = xhshow.sign_xs_post(
                 uri=_FEED_API,
-                cookies=cookie_str,
+                a1_value=_a1_value,
                 payload=payload,
-                x_rap=True,
             )
         except Exception as exc:
             logger.error("GuestFetcher: xhshow 签名失败：%s", exc)
@@ -212,7 +224,8 @@ class GuestFetcher:
             "origin": "https://www.xiaohongshu.com",
             "content-type": "application/json;charset=UTF-8",
             "cookie": cookie_str,
-            **signed_headers,
+            "x-s": _xs_signature,
+            "x-t": str(int(time.time() * 1000)),
         }
 
         try:
