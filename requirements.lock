@@ -7,6 +7,7 @@
 # 如需在纯 pip 环境中使用，直接 pip install -r requirements.lock 即可
 
 aiosqlite==0.21.0
+APScheduler==3.11.0
 annotated-types==0.7.0
 anyio==4.7.0
 certifi==2025.7.14
@@ -30,4 +31,6 @@ sniffio==1.3.1
 starlette==0.46.0
 tenacity==9.0.0
 typing_extensions==4.12.2
+tzlocal==5.4.4
 uvicorn==0.34.0
+xhshow==0.1.4
