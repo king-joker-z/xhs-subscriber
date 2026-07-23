@@ -376,6 +376,132 @@ async def api_vacuum(x_admin_token: str | None = Header(default=None)) -> Vacuum
 
 
 # ------------------------------------------------------------------ #
+#  订阅管理 API
+# ------------------------------------------------------------------ #
+
+class SubscriptionCreateRequest(BaseModel):
+    """添加订阅请求"""
+    name: str
+    user_id: str | None = None
+    video_url: str | None = None
+    enabled: bool = True
+
+
+class SubscriptionToggleRequest(BaseModel):
+    """启用/停用订阅请求"""
+    enabled: bool
+
+
+def _save_subscriptions_to_yaml(subscriptions: list) -> None:
+    """将订阅列表写回 config.yaml（保留其他配置不变）"""
+    import yaml
+    from .config import get_config
+    config = get_config()
+    config_path = Path(config.config_path)
+    # 读取现有 YAML
+    existing: dict = {}
+    if config_path.exists():
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                existing = yaml.safe_load(f) or {}
+        except Exception as exc:
+            logger.warning("读取 config.yaml 失败，将创建新文件：%s", exc)
+            existing = {}
+    if not isinstance(existing, dict):
+        existing = {}
+    # 序列化订阅列表
+    subs_data = []
+    for sub in subscriptions:
+        item: dict = {"name": sub.name, "enabled": sub.enabled}
+        if sub.user_id:
+            item["user_id"] = sub.user_id
+        if sub.video_url:
+            item["video_url"] = sub.video_url
+        subs_data.append(item)
+    existing["subscriptions"] = subs_data
+    # 写回文件
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.dump(existing, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        logger.info("订阅配置已写回 %s（共 %d 条）", config_path, len(subs_data))
+    except Exception as exc:
+        logger.error("写入 config.yaml 失败：%s", exc)
+        raise HTTPException(status_code=500, detail=f"写入配置文件失败：{exc}")
+
+
+@app.post(
+    "/api/subscriptions",
+    summary="添加订阅",
+    response_description="201 Created：订阅添加成功",
+    tags=["subscriptions"],
+    status_code=201,
+)
+async def api_add_subscription(req: SubscriptionCreateRequest) -> dict:
+    """添加新订阅（博主主页或单视频），并持久化到 config.yaml"""
+    if _scheduler is None:
+        raise HTTPException(status_code=503, detail="调度器未初始化")
+    if not req.user_id and not req.video_url:
+        raise HTTPException(status_code=400, detail="user_id 和 video_url 至少提供一个")
+    if req.user_id and req.video_url:
+        raise HTTPException(status_code=400, detail="user_id 和 video_url 只能提供一个")
+    # 检查重名
+    for sub in _scheduler._config.subscriptions:
+        if sub.name == req.name:
+            raise HTTPException(status_code=409, detail=f"订阅名称 '{req.name}' 已存在")
+    from .config import SubscriptionConfig
+    new_sub = SubscriptionConfig({
+        "name": req.name,
+        "user_id": req.user_id,
+        "video_url": req.video_url,
+        "enabled": req.enabled,
+    })
+    _scheduler._config.subscriptions.append(new_sub)
+    _save_subscriptions_to_yaml(_scheduler._config.subscriptions)
+    logger.info("新增订阅：%s（user_id=%s, video_url=%s, enabled=%s）", req.name, req.user_id, req.video_url, req.enabled)
+    return {"status": "ok", "name": req.name}
+
+
+@app.delete(
+    "/api/subscriptions/{name}",
+    summary="删除订阅",
+    response_description="200 OK：订阅删除成功",
+    tags=["subscriptions"],
+)
+async def api_delete_subscription(name: str) -> dict:
+    """按名称删除订阅，并持久化到 config.yaml"""
+    if _scheduler is None:
+        raise HTTPException(status_code=503, detail="调度器未初始化")
+    subs = _scheduler._config.subscriptions
+    original_count = len(subs)
+    _scheduler._config.subscriptions = [s for s in subs if s.name != name]
+    if len(_scheduler._config.subscriptions) == original_count:
+        raise HTTPException(status_code=404, detail=f"订阅 '{name}' 不存在")
+    _save_subscriptions_to_yaml(_scheduler._config.subscriptions)
+    logger.info("删除订阅：%s", name)
+    return {"status": "ok", "name": name}
+
+
+@app.patch(
+    "/api/subscriptions/{name}/toggle",
+    summary="启用/停用订阅",
+    response_description="200 OK：状态切换成功",
+    tags=["subscriptions"],
+)
+async def api_toggle_subscription(name: str, req: SubscriptionToggleRequest) -> dict:
+    """切换订阅的启用/停用状态，并持久化到 config.yaml"""
+    if _scheduler is None:
+        raise HTTPException(status_code=503, detail="调度器未初始化")
+    for sub in _scheduler._config.subscriptions:
+        if sub.name == name:
+            sub.enabled = req.enabled
+            _save_subscriptions_to_yaml(_scheduler._config.subscriptions)
+            logger.info("切换订阅状态：%s → enabled=%s", name, req.enabled)
+            return {"status": "ok", "name": name, "enabled": req.enabled}
+    raise HTTPException(status_code=404, detail=f"订阅 '{name}' 不存在")
+
+
+# ------------------------------------------------------------------ #
 #  Web UI
 # ------------------------------------------------------------------ #
 
@@ -547,8 +673,22 @@ _UI_HTML = """\
   <!-- 订阅列表 -->
   <div class="card" id="section-subs">
     <h2>订阅列表</h2>
+    <!-- 添加订阅表单 -->
+    <div style="background:#f8f8fa;border-radius:8px;padding:14px;margin-bottom:14px;border:1px solid #e8e8ec;">
+      <div style="font-size:0.85em;font-weight:600;color:#555;margin-bottom:10px;">➕ 添加订阅</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="add-name" type="text" placeholder="订阅名称（必填）" style="flex:1;min-width:120px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:0.88em;">
+        <input id="add-user-id" type="text" placeholder="博主 user_id（24位十六进制）" style="flex:2;min-width:180px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:0.88em;">
+        <input id="add-video-url" type="text" placeholder="或单视频 URL（含 xsec_token）" style="flex:2;min-width:200px;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:0.88em;">
+        <label style="font-size:0.85em;color:#555;display:flex;align-items:center;gap:4px;">
+          <input type="checkbox" id="add-enabled" checked>启用
+        </label>
+        <button class="btn btn-primary" onclick="addSubscription()" style="padding:7px 16px;font-size:0.88em;">添加</button>
+      </div>
+      <div style="font-size:0.75em;color:#aaa;margin-top:6px;">博主主页订阅填 user_id，单视频订阅填 video_url，两者只填一个</div>
+      <div id="add-msg" style="font-size:0.82em;margin-top:6px;display:none;"></div>
+    </div>
     <div style="margin-bottom:8px;display:flex;align-items:center;gap:10px;">
-      <span style="font-weight:600;font-size:0.95em;">订阅列表</span>
       <label style="font-size:0.85em;color:#555;cursor:pointer;">
         <input type="checkbox" id="filter-enabled-only" style="margin-right:4px;">仅显示启用
       </label>
@@ -724,10 +864,13 @@ function renderSubTable(d) {
     const lastRun = s.last_run_at
       ? new Date(s.last_run_at).toLocaleString('zh-CN', {hour12: false}).slice(0, 16)
       : '—';
-    return '<tr><td><strong>' + escHtml(s.name) + '</strong></td><td>' + target + '</td><td>' + status + '</td><td>' + dlCount + '</td><td style="font-size:0.8em;color:#888;">' + lastRun + '</td></tr>';
+    return '<tr><td><strong>' + escHtml(s.name) + '</strong></td><td>' + target + '</td><td>' + status + '</td><td>' + dlCount + '</td><td style="font-size:0.8em;color:#888;">' + lastRun + '</td><td style="white-space:nowrap;">'
+      + '<button onclick="toggleSub(\'' + escHtml(s.name) + '\',' + (s.enabled ? 'false' : 'true') + ')" style="padding:2px 8px;font-size:0.78em;margin-right:4px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:' + (s.enabled ? '#fef0f0;color:#c0392b' : '#e8f8ee;color:#1a7f3c') + ';">' + (s.enabled ? '停用' : '启用') + '</button>'
+      + '<button onclick="deleteSub(\'' + escHtml(s.name) + '\')" style="padding:2px 8px;font-size:0.78em;border:1px solid #fca5a5;border-radius:4px;cursor:pointer;background:#fff;color:#c0392b;">删除</button>'
+      + '</td></tr>';
   }).join('');
 
-  wrap.innerHTML = '<table><thead><tr><th>名称</th><th>目标</th><th>状态</th><th>已下载</th><th>最后检查</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  wrap.innerHTML = '<table><thead><tr><th>名称</th><th>目标</th><th>状态</th><th>已下载</th><th>最后检查</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 var _recentFilter = 'all';
@@ -785,6 +928,79 @@ async function loadRecent() {
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
            .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ------------------------------------------------------------------ #
+//  订阅管理操作
+// ------------------------------------------------------------------ #
+
+async function addSubscription() {
+  const name = document.getElementById('add-name').value.trim();
+  const userId = document.getElementById('add-user-id').value.trim();
+  const videoUrl = document.getElementById('add-video-url').value.trim();
+  const enabled = document.getElementById('add-enabled').checked;
+  const msgEl = document.getElementById('add-msg');
+
+  function showMsg(text, isErr) {
+    msgEl.textContent = text;
+    msgEl.style.display = 'block';
+    msgEl.style.color = isErr ? '#ff3b30' : '#34c759';
+    setTimeout(function() { msgEl.style.display = 'none'; }, 4000);
+  }
+
+  if (!name) { showMsg('请填写订阅名称', true); return; }
+  if (!userId && !videoUrl) { showMsg('请填写博主 user_id 或单视频 URL', true); return; }
+  if (userId && videoUrl) { showMsg('user_id 和 video_url 只能填一个', true); return; }
+
+  try {
+    const body = { name: name, enabled: enabled };
+    if (userId) body.user_id = userId;
+    if (videoUrl) body.video_url = videoUrl;
+    const r = await fetch('/api/subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      showMsg('✓ 订阅添加成功', false);
+      document.getElementById('add-name').value = '';
+      document.getElementById('add-user-id').value = '';
+      document.getElementById('add-video-url').value = '';
+      loadStatus();
+    } else {
+      showMsg('✗ ' + (d.detail || '添加失败'), true);
+    }
+  } catch(e) {
+    showMsg('✗ 网络错误：' + e.message, true);
+  }
+}
+
+async function toggleSub(name, enabled) {
+  try {
+    const r = await fetch('/api/subscriptions/' + encodeURIComponent(name) + '/toggle', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: enabled }),
+    });
+    const d = await r.json();
+    if (r.ok) loadStatus();
+    else alert('操作失败：' + (d.detail || '未知错误'));
+  } catch(e) {
+    alert('网络错误：' + e.message);
+  }
+}
+
+async function deleteSub(name) {
+  if (!confirm('确认删除订阅「' + name + '」？\n\n此操作不可撤销。')) return;
+  try {
+    const r = await fetch('/api/subscriptions/' + encodeURIComponent(name), { method: 'DELETE' });
+    const d = await r.json();
+    if (r.ok) loadStatus();
+    else alert('删除失败：' + (d.detail || '未知错误'));
+  } catch(e) {
+    alert('网络错误：' + e.message);
+  }
 }
 
 async function triggerVacuum() {
