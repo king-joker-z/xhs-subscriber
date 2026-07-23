@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-07-23 17:xx — 迭代 #169
+
+### 迭代目标
+修复 xhshow 依赖升级后签名 API 再次不兼容的问题，兼容 0.1.x 与 0.2.x。
+
+### 完成内容
+- **fix: 新增 `src/xhshow_compat.py` 双版本签名兼容层**
+  - xhshow 0.2.x 存在 `sign_headers_get/post` 时，直接使用其完整签名 headers（含真实 `x-s-common` 和 POST `x-rap-param`）
+  - xhshow 0.1.x 环境回退至 `sign_xs_get/post`，保持原有本地追踪 ID 与基础公共签名逻辑
+- **refactor: `fetcher.py` 与 `guest_fetcher.py` 统一调用兼容层**
+  - 去除两处重复的手工签名头组装，降低后续升级维护成本
+- **chore: 限定依赖范围**
+  - `xhshow>=0.1.0,<0.3.0`，防止未验证的 0.3+ 破坏性升级
+
+### 测试结果
+- Python 3.12 语法检查：全部 src 模块通过
+- xhshow 0.1.x 实例回退签名验证：x-s、x-t、追踪 ID、x-s-common 格式均通过
+- 模拟 xhshow 0.2.x 完整 headers API：GET/POST 调用与 x-rap-param 传递通过
+- PyPI 最新版本调查：xhshow 最新为 0.2.0；当前环境未能安装其依赖 `pycryptodome>=3.23.0`，已通过下载 wheel 直接确认公开方法签名
+- git commit: `d19e391`，已 push 到 `origin/main`
+
+### 下次迭代建议（18:xx 执行）
+- 使用具备 `pycryptodome` 的环境安装 xhshow 0.2.0，进行真实新版端到端签名验证
+- 用户提供有效 Cookie 后验证博主主页订阅全链路
+- 继续完善 Web UI 的订阅编辑能力
+
+---
+
 ## 2026-07-23 16:xx — 迭代 #168
 
 ### 迭代目标
