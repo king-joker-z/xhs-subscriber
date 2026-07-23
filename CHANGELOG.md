@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-07-23 10:xx — 迭代 #166
+
+### 迭代目标
+修复 xhshow 0.1.x API 破坏性变更导致的签名失效 bug（优先级第1项）
+
+### 完成内容
+- **fix: `fetcher.py` 适配 xhshow 新 API**
+  - `sign_headers_get(uri, cookies, params)` → `sign_xs_get(uri, a1_value, params)`
+  - 新 API 只返回 `x-s` 签名字符串（`XYS_...` 格式），不再返回完整 headers dict
+  - 新增 `_extract_a1_from_cookie()` 辅助函数，从 cookie 字符串中提取 a1 值
+  - 手动组装请求头：`x-s` + `x-t`（13位毫秒时间戳）+ `user-agent` + `referer` + `cookie`
+  - 签名失败时记录错误并跳出分页循环，避免无效重试
+- **fix: `guest_fetcher.py` 适配 xhshow 新 API**
+  - `sign_headers_post(uri, cookies, payload, x_rap)` → `sign_xs_post(uri, a1_value, payload)`
+  - `xhshow.generate_a1()` 已在 0.1.x 中移除，改为本地 `_generate_a1()` 静态方法
+  - 本地生成 52 位十六进制 a1，格式与小红书 Web 端一致
+  - 修复前次迭代遗留的语法错误（多余 `}`）
+- **chore: `requirements.txt` 版本约束调整**
+  - `xhshow>=0.2.0` → `xhshow>=0.1.0`（匹配实际发布的 PyPI 包 API）
+
+### 测试结果
+- Python 3.12 语法检查：全部 9 个模块通过（`python3.12 -m py_compile`）
+- xhshow 签名格式验证：
+  - `sign_xs_get` 返回 `XYS_` 前缀字符串 ✓
+  - `sign_xs_post` 返回 `XYS_` 前缀字符串 ✓
+  - `x-t` 为 13 位毫秒时间戳 ✓
+  - `_extract_a1_from_cookie` 边界情况（空 cookie、无 a1、含 a1）✓
+  - `_generate_a1` 生成 52 位十六进制 ✓
+- 端到端请求验证：需有效 Cookie，待用户提供 Cookie 后验证
+- git commit: `5b691f9`，已 push 到 `origin/main`
+
+### 下次迭代建议（13:xx 执行）
+- **端到端验证**：用户提供有效 Cookie 后，验证博主主页订阅全链路（xhshow 签名 → API 请求 → 元数据解析）
+- **请求头完善**：新 API 可能还需 `x-s-common`、`x-b3-traceid` 等头，需抓包确认后补充
+- **Web UI 增强**：订阅管理界面支持添加/删除订阅（当前仅只读展示）
+
+---
+
 ## 2026-07-22 10:xx — 迭代 #2
 
 ### 迭代目标
