@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-07-23 19:xx — 迭代 #171
+
+### 迭代目标
+修复无订阅服务因 XHS-Downloader 可选依赖缺失而无法启动的问题，并完成 `/health` 验证。
+
+### 完成内容
+- **fix: 调度器按需初始化下载器组件**
+  - 空订阅或全部停用订阅时，不再在服务构造阶段创建 `XHSFetcher` 与 `Downloader`
+  - 此时服务仍能提供 `/health`、Web UI 与订阅管理；用户在 UI 配置订阅后重启服务即可启用下载能力
+  - 实际处理订阅时才初始化爬取和下载组件
+  - shutdown 增加空值保护
+- **上游检查**
+  - 发现 XHS-Downloader `develop` 新提交 `d54b08f`（修复部分分享链接提取失败），但当前 submodule 跟踪分支未指向 develop，`git submodule update --remote` 未移动指针，因此未强制跨分支升级
+
+### 测试结果
+- Python 3.12 全部 src 模块语法检查通过
+- 空订阅延迟初始化回归测试通过
+- 使用 `XHS_COOKIE="test"` 和临时配置启动服务成功，`GET /health` 返回：`{"status":"ok","version":"1.0.0",...}`
+- 测试服务进程已停止，未留下端口占用
+- 完整下载测试：待用户提供有效 Cookie 后验证
+- git commit: `1e94d6d`，已 push 到 `origin/main`
+
+### 下次迭代建议（20:xx 起非工作时间，不执行）
+- 下个工作日 10:xx：用有效 Cookie 验证博主主页订阅全链路
+- 评估将 XHS-Downloader submodule 跟踪分支切换至 develop 前的兼容性与变更范围
+- 在具备 pycryptodome 的环境中运行 xhshow 0.2.0 真实签名验证
+
+---
+
 ## 2026-07-23 18:xx — 迭代 #170
 
 ### 迭代目标
