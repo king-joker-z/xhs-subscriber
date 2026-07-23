@@ -35,13 +35,9 @@ class XHSScheduler:
     def __init__(self, config: AppConfig, db: Database):
         self._config = config
         self._db = db
-        self._fetcher = XHSFetcher(cookie=config.xhs_cookie.get_secret_value())
-        self._downloader = Downloader(
-            db=db,
-            download_dir=config.download_dir,
-            concurrency=config.download_concurrency,
-            cookie=config.xhs_cookie.get_secret_value(),
-        )
+        # 仅在存在启用订阅时初始化下载器依赖；空订阅服务仍可提供 /health 与 Web UI。
+        self._fetcher: XHSFetcher | None = None
+        self._downloader: Downloader | None = None
         self._scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
         self._running = False
         # run_once 并发保护标志：True 表示正在执行，防止重复触发
@@ -99,12 +95,30 @@ class XHSScheduler:
 
     async def startup(self) -> None:
         """
-        启动 fetcher 共享 XHS 实例，应在 FastAPI startup 事件中调用。
-        同时执行 Cookie 有效性预检：向小红书发一次轻量探测请求，
-        在启动日志中明确报告 Cookie 状态，避免服务静默运行数小时后才发现失效。
+        启动时按需初始化 fetcher 共享 XHS 实例。
+
+        没有启用订阅时不加载 XHS-Downloader：此时服务仍可提供健康检查与 Web UI，
+        用户可先在 UI 配置订阅，再重启服务开始下载。
         """
+        if not any(sub.enabled for sub in self._config.subscriptions):
+            logger.info("未配置启用订阅，跳过 XHS-Downloader 初始化与 Cookie 预检")
+            return
+        self._ensure_workers()
+        assert self._fetcher is not None
         await self._fetcher.start()
         await self._probe_cookie()
+
+    def _ensure_workers(self) -> None:
+        """按需初始化爬取与下载组件。"""
+        if self._fetcher is None:
+            self._fetcher = XHSFetcher(cookie=self._config.xhs_cookie.get_secret_value())
+        if self._downloader is None:
+            self._downloader = Downloader(
+                db=self._db,
+                download_dir=self._config.download_dir,
+                concurrency=self._config.download_concurrency,
+                cookie=self._config.xhs_cookie.get_secret_value(),
+            )
 
     async def _probe_cookie(self) -> None:
         """
@@ -187,8 +201,9 @@ class XHSScheduler:
             self.cookie_status = "unknown"
 
     async def shutdown(self) -> None:
-        """关闭 fetcher 共享 XHS 实例，应在 FastAPI shutdown 事件中调用"""
-        await self._fetcher.stop()
+        """关闭已初始化的 fetcher 共享 XHS 实例。"""
+        if self._fetcher is not None:
+            await self._fetcher.stop()
 
     async def run_once(self) -> None:
         """立即执行一次全量检查（所有订阅）。若已有检查正在执行则跳过，防止并发重复触发。"""
@@ -248,6 +263,9 @@ class XHSScheduler:
                 logger.warning("_process_subscription 收到空 sub.name，跳过该订阅")
                 return
             logger.info("处理订阅：%s", sub.name)
+            self._ensure_workers()
+            assert self._fetcher is not None
+            assert self._downloader is not None
 
             # M3 爬取
             if sub.user_id:
