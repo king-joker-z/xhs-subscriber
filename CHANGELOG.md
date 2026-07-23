@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-07-23 18:xx — 迭代 #170
+
+### 迭代目标
+修复锁文件遗漏运行时依赖导致服务无法在干净环境启动的问题。
+
+### 完成内容
+- **fix: 补齐 `requirements.lock` 运行时依赖**
+  - 新增 `APScheduler==3.11.0`：调度器启动必需依赖
+  - 新增 `tzlocal==5.4.4`：APScheduler 的时区依赖
+  - 新增 `xhshow==0.1.4`：锁定当前已验证的签名库版本
+- **问题诊断**
+  - 干净 Python 3.12 环境导入服务时确认缺少 APScheduler
+  - 上游 XHS-Downloader 无新 commit
+  - 公开信息显示 XHS-Downloader 已有 V2.7 发布；当前 submodule 分支无待合并提交
+
+### 测试结果
+- Python 3.12 全部 src 模块语法检查通过
+- 锁文件关键运行时依赖存在性检查通过
+- 服务启动测试受当前隔离包源限制阻断：测试 venv 缺少 uvicorn，且当前包源无法取得；待在可完整安装 `requirements.lock` 的环境运行 `XHS_COOKIE="test" python -m src.main` 后验证 `/health`
+- 完整下载测试：待用户提供有效 Cookie 后验证
+- git commit: `357cdde`，已 push 到 `origin/main`
+
+### 下次迭代建议（19:xx 执行）
+- 在可访问完整 PyPI 镜像的隔离环境执行 `pip install -r requirements.lock` 后完成 `/health` 启动验证
+- 有效 Cookie 到位后验证博主主页订阅全链路
+- 在具有 pycryptodome 的环境中运行 xhshow 0.2.0 真实签名验证
+
+---
+
 ## 2026-07-23 17:xx — 迭代 #169
 
 ### 迭代目标
