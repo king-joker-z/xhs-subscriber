@@ -27,5 +27,5 @@ tenacity>=8.0.0
 lxml>=5.0.0
 
 # ---- XHS API 签名（替代 Playwright，纯 Python 实现） ----
-# 0.1.x API 变更：sign_xs_get/sign_xs_post 替代旧 sign_headers_get/post，generate_a1() 已移除
-xhshow>=0.1.0
+# 同时兼容 0.1.x（sign_xs_*）和 0.2.x（sign_headers_* 完整请求头 API）
+xhshow>=0.1.0,<0.3.0

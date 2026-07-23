@@ -26,6 +26,8 @@ from typing import Any, Optional
 
 import httpx
 
+from .xhshow_compat import sign_get_headers
+
 logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------ #
@@ -456,34 +458,17 @@ class XHSFetcher:
                 "xsec_token": "",
                 "xsec_source": "pc_user",
             }
-            # xhshow 签名（0.1.x 新 API：sign_xs_get 只返回 x-s 字符串，需手动组装 headers）
-            # 从 cookie 字符串中提取 a1 值（新 API 要求单独传入）
-            _a1_value = _extract_a1_from_cookie(cookie_str)
-            if not _a1_value:
-                logger.warning(
-                    "Cookie 中未找到 a1 字段，xhshow 签名可能失效（user_id=%s）。"
-                    "请确认 XHS_COOKIE 包含 a1=xxx 字段。",
-                    user_id,
-                )
+            # xhshow 签名：兼容 0.1.x（sign_xs_get）与 0.2.x（完整 sign_headers_get）
             try:
-                _xs_signature = encipher.sign_xs_get(
-                    uri=_USER_POSTED_API,
-                    a1_value=_a1_value,
-                    params=params,
-                )
+                signed_headers = sign_get_headers(encipher, _USER_POSTED_API, cookie_str, params)
             except Exception as _sign_exc:
-                logger.error("xhshow sign_xs_get 签名失败 user_id=%s：%s", user_id, _sign_exc)
+                logger.error("xhshow GET 签名失败 user_id=%s：%s", user_id, _sign_exc)
                 break
             request_headers = {
                 "user-agent": _random_ua(),
                 "referer": "https://www.xiaohongshu.com/",
                 "cookie": cookie_str,
-                "x-s": _xs_signature,
-                "x-t": str(int(time.time() * 1000)),
-                # 补充完整追踪 headers（小红书 Web 端必需，缺失会导致 403）
-                "x-b3-traceid": _generate_trace_ids()[0],
-                "x-xray-traceid": _generate_trace_ids()[1],
-                "x-s-common": _build_x_s_common(cookie_str),
+                **signed_headers,
             }
 
             try:

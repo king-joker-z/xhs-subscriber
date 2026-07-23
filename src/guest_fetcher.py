@@ -27,6 +27,8 @@ from typing import Any, Optional
 
 import httpx
 
+from .xhshow_compat import sign_post_headers
+
 logger = logging.getLogger(__name__)
 
 # 笔记详情 API（Web 端 feed 接口，支持访客访问）
@@ -241,15 +243,9 @@ class GuestFetcher:
             "xsec_source": "pc_feed",
         }
 
-        # xhshow 签名（0.1.x 新 API：sign_xs_post 只返回 x-s 字符串，需手动组装 headers）
-        # 从访客 cookie 中取 a1 值（新 API 要求单独传入）
-        _a1_value = guest_cookies.get("a1", "")
+        # xhshow 签名：兼容 0.1.x（sign_xs_post）与 0.2.x（完整 sign_headers_post）
         try:
-            _xs_signature = xhshow.sign_xs_post(
-                uri=_FEED_API,
-                a1_value=_a1_value,
-                payload=payload,
-            )
+            signed_headers = sign_post_headers(xhshow, _FEED_API, cookie_str, payload)
         except Exception as exc:
             logger.error("GuestFetcher: xhshow 签名失败：%s", exc)
             return None
@@ -260,12 +256,7 @@ class GuestFetcher:
             "origin": "https://www.xiaohongshu.com",
             "content-type": "application/json;charset=UTF-8",
             "cookie": cookie_str,
-            "x-s": _xs_signature,
-            "x-t": str(int(time.time() * 1000)),
-            # 补充完整追踪 headers（小红书 Web 端必需，缺失会导致 403）
-            "x-b3-traceid": _generate_trace_ids()[0],
-            "x-xray-traceid": _generate_trace_ids()[1],
-            "x-s-common": _build_x_s_common(cookie_str),
+            **signed_headers,
         }
 
         try:
