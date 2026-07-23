@@ -59,6 +59,42 @@ def _generate_web_id() -> str:
     return "".join(random.choices("0123456789abcdef", k=32))
 
 
+def _generate_trace_ids() -> tuple[str, str]:
+    """生成 x-b3-traceid 和 x-xray-traceid（小红书 Web 端追踪 ID）
+
+    x-b3-traceid: 16 位十六进制（随机）
+    x-xray-traceid: 32 位十六进制（随机）
+    小红书 API 要求这两个 header，缺失会导致 403。
+
+    :return: (x_b3_traceid, x_xray_traceid) 元组
+    """
+    b3 = "".join(random.choices("0123456789abcdef", k=16))
+    xray = "".join(random.choices("0123456789abcdef", k=32))
+    return b3, xray
+
+
+def _build_x_s_common(cookie_str: str) -> str:
+    """从 cookie 字符串构建 x-s-common header 值（简化实现）
+
+    实际算法未公开，此处拼接关键 cookie 字段后取 MD5 前 16 位作为标识。
+
+    :param cookie_str: 完整 cookie 字符串
+    :return: x-s-common header 值
+    """
+    import hashlib
+    _keys_of_interest = {"a1", "webId", "web_session", "webBuild", "xsecappid"}
+    _parts: list[str] = []
+    for part in cookie_str.split(";"):
+        part = part.strip()
+        if "=" not in part:
+            continue
+        key = part.split("=", 1)[0].strip()
+        if key in _keys_of_interest:
+            _parts.append(part)
+    raw = "&".join(_parts)
+    return hashlib.md5(raw.encode()).hexdigest()[:16]
+
+
 def _extract_note_id(url: str) -> Optional[str]:
     """从小红书 URL 中提取 note_id"""
     m = _NOTE_ID_PATTERN.search(url)
@@ -226,6 +262,10 @@ class GuestFetcher:
             "cookie": cookie_str,
             "x-s": _xs_signature,
             "x-t": str(int(time.time() * 1000)),
+            # 补充完整追踪 headers（小红书 Web 端必需，缺失会导致 403）
+            "x-b3-traceid": _generate_trace_ids()[0],
+            "x-xray-traceid": _generate_trace_ids()[1],
+            "x-s-common": _build_x_s_common(cookie_str),
         }
 
         try:

@@ -240,6 +240,47 @@ def _extract_a1_from_cookie(cookie_str: str) -> str:
     return ""
 
 
+def _generate_trace_ids() -> tuple[str, str]:
+    """生成 x-b3-traceid 和 x-xray-traceid（小红书 Web 端追踪 ID）
+
+    x-b3-traceid: 16 位十六进制（随机）
+    x-xray-traceid: 32 位十六进制（随机）
+    小红书 API 要求这两个 header，缺失会导致 403。
+
+    :return: (x_b3_traceid, x_xray_traceid) 元组
+    """
+    b3 = "".join(random.choices("0123456789abcdef", k=16))
+    xray = "".join(random.choices("0123456789abcdef", k=32))
+    return b3, xray
+
+
+def _build_x_s_common(cookie_str: str) -> str:
+    """从 cookie 字符串构建 x-s-common header 值
+
+    x-s-common 是小红书 Web 端公共签名头，基于 cookie 中的关键字段组合。
+    格式：将 cookie 中的关键字段（a1, webId, web_session 等）提取后，
+    按 "key=value" 格式用 "&" 连接，再取 MD5 前 16 位作为签名标识。
+    实际算法未公开，此处采用简化实现：拼接关键 cookie 字段作为标识。
+
+    :param cookie_str: 完整 cookie 字符串
+    :return: x-s-common header 值
+    """
+    # 提取关键 cookie 字段
+    _keys_of_interest = {"a1", "webId", "web_session", "webBuild", "xsecappid"}
+    _parts: list[str] = []
+    for part in cookie_str.split(";"):
+        part = part.strip()
+        if "=" not in part:
+            continue
+        key = part.split("=", 1)[0].strip()
+        if key in _keys_of_interest:
+            _parts.append(part)
+    # 拼接后取 MD5 前 16 位作为公共签名标识
+    import hashlib
+    raw = "&".join(_parts)
+    return hashlib.md5(raw.encode()).hexdigest()[:16]
+
+
 # ------------------------------------------------------------------ #
 #  随机延迟（防频率风控）
 # ------------------------------------------------------------------ #
@@ -439,6 +480,10 @@ class XHSFetcher:
                 "cookie": cookie_str,
                 "x-s": _xs_signature,
                 "x-t": str(int(time.time() * 1000)),
+                # 补充完整追踪 headers（小红书 Web 端必需，缺失会导致 403）
+                "x-b3-traceid": _generate_trace_ids()[0],
+                "x-xray-traceid": _generate_trace_ids()[1],
+                "x-s-common": _build_x_s_common(cookie_str),
             }
 
             try:
