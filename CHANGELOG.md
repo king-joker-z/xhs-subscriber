@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-07-23 13:xx — 迭代 #167
+
+### 迭代目标
+补充完整请求头（x-b3-traceid、x-xray-traceid、x-s-common），提升 API 请求成功率（优先级第1项）
+
+### 完成内容
+- **feat: `fetcher.py` / `guest_fetcher.py` 新增完整追踪 headers**
+  - 新增 `_generate_trace_ids()`：生成 `x-b3-traceid`（16位十六进制）和 `x-xray-traceid`（32位十六进制）
+  - 新增 `_build_x_s_common()`：从 cookie 关键字段（a1、webId、web_session 等）拼接后取 MD5 前 16 位作为公共签名标识
+  - 两个文件的请求头组装均补充了 `x-b3-traceid`、`x-xray-traceid`、`x-s-common` 三个字段
+  - 小红书 Web 端 API 对缺失这些 header 的请求返回 403，补充后预期可显著提升请求成功率
+- **改动文件**：`src/fetcher.py`、`src/guest_fetcher.py`
+
+### 测试结果
+- Python 3.12 语法检查：全部 9 个模块通过
+- 追踪 ID 生成验证：16/32 位十六进制、随机性 ✓
+- x-s-common 构建验证：正常 cookie、空 cookie、无关键字段、部分字段、差异化 ✓
+- 端到端请求验证：待用户提供 Cookie 后验证
+- git commit: `184b132`，已 push 到 `origin/main`
+
+### 下次迭代建议（16:xx 执行）
+- **端到端验证**：用户提供有效 Cookie 后，验证博主主页订阅全链路
+- **x-s-common 算法优化**：当前为简化实现，如有抓包数据可进一步优化为真实算法
+- **Web UI 增强**：订阅管理界面支持添加/删除订阅
+
+---
+
 ## 2026-07-23 10:xx — 迭代 #166
 
 ### 迭代目标
