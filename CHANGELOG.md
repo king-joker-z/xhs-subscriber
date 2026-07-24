@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-07-24 13:00 — 迭代 #172
+
+### 迭代目标
+为 xhshow 0.1.x/0.2.x 签名兼容层补充可重复执行的回归测试，防止后续改动破坏签名请求头生成。
+
+### 完成内容
+- **test: 增加 `tests/test_xhshow_compat.py`**
+  - 覆盖 xhshow 0.1.x 回退 GET/POST 签名路径，校验 `a1` 提取、`x-s`、13 位 `x-t` 与追踪 ID 格式
+  - 覆盖 xhshow 0.2.x 完整 headers API 路径，校验返回头原样保留及 POST `x_rap=True` 参数
+- **环境与上游检查**
+  - 使用 Python 3.12 重建 `/tmp/xhs-test-env` 并从 PyPI 成功安装 `requirements.lock`
+  - XHS-Downloader 上游 HEAD 为 `cdc02d0`，与当前 submodule 一致，无可 pull 的新 commit
+  - 公开信息检索接口本次返回 504，未据此作出上游功能变更
+
+### 测试结果
+- `python -m unittest discover -s tests -v`：3/3 通过
+- Python 3.12 对 `src`、`tests` 的语法编译检查通过
+- xhshow 0.1.4 真实本地签名格式验证通过（GET/POST 均包含 `x-s`、`x-t`）
+- 使用 `XHS_COOKIE="test"` 启动隔离服务成功，`GET /health` 返回 HTTP 200 和 `status=ok`
+- 测试服务进程已停止，未留下端口占用
+- 完整下载测试：待用户提供有效 Cookie 后验证
+
+### 下次迭代建议
+- 在具备有效 Cookie 的环境验证博主主页订阅全链路
+- 评估 xhshow 0.2.0 与当前依赖锁定的完整安装兼容性
+
+---
+
 ## 2026-07-23 19:xx — 迭代 #171
 
 ### 迭代目标
