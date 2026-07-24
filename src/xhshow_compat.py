@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import secrets
 import time
 from typing import Any
@@ -48,8 +49,11 @@ def sign_get_headers(client: Any, uri: str, cookie_str: str, params: dict[str, A
 
 
 def sign_post_headers(client: Any, uri: str, cookie_str: str, payload: dict[str, Any]) -> dict[str, str]:
-    """获取 POST 签名头，优先使用 xhshow 0.2.x 的完整签名 API。"""
+    """获取 POST 签名头，兼容不同 xhshow 的完整签名 API 参数。"""
     if hasattr(client, "sign_headers_post"):
-        headers = dict(client.sign_headers_post(uri=uri, cookies=cookie_str, payload=payload, x_rap=True))
-        return headers
+        kwargs: dict[str, Any] = {"uri": uri, "cookies": cookie_str, "payload": payload}
+        # 早期 0.2.x API 支持 x_rap；0.1.9 的完整 headers API 已移除此参数。
+        if "x_rap" in inspect.signature(client.sign_headers_post).parameters:
+            kwargs["x_rap"] = True
+        return dict(client.sign_headers_post(**kwargs))
     return _fallback_headers(client, "POST", uri, cookie_str, payload)

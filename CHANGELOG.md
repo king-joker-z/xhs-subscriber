@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-07-24 16:00 — 迭代 #173
+
+### 迭代目标
+升级并适配 xhshow 0.1.9，修复新版完整 POST 签名 API 不再接受 `x_rap` 参数导致的运行时异常。
+
+### 完成内容
+- **fix: 兼容 `sign_headers_post` 的参数变体**
+  - `src/xhshow_compat.py` 在调用完整 POST headers API 前检查方法签名
+  - 仅当目标版本显式支持时传递 `x_rap=True`，兼容旧版与 xhshow 0.1.9 的 API
+- **chore: 升级锁定依赖**
+  - `requirements.lock`：`xhshow==0.1.4` 升级为 `xhshow==0.1.9`
+  - 0.1.9 发布信息包含签名算法更新；隔离环境已实际安装并验证
+- **test: 扩展签名兼容性回归**
+  - 新增不支持 `x_rap` 的完整 headers API 测试
+  - 保留支持 `x_rap` 的 API 变体测试，确保条件传参正确
+- **上游检查**
+  - XHS-Downloader 当前 `master` HEAD 仍为 `cdc02d0`；`develop` 为 `d54b08f`，未改变当前跟踪分支，未升级 submodule
+
+### 测试结果
+- Python 3.12 隔离环境安装 xhshow 0.1.9（含 pycryptodome）成功
+- 真实 xhshow 0.1.9 GET/POST 签名检查通过，均包含 `x-s`、`x-t`
+- `python -m unittest discover -s tests -v`：4/4 通过
+- Python 3.12 对 `src`、`tests` 的语法编译检查通过
+- 使用 `XHS_COOKIE="test"` 启动隔离服务成功，`GET /health` 返回 HTTP 200 和 `status=ok`
+- 完整下载测试：待用户提供有效 Cookie 后验证
+
+### 下次迭代建议
+- 提供有效 Cookie 后验证博主主页订阅的真实 API 调用与下载闭环
+- 在评估分支差异后决定是否跟进 XHS-Downloader `develop` 的分享链接修复
+
+---
+
 ## 2026-07-24 13:00 — 迭代 #172
 
 ### 迭代目标

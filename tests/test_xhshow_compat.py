@@ -27,10 +27,22 @@ class ModernClient:
         uri: str,
         cookies: str,
         payload: dict[str, object],
+    ) -> dict[str, str]:
+        self.post_args = (uri, cookies, payload)
+        return {"x-s": "modern-post", "x-t": "456", "x-rap-param": "1"}
+
+
+class XRapClient(ModernClient):
+    def sign_headers_post(
+        self,
+        *,
+        uri: str,
+        cookies: str,
+        payload: dict[str, object],
         x_rap: bool,
     ) -> dict[str, str]:
         self.post_args = (uri, cookies, payload, x_rap)
-        return {"x-s": "modern-post", "x-t": "456", "x-rap-param": "1"}
+        return {"x-s": "xrap-post", "x-t": "789"}
 
 
 class XhshowCompatTests(unittest.TestCase):
@@ -57,6 +69,12 @@ class XhshowCompatTests(unittest.TestCase):
         post_headers = sign_post_headers(client, "/api/test", "a1=test", {"q": "v"})
         self.assertEqual(get_headers, {"x-s": "modern-get", "x-t": "123"})
         self.assertEqual(post_headers["x-rap-param"], "1")
+        self.assertEqual(client.post_args, ("/api/test", "a1=test", {"q": "v"}))
+
+    def test_x_rap_is_used_only_when_supported(self) -> None:
+        client = XRapClient()
+        headers = sign_post_headers(client, "/api/test", "a1=test", {"q": "v"})
+        self.assertEqual(headers["x-s"], "xrap-post")
         self.assertTrue(client.post_args[3])
 
 
