@@ -353,14 +353,14 @@ class GuestFetcher:
                 if item.get("id") == note_id:
                     note_card = item.get("note_card")
                     break
-            # 如果没找到精确匹配，取第一个
-            if note_card is None and items:
-                first_item = items[0]
-                if isinstance(first_item, dict):
-                    note_card = first_item.get("note_card")
+            # 必须匹配请求的笔记 ID。feed 响应可能包含推荐项，回退到第一项会
+            # 让用户拿到与 URL 不对应的媒体，不能将其视作成功结果。
+            if note_card is None:
+                logger.warning("GuestFetcher: feed 响应中未找到目标 note_id=%s", note_id)
+                return None
 
-            if not note_card or not isinstance(note_card, dict):
-                logger.warning("GuestFetcher: 未找到 note_card，note_id=%s", note_id)
+            if not isinstance(note_card, dict):
+                logger.warning("GuestFetcher: 目标 note_card 类型非法，note_id=%s", note_id)
                 return None
 
             # 基础信息
