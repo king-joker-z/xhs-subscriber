@@ -57,8 +57,10 @@ except ImportError as _import_err:
     _XHS_AVAILABLE = False
     _XHS_IMPORT_ERROR = str(_import_err)
     logger.warning(
-        "XHS-Downloader 未找到（%s）。"
-        "请确认已执行：git submodule update --init --recursive",
+        "XHS-Downloader 导入失败（%s）。"
+        "请先初始化子模块并安装其依赖："
+        "git submodule update --init --recursive && "
+        "python -m pip install -r vendor/XHS-Downloader/requirements.txt",
         _import_err,
     )
 
@@ -319,8 +321,10 @@ class XHSFetcher:
     def __init__(self, cookie: str):
         if not _XHS_AVAILABLE:
             raise RuntimeError(
-                f"XHS-Downloader 未安装，无法初始化 XHSFetcher。\n"
-                f"请执行：git submodule update --init --recursive\n"
+                "XHS-Downloader 不可用，无法初始化 XHSFetcher。\n"
+                "请先初始化子模块并安装其依赖：\n"
+                "  git submodule update --init --recursive\n"
+                "  python -m pip install -r vendor/XHS-Downloader/requirements.txt\n"
                 f"原始错误：{_XHS_IMPORT_ERROR}"
             )
         self._cookie = cookie

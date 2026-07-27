@@ -43,6 +43,18 @@ export XHS_COOKIE="your_cookie_here"
 docker compose up -d
 ```
 
+### 3. 本地源码启动（可选）
+
+```bash
+python3.12 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+# XHS-Downloader 是子模块，下载器功能还需要其独立依赖
+pip install -r vendor/XHS-Downloader/requirements.txt
+export XHS_COOKIE="your_cookie_here"
+python -m src.main
+```
+
 ### 4. 验证运行
 
 ```bash
