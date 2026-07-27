@@ -15,11 +15,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+COPY vendor/XHS-Downloader/ ./vendor/XHS-Downloader/
+# 主项目与 XHS-Downloader 子模块使用独立依赖清单；两者均需安装，
+# 否则容器在启用订阅时会因 rich、fastmcp 等子模块运行时依赖缺失而降级。
 # 使用 BuildKit cache mount 缓存 pip 下载包，避免每次构建重新下载依赖
 # 需要 BuildKit 支持：DOCKER_BUILDKIT=1 docker build ... 或 docker buildx build
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --upgrade pip \
-    && pip install --prefix=/install -r requirements.txt
+    && pip install --prefix=/install -r requirements.txt \
+    && pip install --prefix=/install -r vendor/XHS-Downloader/requirements.txt
 
 # ---- runtime stage ----
 FROM python:3.12-slim AS runtime

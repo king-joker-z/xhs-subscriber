@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-07-27 12:00 — 迭代 #176
+
+### 迭代目标
+修复 Docker 镜像未安装 XHS-Downloader 子模块运行时依赖的问题，保证容器内启用订阅后可加载下载器。
+
+### 完成内容
+- **fix: Docker 构建阶段安装子模块依赖**
+  - `Dockerfile` 在 builder 阶段复制 `vendor/XHS-Downloader` 后，依次安装主项目与子模块的 `requirements.txt`
+  - 避免镜像仅安装主项目依赖、在启用订阅/下载器时缺少 `rich`、`fastmcp` 等子模块依赖
+  - 保持两份依赖清单独立，避免将子模块较新的锁定版本混入主项目 `requirements.lock`
+- **test: 新增 Dockerfile 回归测试**
+  - 校验 Dockerfile 复制子模块并安装两份依赖清单
+- **上游检查**
+  - XHS-Downloader `master` 仍为 `cdc02d0`，当前已集成的 `develop` 修复为 `d54b08f`，无新增提交
+  - 公网检索显示上游发布页包含 MCP 模式下载修复等更新说明；本次未新增平台交互或规避能力
+
+### 测试结果
+- Python 3.12 单元测试：6/6 通过
+- Python 3.12 对 `src`、`tests` 的语法编译检查通过
+- `pip check`：无损坏/冲突的已安装依赖
+- 使用 `XHS_COOKIE="test"` 启动隔离服务成功，`GET /health` 返回 HTTP 200 和 `status=ok`
+- 测试服务进程已停止，未留下端口占用
+- 完整下载测试：未检测到有效 Cookie，待用户提供 Cookie 后验证
+
+### 下次迭代建议
+- 在可用 Docker 环境构建镜像并验证下载器依赖在容器内可导入
+- 使用有效 Cookie 验证主页订阅、短链接解析与下载全链路
+
+---
+
 ## 2026-07-27 11:00 — 补跑迭代 #175
 
 ### 迭代目标
