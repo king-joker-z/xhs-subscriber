@@ -8,6 +8,7 @@ GET  /api/recent  → 最近下载记录列表（按下载时间倒序，默认 
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import datetime, timezone
@@ -39,7 +40,8 @@ app = FastAPI(
 # 调度器实例由 main.py 注入
 _scheduler: "XHSScheduler | None" = None
 # API-6 修复：VACUUM 防重入标志，防止并发调用导致多次 VACUUM 同时执行
-_vacuum_active: bool = False
+# API-30 修复：订阅管理更新串行化，避免并发请求基于过期内存快照覆盖彼此修改。
+_subscription_write_lock = asyncio.Lock()
 
 
 def set_scheduler(scheduler: "XHSScheduler") -> None:
@@ -469,19 +471,20 @@ async def api_add_subscription(req: SubscriptionCreateRequest) -> dict:
         raise HTTPException(status_code=400, detail="user_id 和 video_url 至少提供一个")
     if req.user_id and req.video_url:
         raise HTTPException(status_code=400, detail="user_id 和 video_url 只能提供一个")
-    # 检查重名
-    for sub in _scheduler._config.subscriptions:
-        if sub.name == req.name:
-            raise HTTPException(status_code=409, detail=f"订阅名称 '{req.name}' 已存在")
-    from .config import SubscriptionConfig
-    new_sub = SubscriptionConfig({
-        "name": req.name,
-        "user_id": req.user_id,
-        "video_url": req.video_url,
-        "enabled": req.enabled,
-    })
-    _scheduler._config.subscriptions.append(new_sub)
-    _save_subscriptions_to_yaml(_scheduler._config.subscriptions)
+    async with _subscription_write_lock:
+        # 检查重名必须在锁内，避免两个并发请求同时通过检查。
+        for sub in _scheduler._config.subscriptions:
+            if sub.name == req.name:
+                raise HTTPException(status_code=409, detail=f"订阅名称 '{req.name}' 已存在")
+        from .config import SubscriptionConfig
+        new_sub = SubscriptionConfig({
+            "name": req.name,
+            "user_id": req.user_id,
+            "video_url": req.video_url,
+            "enabled": req.enabled,
+        })
+        _scheduler._config.subscriptions.append(new_sub)
+        _save_subscriptions_to_yaml(_scheduler._config.subscriptions)
     logger.info("新增订阅：%s（user_id=%s, video_url=%s, enabled=%s）", req.name, req.user_id, req.video_url, req.enabled)
     return {"status": "ok", "name": req.name}
 
@@ -496,12 +499,13 @@ async def api_delete_subscription(name: str) -> dict:
     """按名称删除订阅，并持久化到 config.yaml"""
     if _scheduler is None:
         raise HTTPException(status_code=503, detail="调度器未初始化")
-    subs = _scheduler._config.subscriptions
-    original_count = len(subs)
-    _scheduler._config.subscriptions = [s for s in subs if s.name != name]
-    if len(_scheduler._config.subscriptions) == original_count:
-        raise HTTPException(status_code=404, detail=f"订阅 '{name}' 不存在")
-    _save_subscriptions_to_yaml(_scheduler._config.subscriptions)
+    async with _subscription_write_lock:
+        subs = _scheduler._config.subscriptions
+        original_count = len(subs)
+        _scheduler._config.subscriptions = [s for s in subs if s.name != name]
+        if len(_scheduler._config.subscriptions) == original_count:
+            raise HTTPException(status_code=404, detail=f"订阅 '{name}' 不存在")
+        _save_subscriptions_to_yaml(_scheduler._config.subscriptions)
     logger.info("删除订阅：%s", name)
     return {"status": "ok", "name": name}
 
@@ -516,13 +520,14 @@ async def api_toggle_subscription(name: str, req: SubscriptionToggleRequest) -> 
     """切换订阅的启用/停用状态，并持久化到 config.yaml"""
     if _scheduler is None:
         raise HTTPException(status_code=503, detail="调度器未初始化")
-    for sub in _scheduler._config.subscriptions:
-        if sub.name == name:
-            sub.enabled = req.enabled
-            _save_subscriptions_to_yaml(_scheduler._config.subscriptions)
-            logger.info("切换订阅状态：%s → enabled=%s", name, req.enabled)
-            return {"status": "ok", "name": name, "enabled": req.enabled}
-    raise HTTPException(status_code=404, detail=f"订阅 '{name}' 不存在")
+    async with _subscription_write_lock:
+        for sub in _scheduler._config.subscriptions:
+            if sub.name == name:
+                sub.enabled = req.enabled
+                _save_subscriptions_to_yaml(_scheduler._config.subscriptions)
+                logger.info("切换订阅状态：%s → enabled=%s", name, req.enabled)
+                return {"status": "ok", "name": name, "enabled": req.enabled}
+        raise HTTPException(status_code=404, detail=f"订阅 '{name}' 不存在")
 
 
 # ------------------------------------------------------------------ #
