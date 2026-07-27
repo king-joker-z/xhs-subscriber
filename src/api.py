@@ -434,13 +434,22 @@ def _save_subscriptions_to_yaml(subscriptions: list) -> None:
             item["video_url"] = sub.video_url
         subs_data.append(item)
     existing["subscriptions"] = subs_data
-    # 写回文件
+    # 原子写回：先写同目录临时文件，再 replace，避免进程中断产生截断的 config.yaml。
+    temp_path = config_path.with_name(f".{config_path.name}.tmp")
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(config_path, "w", encoding="utf-8") as f:
+        with open(temp_path, "w", encoding="utf-8") as f:
             yaml.dump(existing, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, config_path)
         logger.info("订阅配置已写回 %s（共 %d 条）", config_path, len(subs_data))
     except Exception as exc:
+        # 保留原配置文件；若临时文件已创建则尽力清理。
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
         logger.error("写入 config.yaml 失败：%s", exc)
         raise HTTPException(status_code=500, detail=f"写入配置文件失败：{exc}")
 
