@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-07-27 10:00 — 迭代 #174
+
+### 迭代目标
+更新 XHS-Downloader 子模块至上游分享链接解析修复，支持 `xhslink.cn` 短链接。
+
+### 完成内容
+- **chore: 更新 `vendor/XHS-Downloader` 子模块**
+  - 从 `cdc02d0` 更新至上游 `develop` 的 `d54b08f`
+  - 上游改动将短链接匹配范围从 `xhslink.com` 扩展为 `xhslink.com` 与 `xhslink.cn`
+  - 同时包含上游默认 User-Agent 与类型注解的小范围修正
+- **上游动态检查**
+  - XHS-Downloader 当前稳定 `master` 仍在 `cdc02d0`；本次更新为已审查的单一 `develop` 修复提交
+  - 当前公开检索显示 XHS-Downloader 最新正式版本为 2.7；xhshow 项目公开说明持续提供完整签名 headers 能力
+
+### 测试结果
+- 在独立依赖环境中安装更新后子模块依赖，验证 `xhslink.com` 与 `xhslink.cn` 均能匹配短链接规则
+- 子模块完整依赖与主项目锁定依赖存在版本差异，因此未合并子模块依赖进主项目锁文件；子模块依赖仍按其 README 说明独立安装
+- Python 3.12 主项目单元测试：4/4 通过
+- 主项目语法编译检查通过
+- 使用 `XHS_COOKIE="test"` 启动隔离服务成功，`GET /health` 返回 HTTP 200 和 `status=ok`
+- 未检测到可用的外部 Cookie；完整下载测试：待用户提供有效 Cookie 后验证
+
+### 下次迭代建议
+- 提供有效 Cookie 后验证包含 `xhslink.cn` 的真实分享链接解析与下载链路
+- 为主项目与子模块设计隔离依赖安装/测试策略，避免两者锁定版本互相覆盖
+
+---
+
 ## 2026-07-24 16:00 — 迭代 #173
 
 ### 迭代目标
