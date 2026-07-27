@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-07-27 11:00 — 补跑迭代 #175
+
+### 迭代目标
+修复访客模式状态接口返回错误 xhshow 版本的问题，确保 Web UI/API 能展示实际已安装的签名库发行版。
+
+### 完成内容
+- **fix: 正确读取 xhshow 发行版版本**
+  - `GET /api/guest-info` 不再从没有版本属性的 `Xhshow` 类读取版本
+  - 改用 `importlib.metadata.version("xhshow")` 读取已安装发行版元数据
+  - 包元数据缺失时保留模块属性回退逻辑
+- **test: 新增访客模式状态回归测试**
+  - 覆盖已安装发行版版本 `0.1.9` 的正确返回
+- **上游检查**
+  - XHS-Downloader 当前稳定 `master` 仍为 `cdc02d0`，已集成的单一 `develop` 修复提交仍为 `d54b08f`，无新增可评估提交
+  - 公网检索本次返回 504，未据此执行外部变更
+
+### 测试结果
+- Python 3.12 单元测试：5/5 通过
+- Python 3.12 对 `src`、`tests` 的语法编译检查通过
+- 真实调用 `api_guest_info()` 确认返回 `xhshow_version="0.1.9"`
+- 使用 `XHS_COOKIE="test"` 启动隔离服务成功：`GET /health` 返回 HTTP 200，`GET /api/guest-info` 返回 `xhshow_version=0.1.9`
+- 测试服务进程已停止，未留下端口占用
+- 完整下载测试：未检测到有效 Cookie，待用户提供 Cookie 后验证
+
+### 下次迭代建议
+- 使用有效 Cookie 验证主页订阅、短链接解析与下载全链路
+- 建立主项目与 XHS-Downloader 子模块的隔离依赖测试脚本
+
+---
+
 ## 2026-07-27 10:00 — 迭代 #174
 
 ### 迭代目标

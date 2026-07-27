@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -1305,9 +1306,13 @@ async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse
 async def api_guest_info() -> dict:
     """返回访客模式的可用状态和使用说明"""
     try:
-        from xhshow import Xhshow  # type: ignore[import]
+        import xhshow  # type: ignore[import]
         xhshow_available = True
-        xhshow_version = getattr(Xhshow, "__version__", "unknown")
+        # xhshow 的模块 __version__ 可能滞后于实际已安装发行版，优先读取包元数据。
+        try:
+            xhshow_version = package_version("xhshow")
+        except PackageNotFoundError:
+            xhshow_version = getattr(xhshow, "__version__", "unknown")
     except ImportError:
         xhshow_available = False
         xhshow_version = None
