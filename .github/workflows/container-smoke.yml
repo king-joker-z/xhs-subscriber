@@ -1,0 +1,61 @@
+name: Container Smoke Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Build and verify runtime readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build image
+        run: docker build --tag xhs-subscriber:smoke .
+
+      - name: Start temporary container
+        run: |
+          docker run --detach --name xhs-subscriber-smoke \
+            --publish 127.0.0.1:18080:8080 \
+            --env XHS_COOKIE=test \
+            --env CONFIG_PATH=/tmp/config.yaml \
+            xhs-subscriber:smoke
+
+      - name: Verify health and downloader readiness
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/health >/tmp/health.json; then
+              break
+            fi
+            sleep 2
+          done
+          test -s /tmp/health.json
+          curl --fail --silent --show-error http://127.0.0.1:18080/api/status >/tmp/status.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          health = json.loads(Path("/tmp/health.json").read_text())
+          status = json.loads(Path("/tmp/status.json").read_text())
+          assert health["status"] == "ok", health
+          assert status["downloader_available"] is True, status
+          assert status["downloader_error"] is None, status
+          print("Container smoke test passed: downloader is ready")
+          PY
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs xhs-subscriber-smoke || true
+
+      - name: Clean up temporary container
+        if: always()
+        run: docker rm --force xhs-subscriber-smoke || true

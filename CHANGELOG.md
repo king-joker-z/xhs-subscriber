@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-07-27 15:42 — 容器验证 CI
+
+### 迭代目标
+新增 GitHub Actions 容器冒烟测试，在托管 Runner 上完成真实 Docker build/run 验证，不依赖本机 Docker daemon。
+
+### 完成内容
+- **ci: 新增 `.github/workflows/container-smoke.yml`**
+  - checkout 时递归拉取 XHS-Downloader submodule
+  - 构建本地临时镜像并启动临时容器
+  - 使用 `XHS_COOKIE=test` 调用 `/health` 与 `/api/status`
+  - 断言 `downloader_available=true`、`downloader_error=null`
+  - 失败时输出容器日志，任务结束时始终删除临时容器
+  - 支持 main 推送、PR 和手动触发
+- **test: 新增 CI 工作流静态回归测试**
+  - 校验镜像构建、子模块 checkout、下载器就绪断言和容器清理步骤
+
+### 测试结果
+- Python 3.12 单元测试：11/11 通过
+- Python 3.12 对 `src`、`tests` 的语法编译检查通过
+- `git diff --check` 通过
+- 本机 Docker daemon 未运行，无法在本机直接构建；此前已通过临时 Python 环境等价验证主项目和子模块依赖组合可使 `downloader_available=true`
+- 推送后由 GitHub Actions 执行真实容器 build/run 验证
+
+### 下次迭代建议
+- 观察本次 GitHub Actions 容器烟测结果；如失败，根据日志修正 Docker 构建或启动配置
+- 使用有效 Cookie 验证主页订阅、短链接解析与下载全链路
+
+---
+
 ## 2026-07-27 15:00 — 迭代 #179
 
 ### 迭代目标
