@@ -632,6 +632,10 @@ _UI_HTML = """\
         <div class="lbl">Cookie 状态</div>
       </div>
       <div class="stat">
+        <div class="val" id="stat-downloader">—</div>
+        <div class="lbl">下载器状态</div>
+      </div>
+      <div class="stat">
         <div class="val" id="stat-subs">—</div>
         <div class="lbl">订阅数量（启用/全部）</div>
       </div>
@@ -809,6 +813,17 @@ async function loadStatus() {
       }
       cookieEl.innerHTML = cookieLabel;
     }
+    // 下载器状态：健康服务不代表下载器依赖已就绪，单独展示避免误判。
+    var downloaderEl = document.getElementById('stat-downloader');
+    if (downloaderEl) {
+      if (d.downloader_available) {
+        downloaderEl.innerHTML = '<span class="dot green"></span>就绪';
+        downloaderEl.title = 'XHS-Downloader 已加载';
+      } else {
+        downloaderEl.innerHTML = '<span class="dot red"></span>不可用';
+        downloaderEl.title = d.downloader_error || 'XHS-Downloader 未就绪';
+      }
+    }
     document.getElementById('stat-interval').textContent = d.interval_hours;
     if (document.getElementById('stat-maxbatch')) {
       document.getElementById('stat-maxbatch').textContent = d.max_batch ?? 30;
@@ -848,6 +863,8 @@ async function loadStatus() {
     renderSubTable(d);
   } catch(e) {
     document.getElementById('stat-status').textContent = '连接失败';
+    var downloaderEl = document.getElementById('stat-downloader');
+    if (downloaderEl) downloaderEl.textContent = '—';
     console.error(e);
   }
 }
