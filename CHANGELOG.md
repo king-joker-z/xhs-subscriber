@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-07-27 14:00 — 迭代 #178
+
+### 迭代目标
+让服务状态接口明确暴露 XHS-Downloader 子模块的可用性，避免健康检查正常但实际下载能力因依赖缺失不可用时难以定位。
+
+### 完成内容
+- **feat: 增强 `/api/status` 下载器可观测性**
+  - 新增 `downloader_available`：标识 XHS-Downloader 及其依赖是否成功导入
+  - 新增 `downloader_error`：不可用时返回简短导入错误，帮助定位缺失依赖（例如 `fastmcp`）
+  - 维持下载器为可选组件的既有行为：无订阅/管理 UI 场景不会因其不可用而导致服务不可启动
+- **test: 新增状态接口回归测试**
+  - 覆盖下载器不可用时状态接口返回 false 与导入错误原因
+- **环境与上游检查**
+  - Docker CLI 已安装但 daemon 未运行，无法在本机执行镜像构建；Dockerfile 依赖安装规则已保留并通过静态测试
+  - XHS-Downloader `master` 仍为 `cdc02d0`，当前已集成 `develop` 修复为 `d54b08f`，无新增提交
+  - xhshow 最新公开版本仍为 0.1.9
+
+### 测试结果
+- Python 3.12 单元测试：9/9 通过
+- Python 3.12 对 `src`、`tests` 的语法编译检查通过
+- 使用 `XHS_COOKIE="test"` 启动隔离服务成功
+- `GET /health` 返回 HTTP 200 和 `status=ok`
+- `GET /api/status` 正确返回 `downloader_available=false` 与 `downloader_error="No module named 'fastmcp'"`
+- 测试服务进程已停止，未留下端口占用
+- 完整下载测试：未检测到有效 Cookie，待用户提供 Cookie 后验证
+
+### 下次迭代建议
+- 启动 Docker daemon 后构建镜像，验证容器内 `downloader_available=true`
+- 使用有效 Cookie 验证主页订阅、短链接解析与下载全链路
+
+---
+
 ## 2026-07-27 13:00 — 迭代 #177
 
 ### 迭代目标

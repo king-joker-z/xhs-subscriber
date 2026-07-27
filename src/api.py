@@ -110,6 +110,8 @@ class StatusResponse(BaseModel):
     last_check_at: str | None  # ISO 8601 UTC，None 表示尚未执行过
     cookie_status: str  # unknown / ok / expired / error
     cookie_nickname: str  # Cookie 有效时的登录用户昵称，其他状态为空字符串
+    downloader_available: bool = False  # XHS-Downloader 子模块及其依赖是否可用
+    downloader_error: str | None = None  # 不可用时的简短导入错误，供 UI/诊断展示
     is_checking: bool = False  # 当前是否正在执行全量检查
 
 
@@ -237,6 +239,16 @@ async def api_status() -> StatusResponse:
         if _scheduler.last_check_at is not None:
             last_check_at = _scheduler.last_check_at.isoformat()
 
+    # 下载器是可选组件：无订阅时服务仍可用，但 UI/诊断需知道其实际可用性。
+    try:
+        from . import fetcher as fetcher_module
+        downloader_available = fetcher_module._XHS_AVAILABLE
+        downloader_error = None if downloader_available else (fetcher_module._XHS_IMPORT_ERROR or "未知导入错误")
+    except Exception as exc:
+        logger.warning("读取 XHS-Downloader 状态失败：%s", exc)
+        downloader_available = False
+        downloader_error = str(exc)
+
     return StatusResponse(
         status="ok",
         version=_VERSION,
@@ -254,6 +266,8 @@ async def api_status() -> StatusResponse:
         last_check_at=last_check_at,
         cookie_status=_scheduler.cookie_status if _scheduler is not None else "unknown",
         cookie_nickname=_scheduler.cookie_nickname if _scheduler is not None else "",
+        downloader_available=downloader_available,
+        downloader_error=downloader_error,
         is_checking=_scheduler._run_once_active if _scheduler is not None else False,
     )
 
