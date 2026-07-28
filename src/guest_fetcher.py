@@ -23,6 +23,7 @@ import random
 import re
 import string
 import time
+from urllib.parse import parse_qs, urlparse
 from typing import Any, Optional
 
 import httpx
@@ -49,7 +50,6 @@ _UA_POOL = [
 _NOTE_ID_PATTERN = re.compile(
     r"(?:explore|discovery/item|user/profile/[^/]+)/([a-f0-9]{24})"
 )
-_XSEC_TOKEN_PATTERN = re.compile(r"xsec_token=([^&]+)")
 
 
 def _random_ua() -> str:
@@ -104,9 +104,12 @@ def _extract_note_id(url: str) -> Optional[str]:
 
 
 def _extract_xsec_token(url: str) -> str:
-    """从 URL 中提取 xsec_token"""
-    m = _XSEC_TOKEN_PATTERN.search(url)
-    return m.group(1) if m else ""
+    """从 URL 查询参数中提取并 URL 解码 xsec_token。"""
+    try:
+        values = parse_qs(urlparse(url).query, keep_blank_values=True).get("xsec_token", [])
+        return values[0] if values else ""
+    except (TypeError, ValueError):
+        return ""
 
 
 class GuestFetcher:

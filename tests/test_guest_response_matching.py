@@ -46,6 +46,14 @@ class GuestResponseMatchingTests(unittest.TestCase):
         self.assertEqual(result["note_id"], note_id)
         self.assertEqual(result["title"], "target")
         self.assertEqual(result["image_urls"], ["https://example.com/target.jpg"])
+    def test_extracts_and_decodes_xsec_token_from_query_parameter(self) -> None:
+        from src.guest_fetcher import _extract_xsec_token
+
+        token = _extract_xsec_token(
+            "https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?"
+            "foo=xsec_token%3Dwrong&xsec_token=token%2Bvalue%3D%3D&xsec_source=pc_feed"
+        )
+        self.assertEqual(token, "token+value==")
 
 
 if __name__ == "__main__":
