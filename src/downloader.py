@@ -345,6 +345,16 @@ class Downloader:
                                     f"响应 Content-Type 为 text/html，疑似 HTML 错误页面，"
                                     f"URL：{url}，目标：{dest.name}"
                                 )
+                            expected_bytes: int | None = None
+                            content_length = resp.headers.get("content-length")
+                            if content_length:
+                                try:
+                                    expected_bytes = int(content_length)
+                                except ValueError:
+                                    logger.warning(
+                                        "响应 Content-Length 非法，忽略完整性校验：%r（目标：%s）",
+                                        content_length, dest.name,
+                                    )
                             downloaded_bytes = 0
                             last_log_bytes = 0
                             with open(tmp_path, "wb") as f:
@@ -365,6 +375,13 @@ class Downloader:
             if downloaded_bytes == 0:
                 raise ValueError(
                     f"下载结果为空文件（{downloaded_bytes} 字节），URL：{url}，目标：{dest.name}"
+                )
+            # DL-61 修复：服务端声明 Content-Length 时，必须确认流实际字节数一致。
+            # 防止连接提前中断却被当作成功下载并写入去重数据库。
+            if expected_bytes is not None and downloaded_bytes != expected_bytes:
+                raise ValueError(
+                    f"下载结果长度不完整（期望 {expected_bytes} 字节，实际 {downloaded_bytes} 字节），"
+                    f"URL：{url}，目标：{dest.name}"
                 )
 
             # 原子重命名（仅在全部重试成功后执行）
