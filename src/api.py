@@ -13,12 +13,14 @@ import logging
 import os
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version as package_version
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Header, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool, field_validator, model_validator
 
 if TYPE_CHECKING:
     from .scheduler import XHSScheduler
@@ -1248,10 +1250,79 @@ async def web_ui() -> HTMLResponse:
 #  访客模式（无 Cookie）下载接口
 # ------------------------------------------------------------------ #
 
+_ALLOWED_PUBLIC_WORK_HOSTS = {"xiaohongshu.com", "www.xiaohongshu.com", "xhslink.com", "www.xhslink.com"}
+_WORK_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+_SHORT_LINK_PATTERN = re.compile(r"^[A-Za-z0-9_-]{4,64}$")
+_XSEC_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,512}$")
+_XHSLINK_RESERVED_PATHS = {"search", "user", "profile", "collection", "favorites", "likes"}
+
+
+def _is_public_single_work_url(url: str) -> bool:
+    """Return whether *url* is a strict canonical public single-work link.
+
+    Validation is entirely local: redirects are never resolved and malformed
+    inputs therefore cannot start signing, downloader work, or network I/O.
+    """
+    if not url or "%" in url or "\\" in url or any(ord(char) < 32 or ord(char) == 127 for char in url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError:
+        return False
+    if parsed.scheme != "https" or parsed.username or parsed.password or port is not None:
+        return False
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if host not in _ALLOWED_PUBLIC_WORK_HOSTS or "#" in url:
+        return False
+    # Canonical paths cannot include an empty segment, including a trailing slash.
+    if not parsed.path or "//" in parsed.path or parsed.path.endswith("/"):
+        return False
+    parts = parsed.path.split("/")[1:]
+    if host in {"xiaohongshu.com", "www.xiaohongshu.com"}:
+        if "?" in url:
+            prefix = "xsec_token="
+            if not parsed.query.startswith(prefix) or _XSEC_TOKEN_PATTERN.fullmatch(parsed.query[len(prefix):]) is None:
+                return False
+        return (
+            len(parts) == 2
+            and parts[0] == "explore"
+            and _WORK_ID_PATTERN.fullmatch(parts[1]) is not None
+        ) or (
+            len(parts) == 3
+            and parts[:2] == ["discovery", "item"]
+            and _WORK_ID_PATTERN.fullmatch(parts[2]) is not None
+        )
+    return (
+        "?" not in url
+        and len(parts) == 1
+        and parts[0].lower() not in _XHSLINK_RESERVED_PATHS
+        and _SHORT_LINK_PATTERN.fullmatch(parts[0]) is not None
+    )
+
+
 class GuestDownloadRequest(BaseModel):
-    """访客模式下载请求"""
-    url: str  # 小红书笔记 URL（需含 xsec_token）
-    download: bool = False  # 是否同时下载媒体文件到本地
+    """One explicitly authorized public single-work import request."""
+
+    url: str
+    authorized: StrictBool | None = None
+    download: bool = False
+
+    @field_validator("url")
+    @classmethod
+    def validate_public_single_work_url(cls, value: str) -> str:
+        if not _is_public_single_work_url(value):
+            raise ValueError(
+                "仅支持 xiaohongshu.com 或 xhslink.com 的公开单作品链接；"
+                "主页、搜索、收藏/点赞和合集入口不支持"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def require_explicit_authorization(self) -> "GuestDownloadRequest":
+        if self.authorized is not True:
+            raise ValueError("必须明确确认已获授权后才能导入公开作品链接")
+        return self
 
 
 class GuestDownloadResponse(BaseModel):
@@ -1373,5 +1444,5 @@ async def api_guest_info() -> dict:
             "风控更严格，请求频率受限（每次间隔 3-8 秒）",
             "触发风控验证（461）时无法自动通过",
         ],
-        "usage": "POST /api/guest-download {\"url\": \"https://www.xiaohongshu.com/explore/xxx?xsec_token=yyy\"}",
+        "usage": "POST /api/guest-download {\"url\": \"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa\", \"authorized\": true}",
     }
