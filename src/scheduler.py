@@ -204,12 +204,13 @@ class XHSScheduler:
         if self._fetcher is not None:
             await self._fetcher.stop()
 
-    async def run_once(self) -> None:
-        """立即执行一次全量检查（所有订阅）。若已有检查正在执行则跳过，防止并发重复触发。"""
-        if self._run_once_active:
-            logger.info("run_once 已在执行中，跳过本次触发")
-            return
-        self._run_once_active = True
+    async def run_once(self, *, _reserved: bool = False) -> None:
+        """立即执行一次全量检查；普通调用会自行占用执行槽位。"""
+        if not _reserved:
+            if self._run_once_active:
+                logger.info("run_once 已在执行中，跳过本次触发")
+                return
+            self._run_once_active = True
         try:
             _start = time.monotonic()
             # SC-47 修复：subscriptions 空列表早期退出，避免执行无意义的 gather 调用
@@ -382,10 +383,40 @@ class XHSScheduler:
         logger.info("执行启动时全量检查...")
         await self.run_once()
 
+    async def _run_once_reserved(self) -> None:
+        """执行已由 API 原子占用的全量检查，并确保异常不遗留后台任务警告。"""
+        try:
+            await self.run_once(_reserved=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("API 立即执行任务异常")
+        finally:
+            self._run_once_active = False
+
+    def _release_run_once_slot(self, _: asyncio.Task[object] | None = None) -> None:
+        """释放 API 立即检查占用的执行槽位（含任务取消前未启动的情形）。"""
+        self._run_once_active = False
+
+    def try_trigger_now(self) -> bool:
+        """原子接纳一次 API 立即检查；成功时同步占用执行槽位。"""
+        if self._run_once_active:
+            return False
+        self._run_once_active = True
+        coroutine = self._run_once_reserved()
+        try:
+            task = asyncio.get_running_loop().create_task(coroutine)
+            task.add_done_callback(self._release_run_once_slot)
+        except Exception:
+            coroutine.close()
+            self._run_once_active = False
+            raise
+        logger.info("已原子接纳立即执行任务")
+        return True
+
     def trigger_now(self) -> None:
-        """立即触发一次调度（供 API /run 调用）"""
-        asyncio.get_running_loop().create_task(self.run_once())
-        logger.info("已触发立即执行")
+        """立即触发一次调度（供兼容调用方使用）。"""
+        self.try_trigger_now()
 
     def stop(self) -> None:
         """停止调度器"""

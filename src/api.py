@@ -153,23 +153,27 @@ async def run_now(response: Response) -> RunResponse:
     异步触发调度器立即执行一次全量检查。
     返回 HTTP 202 Accepted，实际执行在后台进行。
 
-    UI-3 修复：若调度器当前正在执行（_run_once_active=True），
-    返回 HTTP 409 Conflict + status="already_running"，
-    避免重复触发并给调用方明确的语义反馈。
+    由调度器原子接纳后台任务；若已有检查已占用执行槽位，返回 HTTP 409
+    Conflict + status="already_running"，避免检查—创建任务之间的竞态。
     """
     if _scheduler is None:
         logger.warning("/run 被调用但调度器尚未初始化")
         response.status_code = 503
         return RunResponse(status="scheduler_not_ready")
 
-    # UI-3 修复：防重入保护
-    if _scheduler._run_once_active:
+    try:
+        accepted = _scheduler.try_trigger_now()
+    except RuntimeError:
+        logger.exception("/run 创建后台任务失败")
+        response.status_code = 503
+        return RunResponse(status="scheduler_not_ready")
+
+    if not accepted:
         logger.info("/run 被调用但任务已在执行中，返回 409")
         response.status_code = 409
         return RunResponse(status="already_running")
 
-    _scheduler.trigger_now()
-    logger.info("/run 触发立即执行")
+    logger.info("/run 原子接纳立即执行任务")
     return RunResponse(status="accepted")
 
 
