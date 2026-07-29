@@ -55,6 +55,32 @@ class GuestDownloadClassificationTests(unittest.TestCase):
     def _post(self) -> object:
         return self.client.post("/api/guest-download", json={"url": _URL, "authorized": True})
 
+    def _assert_safe_response_schema(self, payload: dict[str, object], *, task_ref: str | None) -> None:
+        """The compatibility schema keeps sensitive fields present but always null in guest mode."""
+        self.assertEqual(
+            set(payload),
+            {
+                "status", "result_type", "note_id", "title", "author", "type",
+                "video_url", "image_urls", "task_ref", "guest_mode", "message",
+            },
+        )
+        self.assertTrue(payload["guest_mode"])
+        self.assertEqual(payload["task_ref"], task_ref)
+        for field in ("note_id", "title", "author", "video_url", "image_urls"):
+            self.assertIsNone(payload[field], field)
+
+    def test_openapi_and_guest_info_describe_controlled_probe_contract(self) -> None:
+        schema = self.client.get("/openapi.json").json()
+        download = schema["paths"]["/api/guest-download"]["post"]
+        info = schema["paths"]["/api/guest-info"]["get"]
+        for operation in (download, info):
+            text = f"{operation['summary']} {operation['description']} {operation['responses']['200']['description']}"
+            self.assertIn("不支持本地媒体下载", text)
+            self.assertIn("result_type", text)
+        payload = self.client.get("/api/guest-info").json()
+        self.assertIn("不返回作品详情或媒体 URL", payload["description"])
+        self.assertIn("result_type", " ".join(payload["limitations"]) + payload["usage"])
+
     def test_classifies_success_and_records_anonymous_metric(self) -> None:
         _GuestFetcherStub.outcome = {
             "note_id": "a" * 24,
@@ -76,11 +102,7 @@ class GuestDownloadClassificationTests(unittest.TestCase):
         self.assertEqual(payload["task_ref"].split(":", 1)[0], "www.xiaohongshu.com/public-work")
         self.assertNotIn("aaaaaaaaaaaaaaaaaaaaaaaa", payload["task_ref"])
         self.assertNotIn("token_1234", payload["task_ref"])
-        self.assertIsNone(payload["note_id"])
-        self.assertIsNone(payload["title"])
-        self.assertIsNone(payload["author"])
-        self.assertIsNone(payload["video_url"])
-        self.assertIsNone(payload["image_urls"])
+        self._assert_safe_response_schema(payload, task_ref=payload["task_ref"])
         self.assertNotIn(_URL, repr(api._guest_download_metrics))
         self.assertNotIn("public work", repr(api._guest_download_metrics))
 
@@ -167,11 +189,7 @@ class GuestDownloadClassificationTests(unittest.TestCase):
         for part in sensitive_parts[1:]:
             self.assertNotIn(part, observed)
         self.assertEqual(payload["task_ref"].split(":", 1)[0], "www.xiaohongshu.com/public-work")
-        self.assertIsNone(payload["note_id"])
-        self.assertIsNone(payload["title"])
-        self.assertIsNone(payload["author"])
-        self.assertIsNone(payload["video_url"])
-        self.assertIsNone(payload["image_urls"])
+        self._assert_safe_response_schema(payload, task_ref=payload["task_ref"])
         self.assertEqual(payload["type"], "image")
 
     def test_success_response_uses_only_fixed_type_and_drops_polluted_display_fields(self) -> None:
@@ -212,8 +230,7 @@ class GuestDownloadClassificationTests(unittest.TestCase):
                 payload = response.json()
                 self.assertEqual(payload["result_type"], "success")
                 self.assertEqual(payload["type"], expected_type)
-                self.assertIsNone(payload["title"])
-                self.assertIsNone(payload["author"])
+                self._assert_safe_response_schema(payload, task_ref=payload["task_ref"])
                 observed = f"{payload!r} {api._guest_download_metrics!r}"
                 for part in polluted_parts:
                     self.assertNotIn(part, observed)
@@ -242,9 +259,9 @@ class GuestDownloadClassificationTests(unittest.TestCase):
             "image_urls": ["https://media.invalid/image?token=media-secret"],
             "quality": "standard",
         }
-        with patch("src.guest_fetcher.GuestFetcher", _GuestFetcherStub), patch(
-            "src.downloader.Downloader", side_effect=AssertionError("downstream-error-secret")
-        ) as downloader, self.assertNoLogs("src.api", level="WARNING"):
+        with patch("src.guest_fetcher.GuestFetcher", _GuestFetcherStub), self.assertNoLogs(
+            "src.api", level="WARNING"
+        ):
             response = self.client.post(
                 "/api/guest-download",
                 json={"url": sensitive_url, "authorized": True, "download": True},
@@ -256,8 +273,8 @@ class GuestDownloadClassificationTests(unittest.TestCase):
         self.assertIn("不支持本地媒体下载", payload["message"])
         self.assertEqual(_GuestFetcherStub.calls, 1)
         self.assertEqual(_GuestFetcherStub.meta_calls, 0)
-        downloader.assert_not_called()
         self.assertEqual(api._guest_download_metrics["unsupported"]["count"], 1)
+        self._assert_safe_response_schema(payload, task_ref=payload["task_ref"])
         observed = f"{payload!r} {api._guest_download_metrics!r}"
         for part in sensitive_parts:
             self.assertNotIn(part, observed)
@@ -290,7 +307,9 @@ class GuestDownloadClassificationTests(unittest.TestCase):
                     )
 
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json()["result_type"], result_type)
+                payload = response.json()
+                self.assertEqual(payload["result_type"], result_type)
+                self._assert_safe_response_schema(payload, task_ref=None)
                 self.assertEqual(_GuestFetcherStub.calls, 1)
                 self.assertEqual(_GuestFetcherStub.urls, [sensitive_url])
                 observed = f"{response.text} {api._guest_download_metrics!r}"
@@ -321,7 +340,9 @@ class GuestDownloadClassificationTests(unittest.TestCase):
                     response = self._post()
 
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json()["result_type"], result_type)
+                payload = response.json()
+                self.assertEqual(payload["result_type"], result_type)
+                self._assert_safe_response_schema(payload, task_ref=None)
                 self.assertEqual(_GuestFetcherStub.calls, 1)
                 self.assertEqual(api._guest_download_metrics[result_type]["count"], 1)
 

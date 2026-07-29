@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 待发布
+- **fix: 对齐访客探测接口安全契约**
+  - `/api/guest-info` 和 `/api/guest-download` 的 OpenAPI 说明明确：仅受控探测已授权的公开单作品，不返回详情或媒体 URL，不支持本地下载
+  - 明确客户端必须按 `result_type` 判断业务结果，HTTP 200 仅表示请求已被处理
+  - 回归测试固定兼容响应 schema：敏感字段保留但始终为 `null`；失败结果不返回 `task_ref`
+  - 修复 `download=true` 测试中的失效 Downloader patch，验证不触达元数据转换或下载下游
+
 ---
 
 ## 2026-07-29 16:22 — 迭代 #194

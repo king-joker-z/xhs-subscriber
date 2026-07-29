@@ -1427,11 +1427,21 @@ def _guest_response(
 @app.post(
     "/api/guest-download",
     response_model=GuestDownloadResponse,
-    summary="访客模式获取笔记（无需 Cookie）",
+    summary="受控探测公开单作品（访客模式）",
+    description=(
+        "仅在调用方明确确认已获授权后，受控探测一条公开作品链接。"
+        "不会返回作品详情、作者信息或媒体 URL，也不支持本地媒体下载。"
+        "请求已被安全校验时可返回 HTTP 200；客户端必须根据 `result_type` 判断成功、"
+        "平台拒绝、授权要求、超时或不支持等结果，而不能仅以 HTTP 200 判定成功。"
+    ),
+    response_description=(
+        "固定结果分类及最小化字段；成功探测或明确不支持下载时可含不可逆 task_ref，"
+        "不返回作品详情或媒体 URL。"
+    ),
     tags=["guest"],
 )
 async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse:
-    """Fetch one authorized public work without retrying platform rejections."""
+    """Probe one authorized public work without exposing metadata or downloading media."""
     from .guest_fetcher import (
         GuestAuthorizationRequiredError,
         GuestFetcher,
@@ -1509,11 +1519,17 @@ async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse
 
 @app.get(
     "/api/guest-info",
-    summary="访客模式状态信息",
+    summary="受控公开作品探测说明（访客模式）",
+    description=(
+        "说明无需 XHS_COOKIE 的受控公开作品探测能力及其安全限制："
+        "不返回作品详情或媒体 URL，不支持本地媒体下载；"
+        "POST /api/guest-download 的业务结果须由 result_type 判断。"
+    ),
+    response_description="访客探测可用性和最小化安全限制说明。",
     tags=["guest"],
 )
 async def api_guest_info() -> dict:
-    """返回访客模式的可用状态和使用说明"""
+    """Return controlled public-work probe availability and its safety constraints."""
     try:
         import xhshow  # type: ignore[import]
         xhshow_available = True
@@ -1529,13 +1545,19 @@ async def api_guest_info() -> dict:
     return {
         "guest_mode_available": xhshow_available,
         "xhshow_version": xhshow_version,
-        "description": "访客模式允许在无 XHS_COOKIE 的情况下获取公开笔记内容",
+        "description": (
+            "访客模式仅在无 XHS_COOKIE 时受控探测一条已获授权的公开作品链接；"
+            "不返回作品详情或媒体 URL，也不支持本地媒体下载。"
+        ),
         "limitations": [
-            "仅支持单条笔记下载（需提供含 xsec_token 的完整 URL）",
-            "不支持博主主页批量爬取",
-            "可能获取到较低画质的媒体文件",
-            "风控更严格，请求频率受限（每次间隔 3-8 秒）",
-            "触发风控验证（461）时无法自动通过",
+            "仅支持一条已获授权的公开作品链接探测，不支持主页、搜索、收藏/点赞或合集入口",
+            "不返回作品 ID、标题、作者、媒体 URL 或封面 URL",
+            "不支持本地媒体下载；download=true 返回 result_type=unsupported",
+            "HTTP 200 仅表示请求已被处理，客户端必须根据 result_type 判断业务结果",
+            "风控更严格，触发风控验证（461）时无法自动通过",
         ],
-        "usage": "POST /api/guest-download {\"url\": \"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa\", \"authorized\": true}",
+        "usage": (
+            "POST /api/guest-download {\"url\": \"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa\", "
+            "\"authorized\": true}；根据响应 result_type 判断业务结果"
+        ),
     }
