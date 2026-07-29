@@ -14,6 +14,7 @@ import os
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version as package_version
 import re
+import secrets
 import time
 import uuid
 from pathlib import Path
@@ -1368,9 +1369,16 @@ class GuestDownloadResponse(BaseModel):
 
 
 _guest_download_metrics: dict[str, dict[str, int]] = {}
+_guest_expired_result_deletions: dict[str, int] = {}
 from .guest_retention import GuestResultStore
 
 _guest_result_store: GuestResultStore | None = None
+
+
+def _record_guest_expired_cleanup(day: str, count: int) -> None:
+    """Record only a UTC day bucket and count for automatic retention cleanup."""
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) and count > 0:
+        _guest_expired_result_deletions[day] = _guest_expired_result_deletions.get(day, 0) + count
 
 
 def set_guest_result_store(store: GuestResultStore | None) -> None:
@@ -1612,6 +1620,8 @@ async def api_delete_guest_result(request: Request) -> JSONResponse:
         return _guest_result_json(deleted)
     try:
         payload = await _guest_result_store.delete(task_ref)
+        if payload.get("message") == "结果已删除，无法恢复，仅保留不可识别聚合统计":
+            payload = {**payload, "confirmation": secrets.token_urlsafe(24)}
     except Exception:
         payload = deleted
     return _guest_result_json(payload)

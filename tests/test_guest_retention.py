@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -21,11 +22,13 @@ class GuestRetentionTests(unittest.TestCase):
     def _store(self, root: Path, days: int = 7) -> GuestResultStore:
         return GuestResultStore(root, retention_days=days)
 
-    def _write_task(self, root: Path, task_id: str, created_at: datetime, status: str = "ok") -> Path:
+    def _write_task(
+        self, root: Path, task_id: str, created_at: datetime, status: str = "ok", result_type: str = "success"
+    ) -> Path:
         root.mkdir(parents=True, exist_ok=True)
         path = root / task_id
         path.write_text(json.dumps({
-            "task_id": task_id, "result_type": "success", "status": status,
+            "task_id": task_id, "result_type": result_type, "status": status,
             "created_at": created_at.isoformat(),
         }), encoding="utf-8")
         return path
@@ -213,8 +216,8 @@ class GuestRetentionTests(unittest.TestCase):
             root = Path(directory) / ".guest-results"
             store = self._store(root, days=1)
             now = datetime.now(timezone.utc)
-            for task_id, status in (("5" * 16, "ok"), ("6" * 16, "error"), ("7" * 16, "error")):
-                self._write_task(root, task_id, now, status)
+            for task_id, status, result_type in (("5" * 16, "ok", "success"), ("6" * 16, "error", "unsupported"), ("7" * 16, "error", "success")):
+                self._write_task(root, task_id, now, status, result_type)
             refs = [
                 f"www.xiaohongshu.com/public-work:{'5' * 16}",
                 f"xhslink.com/short-link:{'6' * 16}",
@@ -248,13 +251,80 @@ class GuestRetentionTests(unittest.TestCase):
 
             for response in deleted:
                 self._assert_private_response(response, *refs, "5" * 16, "6" * 16, "7" * 16)
-                self.assertEqual(response.json(), {"status": "deleted", "message": "结果已删除，无法恢复，仅保留不可识别聚合统计"})
+                payload = response.json()
+                self.assertEqual(payload["status"], "deleted")
+                self.assertEqual(payload["message"], "结果已删除，无法恢复，仅保留不可识别聚合统计")
+                self.assertRegex(payload["confirmation"], r"^[A-Za-z0-9_-]{32}$")
+                self.assertNotIn(payload["confirmation"], repr(api._guest_download_metrics))
+                self.assertNotIn(payload["confirmation"], repr(api._guest_expired_result_deletions))
+                self.assertNotIn(payload["confirmation"], (root / ("5" * 16)).read_text(encoding="utf-8") if (root / ("5" * 16)).exists() else "")
+            self.assertEqual(len({response.json()["confirmation"] for response in deleted}), len(deleted))
             for response in (json_body, form_body, text_body, query, duplicate_header, repeated, invalid, symlink_result, after_get):
                 self._assert_private_response(response, *refs, "private.invalid", "secret", "5" * 16, "6" * 16, "7" * 16, "8" * 16)
                 self.assertEqual(response.json(), {"status": "deleted", "message": _DELETED_MESSAGE})
             self.assertEqual(api._guest_download_metrics, metrics_before)
             self.assertTrue(outside.exists())
             self.assertTrue(symlink.is_symlink())
+
+    def test_manual_expiry_cleanup_never_reports_aggregate_for_get_or_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / ".guest-results"
+            observed: dict[str, int] = {}
+            store = GuestResultStore(root, retention_days=1, on_expired_cleanup=lambda day, count: observed.update({day: count}))
+            now = datetime(2026, 7, 29, tzinfo=timezone.utc)
+            get_id, delete_id = "a" * 16, "b" * 16
+            self._write_task(root, get_id, now - timedelta(days=2))
+            self._write_task(root, delete_id, now - timedelta(days=2))
+
+            get_result = asyncio.run(store.get(f"www.xiaohongshu.com/public-work:{get_id}", now))
+            delete_result = asyncio.run(store.delete(f"xhslink.com/short-link:{delete_id}", now))
+
+            self.assertEqual(get_result, {"status": "deleted", "message": _DELETED_MESSAGE})
+            self.assertEqual(delete_result, {"status": "deleted", "message": _DELETED_MESSAGE})
+            self.assertFalse((root / get_id).exists())
+            self.assertFalse((root / delete_id).exists())
+            self.assertEqual(observed, {})
+
+    def test_expired_cleanup_callback_failure_is_isolated_from_cleanup_and_manual_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / ".guest-results"
+            now = datetime(2026, 7, 29, tzinfo=timezone.utc)
+            secret = "https://private.invalid/?token=secret"
+
+            def failing_callback(day: str, count: int) -> None:
+                raise RuntimeError(secret)
+
+            store = GuestResultStore(root, retention_days=1, on_expired_cleanup=failing_callback)
+            self._write_task(root, "c" * 16, now - timedelta(days=2))
+            with self.assertLogs("src.guest_retention", level="WARNING") as logs:
+                self.assertEqual(asyncio.run(store.cleanup(now, record_expired_cleanup=True)), 1)
+            self.assertNotIn(secret, "\n".join(logs.output))
+            self.assertTrue(any("已安全跳过" in entry for entry in logs.output))
+
+            self._write_task(root, "d" * 16, now - timedelta(days=2))
+            self._write_task(root, "e" * 16, now - timedelta(days=2))
+            self.assertEqual(
+                asyncio.run(store.get(f"www.xiaohongshu.com/public-work:{'d' * 16}", now)),
+                {"status": "deleted", "message": _DELETED_MESSAGE},
+            )
+            self.assertEqual(
+                asyncio.run(store.delete(f"xhslink.com/short-link:{'e' * 16}", now)),
+                {"status": "deleted", "message": _DELETED_MESSAGE},
+            )
+
+    def test_expired_cleanup_only_updates_anonymous_day_count_when_explicitly_automatic(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / ".guest-results"
+            observed: dict[str, int] = {}
+            store = GuestResultStore(root, retention_days=1, on_expired_cleanup=lambda day, count: observed.update({day: count}))
+            now = datetime(2026, 7, 29, tzinfo=timezone.utc)
+            self._write_task(root, "9" * 16, now - timedelta(days=2), "error", "unsupported")
+
+            self.assertEqual(asyncio.run(store.cleanup(now, record_expired_cleanup=True)), 1)
+            self.assertEqual(observed, {"2026-07-29": 1})
+            text = repr(observed)
+            for sensitive in ("9" * 16, "unsupported", "xhslink", "token"):
+                self.assertNotIn(sensitive, text)
 
     def test_transfer_encoding_is_rejected_before_store_access(self) -> None:
         async def receive() -> dict[str, object]:
@@ -265,6 +335,44 @@ class GuestRetentionTests(unittest.TestCase):
             "query_string": b"", "headers": [(b"transfer-encoding", b"chunked")],
         }, receive=receive)
         self.assertTrue(asyncio.run(api._guest_delete_has_body(request)))
+
+    def test_lifespan_keeps_health_available_when_startup_cleanup_callback_fails(self) -> None:
+        from src import main
+
+        download_dir = tempfile.mkdtemp()
+        self._write_task(
+            Path(download_dir) / ".guest-results", "f" * 16,
+            datetime.now(timezone.utc) - timedelta(days=2),
+        )
+
+        class _Config:
+            download_dir = ""
+            guest_result_retention_days = 1
+            http_port = 8080
+
+        config = _Config()
+        config.download_dir = download_dir
+
+        class _Db:
+            async def close(self) -> None:
+                return None
+
+        class _Scheduler:
+            async def startup(self) -> None:
+                return None
+            def start(self) -> None:
+                return None
+            def stop(self) -> None:
+                return None
+            async def shutdown(self) -> None:
+                return None
+
+        with patch("src.main.get_config", return_value=config), patch("src.main.init_db", new=AsyncMock(return_value=_Db())), patch("src.main.XHSScheduler", return_value=_Scheduler()), patch("src.main._record_guest_expired_cleanup", side_effect=RuntimeError("https://private.invalid/?token=secret")):
+            with TestClient(main.app) as client:
+                response = client.get("/health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("private.invalid", response.text)
 
     def test_lifespan_keeps_health_available_when_startup_cleanup_fails(self) -> None:
         from src import main

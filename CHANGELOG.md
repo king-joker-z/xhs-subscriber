@@ -8,6 +8,17 @@
   - 提前删除不可恢复，只作用最小 guest 结果记录，不影响下载文件、订阅、Cookie、数据库或匿名聚合指标
   - 删除、读取与到期清理并发或 `unlink` 遇 `FileNotFoundError` 时统一返回最小 `deleted` 语义，不泄露或越界删除
 
+- **feat: 匿名确认 guest 结果主动删除**
+  - 主动成功删除仅在当前响应返回一次性随机确认号；不持久化、不记录、不支持查询或刷新，且无法由关联号、任务 ID、URL、token 或时间反推
+  - 自动到期清理仅更新 UTC 日粒度不可识别删除计数；手动读取/删除发现过期时仍清理记录，但不计入自动清理聚合
+  - 到期聚合回调失败安全隔离，不影响清理返回值、GET/DELETE、lifespan 或健康检查；Header bearer 与无 body DELETE 边界保持不变
+
+### 测试结果
+- guest 结果留存/删除与确认号专项：17/17 通过
+- Header bearer / DELETE 请求边界专项：22/22 通过
+- Python 3.12 全量 unittest：67/67 通过
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
 
   - 明确 `task_ref` 是不透明、短期、持有即查询（bearer）的结果关联号，不是作品 ID、下载任务或媒体凭证；仅 `success` 和 `download=true` 的 `unsupported` 返回
   - 明确 `GET /api/guest-results` 仅返回 `status`/`result_type`，非法、不存在或过期引用统一为 `deleted`，不记录或返回 URL、token、媒体 URL 或作品元数据

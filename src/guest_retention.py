@@ -6,7 +6,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +21,15 @@ _TASK_REF_RE = re.compile(
 class GuestResultStore:
     """Own only direct, regular task files in the dedicated guest root."""
 
-    def __init__(self, root: str | Path, retention_days: int = 7) -> None:
+    def __init__(
+        self,
+        root: str | Path,
+        retention_days: int = 7,
+        on_expired_cleanup: Callable[[str, int], None] | None = None,
+    ) -> None:
         self._root = Path(root).expanduser().resolve()
         self._retention = timedelta(days=max(1, int(retention_days)))
+        self._on_expired_cleanup = on_expired_cleanup
 
     @property
     def root(self) -> Path:
@@ -84,7 +90,7 @@ class GuestResultStore:
             created_at = datetime.fromisoformat(str(payload["created_at"]))
             current = now or datetime.now(timezone.utc)
             if created_at.tzinfo is None or current - created_at >= self._retention:
-                await self.cleanup(current)
+                await self.cleanup(current, record_expired_cleanup=False)
                 return {"status": "deleted", "message": _DELETED_MESSAGE}
             return {"status": payload.get("status", "error"), "result_type": payload.get("result_type", "invalid_request")}
         except (OSError, ValueError, KeyError, json.JSONDecodeError):
@@ -102,7 +108,7 @@ class GuestResultStore:
             created_at = datetime.fromisoformat(str(payload["created_at"]))
             current = now or datetime.now(timezone.utc)
             if created_at.tzinfo is None or current - created_at >= self._retention:
-                await self.cleanup(current)
+                await self.cleanup(current, record_expired_cleanup=False)
                 return {"status": "deleted", "message": _DELETED_MESSAGE}
             # Re-check immediately before unlink so a changed path is never treated as owned.
             if not self._owned_regular_task_file(path):
@@ -115,8 +121,8 @@ class GuestResultStore:
         except (FileNotFoundError, OSError, ValueError, KeyError, json.JSONDecodeError):
             return {"status": "deleted", "message": _DELETED_MESSAGE}
 
-    async def cleanup(self, now: datetime | None = None) -> int:
-        """Idempotently remove only expired, valid, direct task files."""
+    async def cleanup(self, now: datetime | None = None, *, record_expired_cleanup: bool = False) -> int:
+        """Remove expired owned files; only explicit automatic runs may report aggregates."""
         if self._root.is_symlink() or not self._root.is_dir():
             return 0
         current = now or datetime.now(timezone.utc)
@@ -140,4 +146,9 @@ class GuestResultStore:
                 deleted += 1
             except (FileNotFoundError, OSError, ValueError, KeyError, json.JSONDecodeError):
                 continue
+        if deleted and record_expired_cleanup and self._on_expired_cleanup is not None:
+            try:
+                self._on_expired_cleanup(current.date().isoformat(), deleted)
+            except Exception:
+                logger.warning("guest 到期清理聚合上报失败，已安全跳过")
         return deleted

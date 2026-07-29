@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from src.config import get_config, setup_logging
 from src.database import init_db
 from src.scheduler import XHSScheduler
-from src.api import app, set_scheduler, set_guest_result_store
+from src.api import app, set_scheduler, set_guest_result_store, _record_guest_expired_cleanup
 from src.guest_retention import GuestResultStore
 
 logger = logging.getLogger(__name__)
@@ -39,9 +39,10 @@ async def lifespan(application: FastAPI):
         guest_results = GuestResultStore(
             Path(config.download_dir) / ".guest-results",
             config.guest_result_retention_days,
+            on_expired_cleanup=_record_guest_expired_cleanup,
         )
         try:
-            await guest_results.cleanup()
+            await guest_results.cleanup(record_expired_cleanup=True)
         except Exception:
             logger.warning("guest 结果启动清理失败，已安全跳过")
         set_guest_result_store(guest_results)
