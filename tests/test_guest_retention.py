@@ -31,6 +31,16 @@ class GuestRetentionTests(unittest.TestCase):
         }), encoding="utf-8")
         return path
 
+    def test_openapi_contract_explains_minimal_bearer_result_lookup(self) -> None:
+        schema = TestClient(api.app).get("/openapi.json").json()
+        operation = schema["paths"]["/api/guest-results"]["get"]
+        text = f"{operation['summary']} {operation['description']} {operation['responses']['200']['description']}"
+        for expected in (
+            "task_ref", "bearer", "不是作品 ID、下载任务或媒体访问凭证",
+            "仅返回 status 与 result_type", "非法、不存在或过期", "不返回 URL、token 或作品元数据",
+        ):
+            self.assertIn(expected, text)
+
     def test_unexpired_record_is_retained_and_only_minimal_fields_are_returned(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / ".guest-results"

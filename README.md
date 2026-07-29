@@ -78,6 +78,7 @@ open http://localhost:8080/ui
 | `CONFIG_PATH` | ❌ | `/config/config.yaml` | 配置文件路径 |
 | `LOG_LEVEL` | ❌ | `INFO` | 日志级别 |
 | `HTTP_PORT` | ❌ | `8080` | HTTP 服务端口 |
+| `GUEST_RESULT_RETENTION_DAYS` | ❌ | `7` | 访客最小结果留存天数；仅允许 `1`–`365`，覆盖 `guest.result_retention_days` |
 | `XHS_ADMIN_TOKEN` | ❌ | - | 若设置，`POST /api/vacuum` 请求头 `X-Admin-Token` 必须匹配，防止未授权触发 |
 
 ### config.yaml 字段
@@ -94,6 +95,11 @@ downloader:
 logging:
   level: INFO
   dir: /data/logs
+
+guest:
+  # task_ref 对应最小结果的留存天数，默认 7，允许范围 1–365。
+  # task_ref 是不透明短期 bearer 结果关联号，不是作品 ID、下载任务或媒体凭证；请勿记录或分享。
+  result_retention_days: 7
 
 subscriptions:
   - name: "博主名称"
@@ -128,6 +134,9 @@ subscriptions:
 | GET | `/api/recent` | 最近下载记录列表（`?limit=10&post_type=video&user_id=xxx`） |
 | GET | `/api/stats` | 按日期下载统计（`?days=14`），返回每日 video/image/total 数量 |
 | POST | `/api/vacuum` | 执行 SQLite VACUUM（需 `X-Admin-Token` 头，若 `XHS_ADMIN_TOKEN` 已设置） |
+| POST | `/api/guest-download` | 受控探测一条已授权公开作品；不返回详情/媒体 URL、不下载。客户端按 `result_type` 判断；仅 `success` 与 `download=true` 的 `unsupported` 返回短期 `task_ref` |
+| GET | `/api/guest-results?task_ref=...` | 用不透明短期 bearer `task_ref` 查询，仅返回 `status`/`result_type`；非法、不存在或过期统一 `deleted`，不返回 URL、token 或作品元数据 |
+| GET | `/api/guest-info` | 访客探测、task_ref 和最小化留存限制说明 |
 | GET | `/ui` | **Web 管理界面**，浏览器打开 [http://localhost:8080/ui](http://localhost:8080/ui) 即可使用 |
 
 ## 构建镜像

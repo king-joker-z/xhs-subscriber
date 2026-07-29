@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### 待发布
+- **docs: 补齐 guest result 留存与查询契约**
+  - 明确 `task_ref` 是不透明、短期、持有即查询（bearer）的结果关联号，不是作品 ID、下载任务或媒体凭证；仅 `success` 和 `download=true` 的 `unsupported` 返回
+  - 明确 `GET /api/guest-results` 仅返回 `status`/`result_type`，非法、不存在或过期引用统一为 `deleted`，不记录或返回 URL、token、媒体 URL 或作品元数据
+  - 文档化默认 7 天、配置范围 1–365 天，以及 YAML `guest.result_retention_days` 与环境变量 `GUEST_RESULT_RETENTION_DAYS` 覆盖关系
+
+### 待发布
 - **feat: 安全到期删除 guest 结果记录**
   - guest 最小任务结果默认保留 7 天，支持明确配置覆盖；仅保存 opaque task ID、固定结果类型、状态和创建时间
   - 仅清理 `.guest-results` 直接子级中严格 16 位小写 hex 命名的非符号链接普通文件；保留未知、损坏、隐藏、临时和目录项，避免路径越界删除

@@ -72,14 +72,26 @@ class GuestDownloadClassificationTests(unittest.TestCase):
     def test_openapi_and_guest_info_describe_controlled_probe_contract(self) -> None:
         schema = self.client.get("/openapi.json").json()
         download = schema["paths"]["/api/guest-download"]["post"]
+        result = schema["paths"]["/api/guest-results"]["get"]
         info = schema["paths"]["/api/guest-info"]["get"]
         for operation in (download, info):
             text = f"{operation['summary']} {operation['description']} {operation['responses']['200']['description']}"
             self.assertIn("不支持本地媒体下载", text)
             self.assertIn("result_type", text)
+        download_text = f"{download['description']} {download['responses']['200']['description']}"
+        self.assertIn("bearer", download_text)
+        self.assertIn("仅 success 与 download=true 的 unsupported", download_text)
+        result_text = f"{result['summary']} {result['description']} {result['responses']['200']['description']}"
+        for expected in ("bearer", "status", "result_type", "非法、不存在或过期", "不返回 URL、token 或作品元数据"):
+            self.assertIn(expected, result_text)
         payload = self.client.get("/api/guest-info").json()
-        self.assertIn("不返回作品详情或媒体 URL", payload["description"])
-        self.assertIn("result_type", " ".join(payload["limitations"]) + payload["usage"])
+        info_text = f"{payload['description']} {' '.join(payload['limitations'])} {payload['usage']}"
+        for expected in (
+            "不透明短期 bearer 结果关联号", "不是作品 ID、下载任务或媒体凭证",
+            "默认最多保留 7 天", "1–365", "GUEST_RESULT_RETENTION_DAYS",
+            "不记录或返回原始 URL、token、作品元数据或媒体 URL", "result_type",
+        ):
+            self.assertIn(expected, info_text)
 
     def test_classifies_success_and_records_anonymous_metric(self) -> None:
         _GuestFetcherStub.outcome = {

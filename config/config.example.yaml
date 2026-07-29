@@ -22,6 +22,12 @@ logging:
   level: INFO
   dir: /data/logs
 
+guest:
+  # 访客 task_ref 对应的最小结果留存天数：默认 7，允许 1–365。
+  # task_ref 是不透明短期 bearer 结果关联号，不是作品 ID、下载任务或媒体凭证；请勿记录或分享。
+  # 环境变量 GUEST_RESULT_RETENTION_DAYS 可覆盖此值。
+  result_retention_days: 7
+
 subscriptions:
   # 示例1：订阅博主主页（user_id 从小红书个人主页 URL 获取）
   - name: "示例博主"

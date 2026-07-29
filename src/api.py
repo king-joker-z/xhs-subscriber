@@ -1443,12 +1443,14 @@ async def _guest_response(
     description=(
         "仅在调用方明确确认已获授权后，受控探测一条公开作品链接。"
         "不会返回作品详情、作者信息或媒体 URL，也不支持本地媒体下载。"
+        "仅 success 与 download=true 的 unsupported 结果返回 task_ref：它是不透明、短期的"
+        "持有即查询（bearer）结果关联号，不是作品 ID、下载任务或媒体访问凭证。"
         "请求已被安全校验时可返回 HTTP 200；客户端必须根据 `result_type` 判断成功、"
         "平台拒绝、授权要求、超时或不支持等结果，而不能仅以 HTTP 200 判定成功。"
     ),
     response_description=(
-        "固定结果分类及最小化字段；成功探测或明确不支持下载时可含不可逆 task_ref，"
-        "不返回作品详情或媒体 URL。"
+        "固定结果分类及最小化字段；仅 success 或 download=true 的 unsupported 可含不透明短期 task_ref，"
+        "不返回作品详情、媒体 URL 或其他上游元数据。"
     ),
     tags=["guest"],
 )
@@ -1539,7 +1541,14 @@ def _guest_result_json(payload: dict[str, str]) -> JSONResponse:
 
 @app.get(
     "/api/guest-results",
-    summary="查询最小化访客任务结果",
+    summary="查询不透明访客结果关联号",
+    description=(
+        "以 POST /api/guest-download 返回的 task_ref 查询短期最小化结果。task_ref 是持有即查询"
+        "（bearer）关联号，不是作品 ID、下载任务或媒体访问凭证；请勿记录、分享或当作媒体凭证。"
+        "仅返回 status 与 result_type；非法、不存在或过期 task_ref 统一返回 status=deleted，"
+        "不区分原因，也不返回 URL、token 或作品元数据。"
+    ),
+    response_description="仅含 status/result_type 的当前结果，或统一的 deleted 最小化提示。",
     tags=["guest"],
 )
 async def api_guest_result(request: Request) -> JSONResponse:
@@ -1563,9 +1572,11 @@ async def api_guest_result(request: Request) -> JSONResponse:
     description=(
         "说明无需 XHS_COOKIE 的受控公开作品探测能力及其安全限制："
         "不返回作品详情或媒体 URL，不支持本地媒体下载；"
+        "仅 success 与 download=true 的 unsupported 返回短期 bearer task_ref，"
+        "可用于 GET /api/guest-results 查询最小化结果。"
         "POST /api/guest-download 的业务结果须由 result_type 判断。"
     ),
-    response_description="访客探测可用性和最小化安全限制说明。",
+    response_description="访客探测、短期结果关联号和最小化留存限制说明。",
     tags=["guest"],
 )
 async def api_guest_info() -> dict:
@@ -1592,12 +1603,16 @@ async def api_guest_info() -> dict:
         "limitations": [
             "仅支持一条已获授权的公开作品链接探测，不支持主页、搜索、收藏/点赞或合集入口",
             "不返回作品 ID、标题、作者、媒体 URL 或封面 URL",
-            "不支持本地媒体下载；download=true 返回 result_type=unsupported",
+            "仅 success 与 download=true 的 unsupported 返回 task_ref；它是不透明短期 bearer 结果关联号，不是作品 ID、下载任务或媒体凭证",
+            "GET /api/guest-results?task_ref= 仅返回 status 和 result_type；非法、不存在或过期引用统一返回 deleted",
+            "task_ref 默认最多保留 7 天；可通过 guest.result_retention_days 或 GUEST_RESULT_RETENTION_DAYS 配置为 1–365 天",
+            "不记录或返回原始 URL、token、作品元数据或媒体 URL；请勿记录或分享 task_ref",
             "HTTP 200 仅表示请求已被处理，客户端必须根据 result_type 判断业务结果",
             "风控更严格，触发风控验证（461）时无法自动通过",
         ],
         "usage": (
             "POST /api/guest-download {\"url\": \"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa\", "
-            "\"authorized\": true}；根据响应 result_type 判断业务结果"
+            "\"authorized\": true}；仅在 success 或 download=true 的 unsupported 中保留 task_ref，"
+            "再以 GET /api/guest-results?task_ref= 查询；根据响应 result_type 判断业务结果"
         ),
     }
