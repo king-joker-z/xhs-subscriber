@@ -8,7 +8,18 @@
   - 明确 `GET /api/guest-results` 仅返回 `status`/`result_type`，非法、不存在或过期引用统一为 `deleted`，不记录或返回 URL、token、媒体 URL 或作品元数据
   - 文档化默认 7 天、配置范围 1–365 天，以及 YAML `guest.result_retention_days` 与环境变量 `GUEST_RESULT_RETENTION_DAYS` 覆盖关系
 
-### 待发布
+- **feat: 用户主动删除 guest 最小结果**
+  - `GET` / `DELETE /api/guest-results` 仅通过 `X-Guest-Result-Ref` bearer 请求头传递关联号；拒绝 query 参数与 body 回退，响应统一 `Cache-Control: no-store` / `Pragma: no-cache`
+  - 新增幂等主动删除：仅作用 `.guest-results` 专属目录下、严格 canonical task ID 的非符号链接普通记录；不触碰登录态下载、订阅、数据库或匿名聚合指标
+  - `DELETE` 仅接受无 body 请求；JSON、form、text、非零 Content-Length 或 Transfer-Encoding 均安全降级为固定 deleted 响应
+  - 保持最小化存储、路径/符号链接防护与 7 天到期清理；仅 success 与 `download=true` 的 unsupported 结果创建可持有的短期关联号
+
+### 测试结果
+- guest 结果留存/删除专项：10/10 通过
+- Header bearer 与请求边界专项：22/22 通过
+- Python 3.12 全量 unittest：60/60 通过
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
 - **feat: 安全到期删除 guest 结果记录**
   - guest 最小任务结果默认保留 7 天，支持明确配置覆盖；仅保存 opaque task ID、固定结果类型、状态和创建时间
   - 仅清理 `.guest-results` 直接子级中严格 16 位小写 hex 命名的非符号链接普通文件；保留未知、损坏、隐藏、临时和目录项，避免路径越界删除

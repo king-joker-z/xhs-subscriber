@@ -35,6 +35,10 @@ class GuestResultStore:
         match = _TASK_REF_RE.fullmatch(task_ref)
         return (match.group(1) or match.group(2)) if match else None
 
+    def is_valid_ref(self, task_ref: object) -> bool:
+        """Expose canonical bearer-reference validation without touching storage."""
+        return self._task_id(task_ref) is not None
+
     def _path_for(self, task_ref: object) -> Path | None:
         task_id = self._task_id(task_ref)
         return self._root / task_id if task_id else None
@@ -83,6 +87,28 @@ class GuestResultStore:
                 await self.cleanup(current)
                 return {"status": "deleted", "message": _DELETED_MESSAGE}
             return {"status": payload.get("status", "error"), "result_type": payload.get("result_type", "invalid_request")}
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            return {"status": "deleted", "message": _DELETED_MESSAGE}
+
+    async def delete(self, task_ref: str, now: datetime | None = None) -> dict[str, str]:
+        """Delete one unexpired owned record; no associated temp files are retained."""
+        path = self._path_for(task_ref)
+        if path is None or not self._owned_regular_task_file(path):
+            return {"status": "deleted", "message": _DELETED_MESSAGE}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if payload.get("task_id") != path.name:
+                return {"status": "deleted", "message": _DELETED_MESSAGE}
+            created_at = datetime.fromisoformat(str(payload["created_at"]))
+            current = now or datetime.now(timezone.utc)
+            if created_at.tzinfo is None or current - created_at >= self._retention:
+                await self.cleanup(current)
+                return {"status": "deleted", "message": _DELETED_MESSAGE}
+            path.unlink()
+            return {
+                "status": "deleted",
+                "message": "结果已删除，无法恢复，仅保留不可识别聚合统计",
+            }
         except (OSError, ValueError, KeyError, json.JSONDecodeError):
             return {"status": "deleted", "message": _DELETED_MESSAGE}
 

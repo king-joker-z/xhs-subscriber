@@ -1539,12 +1539,36 @@ def _guest_result_json(payload: dict[str, str]) -> JSONResponse:
     )
 
 
+def _guest_result_header_ref(request: Request) -> str | None:
+    """Accept one canonical bearer ref in a header and no query/body fallback."""
+    if request.query_params:
+        return None
+    values = request.headers.getlist("x-guest-result-ref")
+    if len(values) != 1 or not values[0]:
+        return None
+    if _guest_result_store is None or not _guest_result_store.is_valid_ref(values[0]):
+        return None
+    return values[0]
+
+
+async def _guest_delete_has_body(request: Request) -> bool:
+    """Reject actual or potentially streamed DELETE bodies before storage access."""
+    content_length = request.headers.get("content-length")
+    if content_length is not None and content_length != "0":
+        return True
+    if request.headers.get("transfer-encoding") is not None:
+        return True
+    return bool(await request.body())
+
+
 @app.get(
     "/api/guest-results",
     summary="查询不透明访客结果关联号",
     description=(
         "以 POST /api/guest-download 返回的 task_ref 查询短期最小化结果。task_ref 是持有即查询"
         "（bearer）关联号，不是作品 ID、下载任务或媒体访问凭证；请勿记录、分享或当作媒体凭证。"
+        "通过请求头 X-Guest-Result-Ref 传递该关联号；请求 URL 不接受 query 参数，且 body 不作为回退来源，以避免关联号出现在默认访问日志请求目标中。"
+        "仅 success 与 download=true 的 unsupported 结果创建并返回该关联号；其他失败结果不创建可查询或删除记录。"
         "仅返回 status 与 result_type；非法、不存在或过期 task_ref 统一返回 status=deleted，"
         "不区分原因，也不返回 URL、token 或作品元数据。"
     ),
@@ -1552,15 +1576,35 @@ def _guest_result_json(payload: dict[str, str]) -> JSONResponse:
     tags=["guest"],
 )
 async def api_guest_result(request: Request) -> JSONResponse:
-    """Read one canonical ref only; all malformed query shapes look deleted."""
-    task_refs = request.query_params.getlist("task_ref")
+    """Read one canonical header bearer ref only; malformed shapes look deleted."""
+    task_ref = _guest_result_header_ref(request)
     deleted = {"status": "deleted", "message": "结果已按数据最小化策略删除"}
-    if len(task_refs) != 1 or not task_refs[0]:
+    if task_ref is None:
         return _guest_result_json(deleted)
     if _guest_result_store is None:
         return _guest_result_json(deleted)
     try:
-        payload = await _guest_result_store.get(task_refs[0])
+        payload = await _guest_result_store.get(task_ref)
+    except Exception:
+        payload = deleted
+    return _guest_result_json(payload)
+
+
+@app.delete(
+    "/api/guest-results",
+    summary="提前删除最小化访客任务结果",
+    tags=["guest"],
+)
+async def api_delete_guest_result(request: Request) -> JSONResponse:
+    """Delete one owned result by header bearer ref without exposing metadata."""
+    deleted = {"status": "deleted", "message": "结果已按数据最小化策略删除"}
+    if await _guest_delete_has_body(request):
+        return _guest_result_json(deleted)
+    task_ref = _guest_result_header_ref(request)
+    if task_ref is None or _guest_result_store is None:
+        return _guest_result_json(deleted)
+    try:
+        payload = await _guest_result_store.delete(task_ref)
     except Exception:
         payload = deleted
     return _guest_result_json(payload)
@@ -1572,8 +1616,8 @@ async def api_guest_result(request: Request) -> JSONResponse:
     description=(
         "说明无需 XHS_COOKIE 的受控公开作品探测能力及其安全限制："
         "不返回作品详情或媒体 URL，不支持本地媒体下载；"
-        "仅 success 与 download=true 的 unsupported 返回短期 bearer task_ref，"
-        "可用于 GET /api/guest-results 查询最小化结果。"
+        "仅 success 与 download=true 的 unsupported 返回短期 bearer task_ref；"
+        "查询或提前删除时通过 X-Guest-Result-Ref: <task_ref> 请求头传递，不要将其放入 URL、日志或响应拼接内容中。"
         "POST /api/guest-download 的业务结果须由 result_type 判断。"
     ),
     response_description="访客探测、短期结果关联号和最小化留存限制说明。",
@@ -1604,7 +1648,7 @@ async def api_guest_info() -> dict:
             "仅支持一条已获授权的公开作品链接探测，不支持主页、搜索、收藏/点赞或合集入口",
             "不返回作品 ID、标题、作者、媒体 URL 或封面 URL",
             "仅 success 与 download=true 的 unsupported 返回 task_ref；它是不透明短期 bearer 结果关联号，不是作品 ID、下载任务或媒体凭证",
-            "GET /api/guest-results?task_ref= 仅返回 status 和 result_type；非法、不存在或过期引用统一返回 deleted",
+            "GET 或 DELETE /api/guest-results 时仅以 X-Guest-Result-Ref: <task_ref> 请求头传递；请求 URL 不接受 query 参数",
             "task_ref 默认最多保留 7 天；可通过 guest.result_retention_days 或 GUEST_RESULT_RETENTION_DAYS 配置为 1–365 天",
             "不记录或返回原始 URL、token、作品元数据或媒体 URL；请勿记录或分享 task_ref",
             "HTTP 200 仅表示请求已被处理，客户端必须根据 result_type 判断业务结果",
@@ -1612,7 +1656,7 @@ async def api_guest_info() -> dict:
         ],
         "usage": (
             "POST /api/guest-download {\"url\": \"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa\", "
-            "\"authorized\": true}；仅在 success 或 download=true 的 unsupported 中保留 task_ref，"
-            "再以 GET /api/guest-results?task_ref= 查询；根据响应 result_type 判断业务结果"
+            "\"authorized\": true}；仅在 success 或 download=true 的 unsupported 中保留 task_ref；"
+            "查询或删除时仅以 X-Guest-Result-Ref: <task_ref> 请求头传递，再根据响应 result_type 判断业务结果"
         ),
     }
