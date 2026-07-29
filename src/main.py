@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -14,7 +15,8 @@ from fastapi import FastAPI
 from src.config import get_config, setup_logging
 from src.database import init_db
 from src.scheduler import XHSScheduler
-from src.api import app, set_scheduler
+from src.api import app, set_scheduler, set_guest_result_store
+from src.guest_retention import GuestResultStore
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,15 @@ async def lifespan(application: FastAPI):
 
         scheduler = XHSScheduler(config=config, db=db)
         set_scheduler(scheduler)
+        guest_results = GuestResultStore(
+            Path(config.download_dir) / ".guest-results",
+            config.guest_result_retention_days,
+        )
+        try:
+            await guest_results.cleanup()
+        except Exception:
+            logger.warning("guest 结果启动清理失败，已安全跳过")
+        set_guest_result_store(guest_results)
 
         await scheduler.startup()
         scheduler.start()

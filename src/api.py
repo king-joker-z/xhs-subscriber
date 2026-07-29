@@ -1368,6 +1368,15 @@ class GuestDownloadResponse(BaseModel):
 
 
 _guest_download_metrics: dict[str, dict[str, int]] = {}
+from .guest_retention import GuestResultStore
+
+_guest_result_store: GuestResultStore | None = None
+
+
+def set_guest_result_store(store: GuestResultStore | None) -> None:
+    """Inject the owned minimal guest result store at application startup."""
+    global _guest_result_store
+    _guest_result_store = store
 _QUALITY_LEVELS = {"standard", "low", "unknown"}
 
 
@@ -1405,7 +1414,7 @@ def _record_guest_download_metric(result_type: str, elapsed_ms: int, quality: ob
     quality_bucket["count"] += 1
 
 
-def _guest_response(
+async def _guest_response(
     result_type: Literal[
         "success", "unsupported", "platform_rejected", "network_error",
         "timeout", "authorization_required", "invalid_request",
@@ -1416,12 +1425,15 @@ def _guest_response(
     **fields: Any,
 ) -> GuestDownloadResponse:
     _record_guest_download_metric(result_type, int((time.monotonic() - started_at) * 1000), fields.get("quality"))
-    return GuestDownloadResponse(
+    response = GuestDownloadResponse(
         status="ok" if result_type == "success" else "error",
         result_type=result_type,
         message=message,
         **fields,
     )
+    if _guest_result_store is not None and response.task_ref:
+        await _guest_result_store.save(response.task_ref, result_type, response.status)
+    return response
 
 
 @app.post(
@@ -1455,58 +1467,58 @@ async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse
         guest = GuestFetcher()
         result = await guest.fetch_note(req.url)
     except GuestAuthorizationRequiredError:
-        return _guest_response(
+        return await _guest_response(
             "authorization_required", started_at,
             message="该公开内容需要授权访问；请使用有权访问的方式后再试。",
         )
     except GuestPlatformRejectedError:
-        return _guest_response(
+        return await _guest_response(
             "platform_rejected", started_at,
             message="平台未接受此公开作品请求，可能需要授权或暂不支持；未自动重试。",
         )
     except GuestNetworkError:
-        return _guest_response(
+        return await _guest_response(
             "network_error", started_at,
             message="网络或服务异常，未自动重试，可稍后自行重试。",
         )
     except TimeoutError:
-        return _guest_response(
+        return await _guest_response(
             "timeout", started_at,
             message="请求超时，未自动重试。请稍后自行重试。",
         )
     except PermissionError:
-        return _guest_response(
+        return await _guest_response(
             "authorization_required", started_at,
             message="该公开内容需要授权访问；请使用有权访问的方式后再试。",
         )
     except RuntimeError:
-        return _guest_response(
+        return await _guest_response(
             "unsupported", started_at,
             message="当前环境不支持处理该公开作品链接。",
         )
     except Exception:
         logger.warning("访客模式获取笔记发生本地处理异常")
-        return _guest_response(
+        return await _guest_response(
             "network_error", started_at,
             message="处理请求时发生网络或服务异常；未自动重试，请稍后自行重试。",
         )
 
     if not result:
-        return _guest_response(
+        return await _guest_response(
             "platform_rejected", started_at,
             message="平台未接受此公开作品请求，可能需要授权或暂不支持；未自动重试。",
         )
 
     # Guest mode intentionally never forwards untrusted metadata to the downloader.
     if req.download:
-        return _guest_response(
+        return await _guest_response(
             "unsupported", started_at,
             message="访客模式不支持本地媒体下载；已避免处理下游媒体元数据。",
             task_ref=task_ref,
         )
 
     quality = _normalize_guest_quality(result.get("quality"))
-    response = _guest_response(
+    response = await _guest_response(
         "success", started_at,
         message="已获取公开作品的可用信息；媒体可用性与质量以平台实际返回为准。",
         task_ref=task_ref,
@@ -1515,6 +1527,34 @@ async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse
     )
 
     return response
+
+
+def _guest_result_json(payload: dict[str, str]) -> JSONResponse:
+    """Return guest result data with mandatory no-store policy."""
+    return JSONResponse(
+        content=payload,
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+    )
+
+
+@app.get(
+    "/api/guest-results",
+    summary="查询最小化访客任务结果",
+    tags=["guest"],
+)
+async def api_guest_result(request: Request) -> JSONResponse:
+    """Read one canonical ref only; all malformed query shapes look deleted."""
+    task_refs = request.query_params.getlist("task_ref")
+    deleted = {"status": "deleted", "message": "结果已按数据最小化策略删除"}
+    if len(task_refs) != 1 or not task_refs[0]:
+        return _guest_result_json(deleted)
+    if _guest_result_store is None:
+        return _guest_result_json(deleted)
+    try:
+        payload = await _guest_result_store.get(task_refs[0])
+    except Exception:
+        payload = deleted
+    return _guest_result_json(payload)
 
 
 @app.get(

@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### 待发布
+- **feat: 安全到期删除 guest 结果记录**
+  - guest 最小任务结果默认保留 7 天，支持明确配置覆盖；仅保存 opaque task ID、固定结果类型、状态和创建时间
+  - 仅清理 `.guest-results` 直接子级中严格 16 位小写 hex 命名的非符号链接普通文件；保留未知、损坏、隐藏、临时和目录项，避免路径越界删除
+  - 启动清理隔离失败不阻断服务；过期/不存在/非法查询均返回固定删除提示
+  - `GET /api/guest-results` 使用严格单值 canonical query 参数；拒绝缺失、空值、重复、URL/token/控制字符等输入，全部响应设置 `Cache-Control: no-store` 和 `Pragma: no-cache`
+
+### 测试结果
+- guest 结果留存专项：7/7 通过
+- guest-download 分类专项：7/7 通过
+- 公开作品链接安全专项：6/6 通过
+- TLS 证书校验专项：4/4 通过
+- Python 3.12 全量 unittest：54/54 通过
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
 - **fix: 对齐访客探测接口安全契约**
   - `/api/guest-info` 和 `/api/guest-download` 的 OpenAPI 说明明确：仅受控探测已授权的公开单作品，不返回详情或媒体 URL，不支持本地下载
   - 明确客户端必须按 `result_type` 判断业务结果，HTTP 200 仅表示请求已被处理

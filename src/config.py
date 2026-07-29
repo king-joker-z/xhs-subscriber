@@ -152,6 +152,7 @@ class AppConfig(BaseSettings):
     download_dir: str = "/data/downloads"
     log_dir: str = "/data/logs"
     subscriptions: List[SubscriptionConfig] = []
+    guest_result_retention_days: int = Field(default=7, ge=1, le=365)
     max_batch: int = Field(default=30, ge=1, le=500)  # 每次抓取博主作品的最大条数（对应 fetcher MAX_BATCH）
 
     @field_validator("xhs_cookie", mode="before")
@@ -295,6 +296,19 @@ class AppConfig(BaseSettings):
                 logger.warning("config.yaml server.http_port 为 null，已忽略，保持当前值：%s", self.http_port)
             else:
                 self.http_port = int(_clamp(int(_raw_port), 1, 65535, "http_port"))
+
+        guest = data.get("guest", {})
+        if not isinstance(guest, dict):
+            logger.warning("config.yaml guest 类型非法，已忽略 guest 配置")
+            guest = {}
+        if "result_retention_days" in guest and os.environ.get("GUEST_RESULT_RETENTION_DAYS") is None:
+            raw_retention = guest["result_retention_days"]
+            if raw_retention is None:
+                logger.warning("config.yaml guest.result_retention_days 为 null，已忽略")
+            else:
+                self.guest_result_retention_days = int(
+                    _clamp(int(raw_retention), 1, 365, "guest.result_retention_days")
+                )
 
         # 解析订阅列表（保留全部订阅，包括 enabled=False 的，供 UI 展示）
         # CFG-48 修复：subs_raw 类型保护，YAML 中 subscriptions 为 null/非列表时降级为空列表，
