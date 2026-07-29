@@ -136,7 +136,6 @@ class XHSScheduler:
         try:
             async with httpx.AsyncClient(
                 http2=True,
-                verify=False,
                 follow_redirects=True,
                 timeout=10,
             ) as client:

@@ -282,7 +282,6 @@ class GuestFetcher:
         try:
             async with httpx.AsyncClient(
                 http2=True,
-                verify=False,
                 follow_redirects=True,
                 timeout=self._timeout,
             ) as client:

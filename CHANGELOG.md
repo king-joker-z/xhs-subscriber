@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-29 15:05 — 迭代 #192
+
+### 迭代目标
+恢复主仓与 XHS-Downloader 下载链路的 TLS 证书校验，避免绕过 HTTPS 证书验证。
+
+### 完成内容
+- **fix: 恢复 TLS certificate verification**
+  - 移除主仓下载请求中的 `verify=False`
+  - 将 `XHS-Downloader` 子模块切换至公开 fork 的可复现提交 `tls-verify-fix@75cebed`
+  - 上游 HTTP 客户端恢复默认 TLS 证书校验行为
+
+### 测试结果
+- TLS 证书校验专项：4/4 通过
+- 签名兼容专项：4/4 通过
+- Python 3.12 全量 unittest：37/37 通过
+- 使用 `XHS_COOKIE=test` 启动隔离服务，`GET /health` 返回 HTTP 200
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
+### 下次迭代建议
+- 在具备完整下载器依赖和授权 Cookie 的隔离环境验证完整下载链路
+
+---
+
 ## 2026-07-29 14:07 — 迭代 #191
 
 ### 迭代目标
