@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version as package_version
 import re
 import time
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlsplit
@@ -1308,6 +1309,22 @@ def _is_public_single_work_url(url: str) -> bool:
     )
 
 
+def _guest_work_display(url: str) -> str:
+    """Create a non-reversible display summary without query, fragment, or work ID."""
+    parsed = urlsplit(url)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    path_type = "short-link" if host.endswith("xhslink.com") else "public-work"
+    return f"{host}/{path_type}"
+
+
+_GUEST_RESPONSE_TYPES = {"video", "image"}
+
+
+def _normalize_guest_response_type(value: object) -> str:
+    """Return only a fixed public type bucket for untrusted upstream data."""
+    return value if isinstance(value, str) and value in _GUEST_RESPONSE_TYPES else "unknown"
+
+
 class GuestDownloadRequest(BaseModel):
     """One explicitly authorized public single-work import request."""
 
@@ -1345,7 +1362,7 @@ class GuestDownloadResponse(BaseModel):
     type: str | None = None  # "video" | "image"
     video_url: str | None = None
     image_urls: list[str] | None = None
-    cover_url: str | None = None
+    task_ref: str | None = None
     guest_mode: bool = True
     message: str | None = None
 
@@ -1423,6 +1440,7 @@ async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse
     )
 
     started_at = time.monotonic()
+    task_ref = f"{_guest_work_display(req.url)}:{uuid.uuid4().hex[:16]}"
     try:
         guest = GuestFetcher()
         result = await guest.fetch_note(req.url)
@@ -1469,41 +1487,22 @@ async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse
             message="平台未接受此公开作品请求，可能需要授权或暂不支持；未自动重试。",
         )
 
+    # Guest mode intentionally never forwards untrusted metadata to the downloader.
+    if req.download:
+        return _guest_response(
+            "unsupported", started_at,
+            message="访客模式不支持本地媒体下载；已避免处理下游媒体元数据。",
+            task_ref=task_ref,
+        )
+
     quality = _normalize_guest_quality(result.get("quality"))
     response = _guest_response(
         "success", started_at,
         message="已获取公开作品的可用信息；媒体可用性与质量以平台实际返回为准。",
-        note_id=result.get("note_id"),
-        title=result.get("title"),
-        author=result.get("author"),
-        type=result.get("type"),
-        video_url=result.get("video_url") or None,
-        image_urls=result.get("image_urls") or None,
-        cover_url=result.get("cover_url") or None,
+        task_ref=task_ref,
+        type=_normalize_guest_response_type(result.get("type")),
         quality=quality,
     )
-
-    # Optional local download remains separate from guest result classification.
-    if req.download and _scheduler:
-        try:
-            meta = await guest.fetch_note_to_meta(req.url)
-            if meta:
-                from .downloader import Downloader
-                db = _scheduler._db  # type: ignore[attr-defined]
-                dl = Downloader(
-                    db=db,
-                    download_dir=str(_scheduler._config.download_dir),  # type: ignore[attr-defined]
-                    cookie="",
-                )
-                author_id = result.get("author_id") or "guest"
-                success = await dl.download(meta, author_id)
-                response.message = (
-                    "媒体已下载到本地；质量以平台实际返回为准。"
-                    if success else "作品信息已获取；媒体未下载，可能已存在或暂不可用。"
-                )
-        except Exception:
-            logger.warning("访客模式媒体下载失败")
-            response.message = "作品信息已获取；媒体下载未完成，请稍后检查本地目录。"
 
     return response
 

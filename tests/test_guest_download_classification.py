@@ -23,21 +23,30 @@ _URL = "https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=
 
 class _GuestFetcherStub:
     calls = 0
+    meta_calls = 0
+    urls: list[str] = []
     outcome: object = None
 
     def __init__(self) -> None:
         type(self).calls += 1
 
     async def fetch_note(self, url: str) -> object:
+        type(self).urls.append(url)
         if isinstance(type(self).outcome, BaseException):
             raise type(self).outcome
         return type(self).outcome
+
+    async def fetch_note_to_meta(self, url: str) -> object:
+        type(self).meta_calls += 1
+        raise AssertionError("downstream guest metadata must not be requested")
 
 
 class GuestDownloadClassificationTests(unittest.TestCase):
     def setUp(self) -> None:
         api._guest_download_metrics.clear()
         _GuestFetcherStub.calls = 0
+        _GuestFetcherStub.meta_calls = 0
+        _GuestFetcherStub.urls = []
         self.client = TestClient(api.app)
 
     def tearDown(self) -> None:
@@ -63,6 +72,15 @@ class GuestDownloadClassificationTests(unittest.TestCase):
         self.assertEqual(api._guest_download_metrics["success"]["count"], 1)
         self.assertGreaterEqual(api._guest_download_metrics["success"]["total_elapsed_ms"], 0)
         self.assertEqual(api._guest_download_metrics["quality:standard"]["count"], 1)
+        payload = response.json()
+        self.assertEqual(payload["task_ref"].split(":", 1)[0], "www.xiaohongshu.com/public-work")
+        self.assertNotIn("aaaaaaaaaaaaaaaaaaaaaaaa", payload["task_ref"])
+        self.assertNotIn("token_1234", payload["task_ref"])
+        self.assertIsNone(payload["note_id"])
+        self.assertIsNone(payload["title"])
+        self.assertIsNone(payload["author"])
+        self.assertIsNone(payload["video_url"])
+        self.assertIsNone(payload["image_urls"])
         self.assertNotIn(_URL, repr(api._guest_download_metrics))
         self.assertNotIn("public work", repr(api._guest_download_metrics))
 
@@ -98,6 +116,186 @@ class GuestDownloadClassificationTests(unittest.TestCase):
                 self.assertNotIn("sensitive title", metrics_text)
                 self.assertNotIn("reusable-secret", metrics_text)
                 self.assertNotIn(_URL, metrics_text)
+
+    def test_sensitive_url_is_ephemeral_and_never_exposed(self) -> None:
+        sensitive_url = (
+            "https://www.xiaohongshu.com/explore/bbbbbbbbbbbbbbbbbbbbbbbb"
+            "?xsec_token=token_sensitive_9876#fragment-sensitive"
+        )
+        sensitive_parts = (
+            sensitive_url,
+            "bbbbbbbbbbbbbbbbbbbbbbbb",
+            "xsec_token",
+            "token_sensitive_9876",
+            "fragment-sensitive",
+        )
+        _GuestFetcherStub.outcome = {
+            "note_id": "b" * 24,
+            "title": "title https://www.xiaohongshu.com/explore/bbbbbbbbbbbbbbbbbbbbbbbb?xsec_token=token_sensitive_9876",
+            "author": "safe author",
+            "type": "image",
+            "video_url": "https://media.invalid/video?token=media-secret",
+            "image_urls": ["https://media.invalid/image?token=media-secret"],
+            "cover_url": "https://media.invalid/cover?token=media-secret",
+            "quality": "low",
+        }
+        with patch("src.guest_fetcher.GuestFetcher", _GuestFetcherStub):
+            response = self.client.post(
+                "/api/guest-download", json={"url": sensitive_url, "authorized": True}
+            )
+
+        # The strict safety gate rejects fragments before constructing a handler.
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(_GuestFetcherStub.calls, 0)
+        observed = f"{response.text} {api._guest_download_metrics!r}"
+        for part in sensitive_parts:
+            self.assertNotIn(part, observed)
+
+        allowed_url = sensitive_url.split("#", 1)[0]
+        with patch("src.guest_fetcher.GuestFetcher", _GuestFetcherStub), self.assertNoLogs(
+            "src.api", level="WARNING"
+        ):
+            response = self.client.post(
+                "/api/guest-download", json={"url": allowed_url, "authorized": True}
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(_GuestFetcherStub.calls, 1)
+        self.assertEqual(_GuestFetcherStub.urls, [allowed_url])
+        payload = response.json()
+        observed = f"{payload!r} {api._guest_download_metrics!r}"
+        for part in sensitive_parts[1:]:
+            self.assertNotIn(part, observed)
+        self.assertEqual(payload["task_ref"].split(":", 1)[0], "www.xiaohongshu.com/public-work")
+        self.assertIsNone(payload["note_id"])
+        self.assertIsNone(payload["title"])
+        self.assertIsNone(payload["author"])
+        self.assertIsNone(payload["video_url"])
+        self.assertIsNone(payload["image_urls"])
+        self.assertEqual(payload["type"], "image")
+
+    def test_success_response_uses_only_fixed_type_and_drops_polluted_display_fields(self) -> None:
+        polluted_parts = (
+            "https://media.invalid/asset?token=media-secret#fragment-secret",
+            "xsec_token=upstream-token",
+            "dddddddddddddddddddddddd",
+            "\x00",
+            "control-secret",
+        )
+        for upstream_type, expected_type in (
+            ("video", "video"),
+            ("image", "image"),
+            ("https://media.invalid/asset?token=media-secret", "unknown"),
+            ("xsec_token=upstream-token", "unknown"),
+            ("d" * 24, "unknown"),
+            ("bad\x00control-secret", "unknown"),
+            ("x" * 4096, "unknown"),
+            (None, "unknown"),
+        ):
+            with self.subTest(upstream_type=repr(upstream_type)):
+                api._guest_download_metrics.clear()
+                _GuestFetcherStub.calls = 0
+                _GuestFetcherStub.urls = []
+                _GuestFetcherStub.outcome = {
+                    "note_id": "d" * 24,
+                    "title": "https://media.invalid/asset?token=media-secret#fragment-secret",
+                    "author": "xsec_token=upstream-token " + "d" * 24 + " bad\x00control-secret" + "x" * 4096,
+                    "type": upstream_type,
+                    "quality": "standard",
+                }
+                with patch("src.guest_fetcher.GuestFetcher", _GuestFetcherStub), self.assertNoLogs(
+                    "src.api", level="WARNING"
+                ):
+                    response = self._post()
+
+                self.assertEqual(response.status_code, 200)
+                payload = response.json()
+                self.assertEqual(payload["result_type"], "success")
+                self.assertEqual(payload["type"], expected_type)
+                self.assertIsNone(payload["title"])
+                self.assertIsNone(payload["author"])
+                observed = f"{payload!r} {api._guest_download_metrics!r}"
+                for part in polluted_parts:
+                    self.assertNotIn(part, observed)
+                self.assertNotIn("x" * 4096, observed)
+
+    def test_download_true_does_not_forward_guest_metadata_to_downloader(self) -> None:
+        sensitive_url = (
+            "https://www.xiaohongshu.com/explore/eeeeeeeeeeeeeeeeeeeeeeee"
+            "?xsec_token=download_token_9876"
+        )
+        sensitive_parts = (
+            sensitive_url,
+            "eeeeeeeeeeeeeeeeeeeeeeee",
+            "xsec_token",
+            "download_token_9876",
+            "https://media.invalid/video?token=media-secret",
+            "downstream-title-secret",
+            "downstream-error-secret",
+        )
+        _GuestFetcherStub.outcome = {
+            "note_id": "e" * 24,
+            "title": "downstream-title-secret",
+            "author": "https://media.invalid/video?token=media-secret",
+            "type": "video",
+            "video_url": "https://media.invalid/video?token=media-secret",
+            "image_urls": ["https://media.invalid/image?token=media-secret"],
+            "quality": "standard",
+        }
+        with patch("src.guest_fetcher.GuestFetcher", _GuestFetcherStub), patch(
+            "src.downloader.Downloader", side_effect=AssertionError("downstream-error-secret")
+        ) as downloader, self.assertNoLogs("src.api", level="WARNING"):
+            response = self.client.post(
+                "/api/guest-download",
+                json={"url": sensitive_url, "authorized": True, "download": True},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["result_type"], "unsupported")
+        self.assertIn("不支持本地媒体下载", payload["message"])
+        self.assertEqual(_GuestFetcherStub.calls, 1)
+        self.assertEqual(_GuestFetcherStub.meta_calls, 0)
+        downloader.assert_not_called()
+        self.assertEqual(api._guest_download_metrics["unsupported"]["count"], 1)
+        observed = f"{payload!r} {api._guest_download_metrics!r}"
+        for part in sensitive_parts:
+            self.assertNotIn(part, observed)
+
+    def test_failure_responses_and_metrics_exclude_sensitive_source_url(self) -> None:
+        sensitive_url = (
+            "https://www.xiaohongshu.com/explore/cccccccccccccccccccccccc"
+            "?xsec_token=token_failure_9876"
+        )
+        sensitive_parts = (
+            sensitive_url,
+            "cccccccccccccccccccccccc",
+            "xsec_token",
+            "token_failure_9876",
+        )
+        for outcome, result_type in (
+            (GuestAuthorizationRequiredError("TLS failure token_failure_9876"), "authorization_required"),
+            (GuestPlatformRejectedError("platform token_failure_9876"), "platform_rejected"),
+            (GuestNetworkError("network token_failure_9876"), "network_error"),
+            (TimeoutError("timeout token_failure_9876"), "timeout"),
+        ):
+            with self.subTest(result_type=result_type):
+                api._guest_download_metrics.clear()
+                _GuestFetcherStub.calls = 0
+                _GuestFetcherStub.urls = []
+                _GuestFetcherStub.outcome = outcome
+                with patch("src.guest_fetcher.GuestFetcher", _GuestFetcherStub):
+                    response = self.client.post(
+                        "/api/guest-download", json={"url": sensitive_url, "authorized": True}
+                    )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["result_type"], result_type)
+                self.assertEqual(_GuestFetcherStub.calls, 1)
+                self.assertEqual(_GuestFetcherStub.urls, [sensitive_url])
+                observed = f"{response.text} {api._guest_download_metrics!r}"
+                for part in sensitive_parts:
+                    self.assertNotIn(part, observed)
 
     def test_classifies_platform_rejection_and_never_retries(self) -> None:
         _GuestFetcherStub.outcome = GuestPlatformRejectedError("HTTP 429")
