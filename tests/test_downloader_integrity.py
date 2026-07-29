@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import httpx
 
-from src.downloader import Downloader
+from src.downloader import Downloader, _retry_after_seconds, _wait_for_retry
 
 _REAL_ASYNC_CLIENT = httpx.AsyncClient
 
@@ -42,6 +42,25 @@ class DownloaderIntegrityTests(unittest.IsolatedAsyncioTestCase):
                     )
             self.assertFalse(dest.exists())
             self.assertFalse(dest.with_suffix(".mp4.tmp").exists())
+    def test_retry_after_seconds_accepts_delta_and_rejects_invalid_values(self) -> None:
+        self.assertEqual(_retry_after_seconds("12"), 12.0)
+        self.assertEqual(_retry_after_seconds("-3"), 0.0)
+        self.assertIsNone(_retry_after_seconds("not-a-date"))
+
+    def test_429_retry_uses_retry_after_header(self) -> None:
+        request = httpx.Request("GET", "https://example.invalid/video.mp4")
+        response = httpx.Response(429, headers={"retry-after": "7"}, request=request)
+        error = httpx.HTTPStatusError("limited", request=request, response=response)
+
+        class _Outcome:
+            def exception(self):
+                return error
+
+        class _State:
+            outcome = _Outcome()
+            attempt_number = 1
+
+        self.assertEqual(_wait_for_retry(_State()), 7.0)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -34,7 +36,6 @@ from tenacity import (
     retry_if_exception,
     retry_if_exception_type,
     stop_after_attempt,
-    wait_exponential,
     before_sleep_log,
 )
 
@@ -97,6 +98,33 @@ def _ext_from_url(url: str, default: str = ".jpg") -> str:
     except Exception:
         pass
     return default
+
+
+def _retry_after_seconds(value: str | None) -> float | None:
+    """解析 HTTP Retry-After 值，返回非负等待秒数；格式非法时返回 None。"""
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=timezone.utc)
+            return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+        except (TypeError, ValueError, IndexError):
+            return None
+
+
+def _wait_for_retry(retry_state) -> float:
+    """优先遵从 429 响应的 Retry-After，否则使用既有指数退避。"""
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+        retry_after = _retry_after_seconds(exc.response.headers.get("retry-after"))
+        if retry_after is not None:
+            return min(retry_after, _RETRY_WAIT_MAX)
+    exponential = _RETRY_WAIT_MULTIPLIER * (2 ** max(0, retry_state.attempt_number - 1))
+    return min(max(exponential, _RETRY_WAIT_MIN), _RETRY_WAIT_MAX)
 
 
 class Downloader:
@@ -326,7 +354,7 @@ class Downloader:
                 # DL-6 修复：_is_retryable 覆盖网络层异常 + HTTP 5xx，4xx 不重试
                 retry=retry_if_exception(_is_retryable),
                 stop=stop_after_attempt(_RETRY_MAX_ATTEMPTS),
-                wait=wait_exponential(multiplier=_RETRY_WAIT_MULTIPLIER, min=_RETRY_WAIT_MIN, max=_RETRY_WAIT_MAX),
+                wait=_wait_for_retry,
                 before_sleep=before_sleep_log(logger, logging.WARNING),
                 reraise=True,
             ):
