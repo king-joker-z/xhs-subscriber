@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-29 13:33 — 迭代 #190
+
+### 迭代目标
+为 guest-download 建立标准化结果分类、进程内匿名指标，并确保失败路径不泄露请求或平台敏感上下文。
+
+### 完成内容
+- **feat: guest-download 安全结果分类与匿名观测**
+  - `result_type` 固定枚举：`success`、`unsupported`、`platform_rejected`、`network_error`、`timeout`、`authorization_required`、`invalid_request`
+  - 401/403/406/461 映射为 `authorization_required`；429 和其他平台拒绝映射为 `platform_rejected`；超时映射为 `timeout`；普通网络异常映射为 `network_error`
+  - 全部失败场景不自动重试
+  - 进程内匿名指标仅聚合结果类型、处理耗时和固定 `standard` / `low` / `unknown` quality 桶
+  - 异常链、日志、API 响应和指标不保存或输出 URL、作品标识、平台正文、Cookie、签名、请求头、token、异常原文等敏感上下文
+
+### 测试结果
+- guest-download 分类专项：7/7 通过
+- 公开作品链接安全专项：6/6 通过
+- Python 3.12 全量 unittest：33/33 通过
+- 已知降级：XHS-Downloader 缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
+### 下次迭代建议
+- 在具备完整下载器依赖和授权 Cookie 的隔离环境验证允许链接的完整下载链路
+
+---
+
 ## 2026-07-29 12:26 — 迭代 #189
 
 ### 迭代目标

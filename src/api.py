@@ -14,12 +14,15 @@ import os
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version as package_version
 import re
+import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, Header, HTTPException, Query, Response
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, StrictBool, field_validator, model_validator
 
 if TYPE_CHECKING:
@@ -1328,6 +1331,10 @@ class GuestDownloadRequest(BaseModel):
 class GuestDownloadResponse(BaseModel):
     """访客模式下载响应"""
     status: str
+    result_type: Literal[
+        "success", "unsupported", "platform_rejected", "network_error",
+        "timeout", "authorization_required", "invalid_request",
+    ]
     note_id: str | None = None
     title: str | None = None
     author: str | None = None
@@ -1339,6 +1346,63 @@ class GuestDownloadResponse(BaseModel):
     message: str | None = None
 
 
+_guest_download_metrics: dict[str, dict[str, int]] = {}
+_QUALITY_LEVELS = {"standard", "low", "unknown"}
+
+
+def _normalize_guest_quality(value: object) -> str:
+    """Map untrusted source quality to one fixed anonymous metric bucket."""
+    return value if isinstance(value, str) and value in _QUALITY_LEVELS else "unknown"
+
+
+@app.exception_handler(RequestValidationError)
+async def guest_download_validation_error_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Classify rejected guest-download input without invoking its handler."""
+    if request.url.path != "/api/guest-download":
+        return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
+    _record_guest_download_metric("invalid_request", 0)
+    return JSONResponse(
+        status_code=422,
+        content={
+            "status": "error",
+            "result_type": "invalid_request",
+            "message": "请求格式或公开单作品链接不符合安全要求；请检查链接并确认授权。",
+        },
+    )
+
+
+def _record_guest_download_metric(result_type: str, elapsed_ms: int, quality: object = None) -> None:
+    """Record fixed aggregate buckets only: result, duration, and standard/low/unknown quality."""
+    bucket = _guest_download_metrics.setdefault(result_type, {"count": 0, "total_elapsed_ms": 0})
+    bucket["count"] += 1
+    bucket["total_elapsed_ms"] += max(0, elapsed_ms)
+    quality_bucket = _guest_download_metrics.setdefault(
+        f"quality:{_normalize_guest_quality(quality)}", {"count": 0, "total_elapsed_ms": 0}
+    )
+    quality_bucket["count"] += 1
+
+
+def _guest_response(
+    result_type: Literal[
+        "success", "unsupported", "platform_rejected", "network_error",
+        "timeout", "authorization_required", "invalid_request",
+    ],
+    started_at: float,
+    *,
+    message: str,
+    **fields: Any,
+) -> GuestDownloadResponse:
+    _record_guest_download_metric(result_type, int((time.monotonic() - started_at) * 1000), fields.get("quality"))
+    return GuestDownloadResponse(
+        status="ok" if result_type == "success" else "error",
+        result_type=result_type,
+        message=message,
+        **fields,
+    )
+
+
 @app.post(
     "/api/guest-download",
     response_model=GuestDownloadResponse,
@@ -1346,39 +1410,65 @@ class GuestDownloadResponse(BaseModel):
     tags=["guest"],
 )
 async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse:
-    """
-    访客模式获取笔记元数据和媒体 URL。
-    无需配置 XHS_COOKIE 即可使用，但有以下限制：
-    - 仅支持单条笔记（需提供含 xsec_token 的完整 URL）
-    - 可能获取到较低画质的媒体
-    - 风控更严格，请求频率受限
-    - 不支持博主主页批量爬取
+    """Fetch one authorized public work without retrying platform rejections."""
+    from .guest_fetcher import (
+        GuestAuthorizationRequiredError,
+        GuestFetcher,
+        GuestNetworkError,
+        GuestPlatformRejectedError,
+    )
 
-    若 download=true，会将媒体文件下载到本地（需要调度器已初始化）。
-    """
-    from .guest_fetcher import GuestFetcher
-
-    if not req.url:
-        return GuestDownloadResponse(status="error", message="URL 不能为空")
-
+    started_at = time.monotonic()
     try:
         guest = GuestFetcher()
         result = await guest.fetch_note(req.url)
-    except Exception as exc:
-        logger.error("访客模式获取笔记失败：%s", exc)
-        return GuestDownloadResponse(
-            status="error",
-            message=f"获取失败：{exc}",
+    except GuestAuthorizationRequiredError:
+        return _guest_response(
+            "authorization_required", started_at,
+            message="该公开内容需要授权访问；请使用有权访问的方式后再试。",
+        )
+    except GuestPlatformRejectedError:
+        return _guest_response(
+            "platform_rejected", started_at,
+            message="平台未接受此公开作品请求，可能需要授权或暂不支持；未自动重试。",
+        )
+    except GuestNetworkError:
+        return _guest_response(
+            "network_error", started_at,
+            message="网络或服务异常，未自动重试，可稍后自行重试。",
+        )
+    except TimeoutError:
+        return _guest_response(
+            "timeout", started_at,
+            message="请求超时，未自动重试。请稍后自行重试。",
+        )
+    except PermissionError:
+        return _guest_response(
+            "authorization_required", started_at,
+            message="该公开内容需要授权访问；请使用有权访问的方式后再试。",
+        )
+    except RuntimeError:
+        return _guest_response(
+            "unsupported", started_at,
+            message="当前环境不支持处理该公开作品链接。",
+        )
+    except Exception:
+        logger.warning("访客模式获取笔记发生本地处理异常")
+        return _guest_response(
+            "network_error", started_at,
+            message="处理请求时发生网络或服务异常；未自动重试，请稍后自行重试。",
         )
 
     if not result:
-        return GuestDownloadResponse(
-            status="error",
-            message="获取笔记失败，可能触发风控或 URL 无效。请确认 URL 包含有效的 xsec_token。",
+        return _guest_response(
+            "platform_rejected", started_at,
+            message="平台未接受此公开作品请求，可能需要授权或暂不支持；未自动重试。",
         )
 
-    response = GuestDownloadResponse(
-        status="ok",
+    quality = _normalize_guest_quality(result.get("quality"))
+    response = _guest_response(
+        "success", started_at,
+        message="已获取公开作品的可用信息；媒体可用性与质量以平台实际返回为准。",
         note_id=result.get("note_id"),
         title=result.get("title"),
         author=result.get("author"),
@@ -1386,10 +1476,10 @@ async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse
         video_url=result.get("video_url") or None,
         image_urls=result.get("image_urls") or None,
         cover_url=result.get("cover_url") or None,
-        guest_mode=True,
+        quality=quality,
     )
 
-    # 可选：下载媒体文件到本地
+    # Optional local download remains separate from guest result classification.
     if req.download and _scheduler:
         try:
             meta = await guest.fetch_note_to_meta(req.url)
@@ -1399,17 +1489,17 @@ async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse
                 dl = Downloader(
                     db=db,
                     download_dir=str(_scheduler._config.download_dir),  # type: ignore[attr-defined]
-                    cookie="",  # 访客模式无 cookie
+                    cookie="",
                 )
                 author_id = result.get("author_id") or "guest"
                 success = await dl.download(meta, author_id)
-                if success:
-                    response.message = "媒体文件已下载到本地"
-                else:
-                    response.message = "媒体文件下载跳过（可能已存在或下载失败）"
-        except Exception as exc:
-            logger.warning("访客模式下载媒体文件失败：%s", exc)
-            response.message = f"元数据获取成功，但媒体下载失败：{exc}"
+                response.message = (
+                    "媒体已下载到本地；质量以平台实际返回为准。"
+                    if success else "作品信息已获取；媒体未下载，可能已存在或暂不可用。"
+                )
+        except Exception:
+            logger.warning("访客模式媒体下载失败")
+            response.message = "作品信息已获取；媒体下载未完成，请稍后检查本地目录。"
 
     return response
 

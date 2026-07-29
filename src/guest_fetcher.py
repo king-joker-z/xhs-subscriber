@@ -32,6 +32,19 @@ from .xhshow_compat import sign_post_headers
 
 logger = logging.getLogger(__name__)
 
+
+class GuestPlatformRejectedError(Exception):
+    """The platform rejected a guest request; callers must not auto-retry."""
+
+
+class GuestAuthorizationRequiredError(GuestPlatformRejectedError):
+    """The platform requires authorization or a verification challenge."""
+
+
+class GuestNetworkError(Exception):
+    """A transport/client failure without request or response context."""
+
+
 # 笔记详情 API（Web 端 feed 接口，支持访客访问）
 _FEED_API = "https://edith.xiaohongshu.com/api/sns/web/v1/feed"
 
@@ -140,10 +153,9 @@ class GuestFetcher:
                 from xhshow import Xhshow  # type: ignore[import]
                 self._xhshow = Xhshow()
                 logger.info("GuestFetcher: xhshow 初始化成功")
-            except ImportError:
-                raise RuntimeError(
-                    "xhshow 未安装，无法使用访客模式。请执行：pip install xhshow>=0.2.0"
-                )
+            except Exception:
+                logger.warning("GuestFetcher: xhshow 初始化失败")
+                raise RuntimeError("guest fetcher support is unavailable") from None
         return self._xhshow
 
     def _generate_guest_cookies(self) -> dict[str, str]:
@@ -219,16 +231,16 @@ class GuestFetcher:
                  }
         """
         if not url or not url.startswith(("http://", "https://")):
-            raise ValueError(f"GuestFetcher.fetch_note 收到非法 URL：{url!r}")
+            raise ValueError("guest request URL is invalid")
 
         note_id = _extract_note_id(url)
         if not note_id:
-            logger.error("GuestFetcher: 无法从 URL 提取 note_id：%s", url)
+            logger.warning("GuestFetcher: 公开作品标识无效")
             return None
 
         xsec_token = _extract_xsec_token(url)
         if not xsec_token:
-            logger.warning("GuestFetcher: URL 中未找到 xsec_token，请求可能失败：%s", url)
+            logger.warning("GuestFetcher: 公开作品链接缺少访问参数")
 
         xhshow = self._ensure_xhshow()
         await self._rate_limit()
@@ -247,11 +259,14 @@ class GuestFetcher:
         }
 
         # xhshow 签名：兼容 0.1.x（sign_xs_post）与 0.2.x（完整 sign_headers_post）
+        signed_headers: dict[str, str] | None
         try:
             signed_headers = sign_post_headers(xhshow, _FEED_API, cookie_str, payload)
-        except Exception as exc:
-            logger.error("GuestFetcher: xhshow 签名失败：%s", exc)
-            return None
+        except Exception:
+            logger.warning("GuestFetcher: xhshow 签名处理异常")
+            signed_headers = None
+        if signed_headers is None:
+            raise GuestNetworkError("guest request processing failure") from None
 
         headers = {
             "user-agent": _random_ua(),
@@ -262,6 +277,8 @@ class GuestFetcher:
             **signed_headers,
         }
 
+        transport_failure: str | None = None
+        timeout_failure = False
         try:
             async with httpx.AsyncClient(
                 http2=True,
@@ -274,47 +291,45 @@ class GuestFetcher:
                     json=payload,
                     headers=headers,
                 )
-
-            if resp.status_code == 461:
-                logger.warning(
-                    "GuestFetcher: 触发风控验证（461），note_id=%s。"
-                    "访客模式下无法通过验证，建议使用有效 Cookie。",
-                    note_id,
-                )
-                return None
-
-            if resp.status_code == 429:
-                logger.warning("GuestFetcher: 触发限流（429），note_id=%s", note_id)
-                return None
-
-            if resp.status_code != 200:
-                logger.error(
-                    "GuestFetcher: HTTP %d，note_id=%s",
-                    resp.status_code, note_id,
-                )
-                return None
-
-            data = resp.json()
-            if not isinstance(data, dict):
-                logger.error("GuestFetcher: 响应非 dict 类型：%s", type(data).__name__)
-                return None
-
-            code = data.get("code")
-            if code != 0:
-                logger.error(
-                    "GuestFetcher: API 错误 code=%s msg=%s note_id=%s",
-                    code, data.get("msg"), note_id,
-                )
-                return None
-
-            return self._parse_feed_response(data, note_id)
-
         except httpx.TimeoutException:
-            logger.error("GuestFetcher: 请求超时，note_id=%s", note_id)
+            logger.warning("GuestFetcher: 请求超时")
+            timeout_failure = True
+        except httpx.HTTPError:
+            logger.warning("GuestFetcher: 网络或 HTTP 客户端异常")
+            transport_failure = "guest transport failure"
+        except Exception:
+            logger.warning("GuestFetcher: 本地请求处理异常")
+            transport_failure = "guest request processing failure"
+
+        if timeout_failure:
+            raise TimeoutError("guest request timed out") from None
+        if transport_failure is not None:
+            # Raised after the except suite so no low-level exception is retained
+            # as __cause__ or __context__ on the observable error chain.
+            raise GuestNetworkError(transport_failure)
+
+        if resp.status_code in (401, 403, 406, 461):
+            raise GuestAuthorizationRequiredError(
+                f"guest request requires authorization or verification (HTTP {resp.status_code})"
+            )
+
+        if resp.status_code == 429:
+            raise GuestPlatformRejectedError("guest request rate limited (HTTP 429)")
+
+        if resp.status_code != 200:
+            raise GuestPlatformRejectedError(f"guest request rejected (HTTP {resp.status_code})")
+
+        data = resp.json()
+        if not isinstance(data, dict):
+            logger.warning("GuestFetcher: 平台响应格式异常")
             return None
-        except Exception as exc:
-            logger.error("GuestFetcher: 请求异常 note_id=%s：%s", note_id, exc)
+
+        code = data.get("code")
+        if code != 0:
+            logger.warning("GuestFetcher: 平台返回拒绝结果")
             return None
+
+        return self._parse_feed_response(data, note_id)
 
     def _parse_feed_response(self, data: dict, note_id: str) -> Optional[dict[str, Any]]:
         """
@@ -345,7 +360,7 @@ class GuestFetcher:
         try:
             items = data.get("data", {}).get("items", [])
             if not items:
-                logger.warning("GuestFetcher: feed 响应 items 为空，note_id=%s", note_id)
+                logger.warning("GuestFetcher: 平台响应未包含可处理作品")
                 return None
 
             # 找到目标笔记
@@ -359,11 +374,11 @@ class GuestFetcher:
             # 必须匹配请求的笔记 ID。feed 响应可能包含推荐项，回退到第一项会
             # 让用户拿到与 URL 不对应的媒体，不能将其视作成功结果。
             if note_card is None:
-                logger.warning("GuestFetcher: feed 响应中未找到目标 note_id=%s", note_id)
+                logger.warning("GuestFetcher: 平台响应未匹配请求作品")
                 return None
 
             if not isinstance(note_card, dict):
-                logger.warning("GuestFetcher: 目标 note_card 类型非法，note_id=%s", note_id)
+                logger.warning("GuestFetcher: 平台作品数据格式异常")
                 return None
 
             # 基础信息
@@ -478,14 +493,11 @@ class GuestFetcher:
                 "guest_mode": True,
             }
 
-            logger.info(
-                "GuestFetcher: 成功获取笔记 note_id=%s type=%s title=%s",
-                note_id, result["type"], title[:50],
-            )
+            logger.info("GuestFetcher: 公开作品信息获取完成")
             return result
 
-        except Exception as exc:
-            logger.error("GuestFetcher: 解析响应失败 note_id=%s：%s", note_id, exc)
+        except Exception:
+            logger.warning("GuestFetcher: 平台响应解析异常")
             return None
 
     async def fetch_note_to_meta(self, url: str) -> Optional["VideoMeta"]:
