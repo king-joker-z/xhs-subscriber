@@ -1567,7 +1567,7 @@ async def _guest_delete_has_body(request: Request) -> bool:
     description=(
         "以 POST /api/guest-download 返回的 task_ref 查询短期最小化结果。task_ref 是持有即查询"
         "（bearer）关联号，不是作品 ID、下载任务或媒体访问凭证；请勿记录、分享或当作媒体凭证。"
-        "通过请求头 X-Guest-Result-Ref 传递该关联号；请求 URL 不接受 query 参数，且 body 不作为回退来源，以避免关联号出现在默认访问日志请求目标中。"
+        "仅通过请求头 X-Guest-Result-Ref 传递；严禁使用 ?task_ref=、其他 query 参数或 body，以避免关联号出现在默认访问日志请求目标中。"
         "仅 success 与 download=true 的 unsupported 结果创建并返回该关联号；其他失败结果不创建可查询或删除记录。"
         "仅返回 status 与 result_type；非法、不存在或过期 task_ref 统一返回 status=deleted，"
         "不区分原因，也不返回 URL、token 或作品元数据。"
@@ -1593,6 +1593,13 @@ async def api_guest_result(request: Request) -> JSONResponse:
 @app.delete(
     "/api/guest-results",
     summary="提前删除最小化访客任务结果",
+    description=(
+        "持有 X-Guest-Result-Ref 的调用方可提前删除该不透明 bearer 关联号对应的最小 guest 结果。"
+        "删除不可恢复，仅作用专属最小 guest 结果记录，不删除下载文件、订阅、Cookie、数据库或匿名聚合指标。"
+        "仅接受一个非空 X-Guest-Result-Ref 请求头；严禁使用 ?task_ref=、其他 query 参数或 body。"
+        "请求头属于敏感 bearer 数据，客户端、代理和日志系统必须脱敏；非法、重复、缺失、不存在或过期引用统一返回 deleted。"
+    ),
+    response_description="统一的最小 deleted 结果；不暴露记录是否曾存在或任何作品/媒体元数据。",
     tags=["guest"],
 )
 async def api_delete_guest_result(request: Request) -> JSONResponse:
@@ -1617,7 +1624,8 @@ async def api_delete_guest_result(request: Request) -> JSONResponse:
         "说明无需 XHS_COOKIE 的受控公开作品探测能力及其安全限制："
         "不返回作品详情或媒体 URL，不支持本地媒体下载；"
         "仅 success 与 download=true 的 unsupported 返回短期 bearer task_ref；"
-        "查询或提前删除时通过 X-Guest-Result-Ref: <task_ref> 请求头传递，不要将其放入 URL、日志或响应拼接内容中。"
+        "查询或提前删除时只能通过 X-Guest-Result-Ref: <task_ref> 请求头传递，严禁 ?task_ref=、其他 query 参数或 body；"
+        "该敏感 bearer 请求头必须在客户端、代理和日志中脱敏，不要将其放入 URL、日志或响应拼接内容中。"
         "POST /api/guest-download 的业务结果须由 result_type 判断。"
     ),
     response_description="访客探测、短期结果关联号和最小化留存限制说明。",
@@ -1648,7 +1656,8 @@ async def api_guest_info() -> dict:
             "仅支持一条已获授权的公开作品链接探测，不支持主页、搜索、收藏/点赞或合集入口",
             "不返回作品 ID、标题、作者、媒体 URL 或封面 URL",
             "仅 success 与 download=true 的 unsupported 返回 task_ref；它是不透明短期 bearer 结果关联号，不是作品 ID、下载任务或媒体凭证",
-            "GET 或 DELETE /api/guest-results 时仅以 X-Guest-Result-Ref: <task_ref> 请求头传递；请求 URL 不接受 query 参数",
+            "GET 或 DELETE /api/guest-results 时仅以 X-Guest-Result-Ref: <task_ref> 请求头传递；严禁 ?task_ref=、其他 query 参数或 body，且必须对该敏感 bearer 请求头脱敏",
+            "DELETE 不可恢复，只删除最小 guest 结果记录；不删除下载文件、订阅、Cookie、数据库或匿名聚合指标",
             "task_ref 默认最多保留 7 天；可通过 guest.result_retention_days 或 GUEST_RESULT_RETENTION_DAYS 配置为 1–365 天",
             "不记录或返回原始 URL、token、作品元数据或媒体 URL；请勿记录或分享 task_ref",
             "HTTP 200 仅表示请求已被处理，客户端必须根据 result_type 判断业务结果",

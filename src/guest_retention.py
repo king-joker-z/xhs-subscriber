@@ -104,12 +104,15 @@ class GuestResultStore:
             if created_at.tzinfo is None or current - created_at >= self._retention:
                 await self.cleanup(current)
                 return {"status": "deleted", "message": _DELETED_MESSAGE}
+            # Re-check immediately before unlink so a changed path is never treated as owned.
+            if not self._owned_regular_task_file(path):
+                return {"status": "deleted", "message": _DELETED_MESSAGE}
             path.unlink()
             return {
                 "status": "deleted",
                 "message": "结果已删除，无法恢复，仅保留不可识别聚合统计",
             }
-        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        except (FileNotFoundError, OSError, ValueError, KeyError, json.JSONDecodeError):
             return {"status": "deleted", "message": _DELETED_MESSAGE}
 
     async def cleanup(self, now: datetime | None = None) -> int:
@@ -135,6 +138,6 @@ class GuestResultStore:
                     continue
                 path.unlink()
                 deleted += 1
-            except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            except (FileNotFoundError, OSError, ValueError, KeyError, json.JSONDecodeError):
                 continue
         return deleted

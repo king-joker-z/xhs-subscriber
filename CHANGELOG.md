@@ -3,7 +3,12 @@
 ## [Unreleased]
 
 ### 待发布
-- **docs: 补齐 guest result 留存与查询契约**
+- **fix: 加固 guest 结果提前删除并发与敏感 bearer 契约**
+  - GET/DELETE 示例及 OpenAPI 明确禁止 `?task_ref=`、其他 query 参数和 body；仅通过 `X-Guest-Result-Ref` 传递，并要求日志/代理脱敏
+  - 提前删除不可恢复，只作用最小 guest 结果记录，不影响下载文件、订阅、Cookie、数据库或匿名聚合指标
+  - 删除、读取与到期清理并发或 `unlink` 遇 `FileNotFoundError` 时统一返回最小 `deleted` 语义，不泄露或越界删除
+
+
   - 明确 `task_ref` 是不透明、短期、持有即查询（bearer）的结果关联号，不是作品 ID、下载任务或媒体凭证；仅 `success` 和 `download=true` 的 `unsupported` 返回
   - 明确 `GET /api/guest-results` 仅返回 `status`/`result_type`，非法、不存在或过期引用统一为 `deleted`，不记录或返回 URL、token、媒体 URL 或作品元数据
   - 文档化默认 7 天、配置范围 1–365 天，以及 YAML `guest.result_retention_days` 与环境变量 `GUEST_RESULT_RETENTION_DAYS` 覆盖关系

@@ -135,11 +135,25 @@ subscriptions:
 | GET | `/api/stats` | 按日期下载统计（`?days=14`），返回每日 video/image/total 数量 |
 | POST | `/api/vacuum` | 执行 SQLite VACUUM（需 `X-Admin-Token` 头，若 `XHS_ADMIN_TOKEN` 已设置） |
 | POST | `/api/guest-download` | 受控探测一条已授权公开作品；不返回详情/媒体 URL、不下载。客户端按 `result_type` 判断；仅 `success` 与 `download=true` 的 `unsupported` 返回短期 `task_ref` |
-| GET | `/api/guest-results?task_ref=...` | 用不透明短期 bearer `task_ref` 查询，仅返回 `status`/`result_type`；非法、不存在或过期统一 `deleted`，不返回 URL、token 或作品元数据 |
+| GET | `/api/guest-results` | 用不透明短期 bearer `task_ref` 查询：仅通过 `X-Guest-Result-Ref: <task_ref>` header 传递，严禁 `?task_ref=`、其他 query 参数或 body；仅返回 `status`/`result_type`，非法、不存在或过期统一 `deleted` |
+| DELETE | `/api/guest-results` | 用同一敏感 header 提前删除最小 guest 结果，删除不可恢复；仅删除该最小记录，不删除下载文件、订阅、Cookie、数据库或匿名聚合指标。header 必须在客户端、代理和日志中脱敏 |
 | GET | `/api/guest-info` | 访客探测、task_ref 和最小化留存限制说明 |
 | GET | `/ui` | **Web 管理界面**，浏览器打开 [http://localhost:8080/ui](http://localhost:8080/ui) 即可使用 |
 
-## 构建镜像
+### Guest 结果查询与提前删除
+
+`task_ref` 是不透明、短期的 bearer 结果关联号；不是作品 ID、下载任务或媒体凭证。它只能以敏感请求头传递，必须在客户端、代理与日志中脱敏，严禁放入 URL、query、body 或日志。
+
+```bash
+# 查询：仅返回 status / result_type，示例不含真实 task_ref
+curl -H 'X-Guest-Result-Ref: <task_ref>' http://localhost:8080/api/guest-results
+
+# 提前删除：不可恢复；只删除最小 guest 结果记录，不删除下载文件、订阅、Cookie、数据库或匿名聚合指标
+curl -X DELETE -H 'X-Guest-Result-Ref: <task_ref>' http://localhost:8080/api/guest-results
+```
+
+`?task_ref=`、任何其他 query 参数和 request body 都被拒绝并统一返回最小 `deleted` 语义。非法、不存在或过期引用也不会暴露存在性、URL、token、作品或媒体元数据。
+
 
 ```bash
 docker build -t xhs-subscriber .

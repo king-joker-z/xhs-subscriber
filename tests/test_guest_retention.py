@@ -45,7 +45,7 @@ class GuestRetentionTests(unittest.TestCase):
         for expected in (
             "task_ref", "bearer", "不是作品 ID、下载任务或媒体访问凭证",
             "仅返回 status 与 result_type", "非法、不存在或过期", "不返回 URL、token 或作品元数据",
-            "X-Guest-Result-Ref", "不接受 query 参数", "body 不作为回退来源", "其他失败结果不创建",
+            "X-Guest-Result-Ref", "严禁使用 ?task_ref=", "其他 query 参数", "body", "其他失败结果不创建",
         ):
             self.assertIn(expected, text)
 
@@ -54,8 +54,18 @@ class GuestRetentionTests(unittest.TestCase):
         text = " ".join([payload["description"], *payload["limitations"], payload["usage"]])
         self.assertIn("X-Guest-Result-Ref", text)
         self.assertIn("GET 或 DELETE /api/guest-results", text)
+        self.assertIn("严禁 ?task_ref=", text)
         self.assertNotIn("guest-results?task_ref", text)
-        self.assertNotIn("?task_ref=", text)
+
+    def test_delete_openapi_contract_prohibits_query_and_documents_scope(self) -> None:
+        schema = TestClient(api.app).get("/openapi.json").json()
+        operation = schema["paths"]["/api/guest-results"]["delete"]
+        text = f"{operation['summary']} {operation['description']} {operation['responses']['200']['description']}"
+        for expected in (
+            "X-Guest-Result-Ref", "严禁使用 ?task_ref=", "敏感 bearer 数据", "必须脱敏",
+            "删除不可恢复", "仅作用专属最小 guest 结果记录", "不删除下载文件、订阅、Cookie、数据库或匿名聚合指标",
+        ):
+            self.assertIn(expected, text)
 
     def test_unexpired_record_is_retained_and_only_minimal_fields_are_returned(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -146,6 +156,57 @@ class GuestRetentionTests(unittest.TestCase):
                 self._assert_private_response(response, ref, task_id, "private.invalid", "secret")
                 self.assertEqual(response.json(), {"status": "deleted", "message": _DELETED_MESSAGE})
             self.assertTrue((root / task_id).exists())
+
+    def test_concurrent_get_delete_cleanup_and_missing_unlink_stay_minimal(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / ".guest-results"
+            store = self._store(root, days=1)
+            now = datetime.now(timezone.utc)
+            active_id, expired_id, missing_id = "9" * 16, "a" * 16, "b" * 16
+            active_ref = f"www.xiaohongshu.com/public-work:{active_id}"
+            expired_ref = f"xhslink.com/short-link:{expired_id}"
+            missing_ref = f"www.xiaohongshu.com/public-work:{missing_id}"
+            self._write_task(root, active_id, now)
+            self._write_task(root, expired_id, now - timedelta(days=2))
+
+            async def race() -> tuple[dict[str, object], ...]:
+                return await asyncio.gather(
+                    store.delete(active_ref, now),
+                    store.delete(active_ref, now),
+                    store.get(active_ref, now),
+                    store.delete(expired_ref, now),
+                    store.cleanup(now),
+                )
+
+            results = asyncio.run(race())
+            for result in results[:4]:
+                self.assertEqual(result["status"], "deleted")
+                self.assertNotIn(active_id, repr(result))
+                self.assertNotIn(expired_id, repr(result))
+            self.assertFalse((root / active_id).exists())
+            self.assertFalse((root / expired_id).exists())
+
+            path = self._write_task(root, missing_id, now)
+            with patch.object(Path, "unlink", side_effect=FileNotFoundError):
+                result = asyncio.run(store.delete(missing_ref, now))
+            self.assertEqual(result, {"status": "deleted", "message": _DELETED_MESSAGE})
+            self.assertTrue(path.exists())
+
+    def test_api_delete_concurrent_failure_stays_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = self._store(Path(directory) / ".guest-results")
+            ref = f"www.xiaohongshu.com/public-work:{'c' * 16}"
+            previous_store = api._guest_result_store
+            api.set_guest_result_store(store)
+            try:
+                with patch.object(store, "delete", new=AsyncMock(side_effect=FileNotFoundError)):
+                    response = TestClient(api.app).delete(
+                        "/api/guest-results", headers={"X-Guest-Result-Ref": ref}
+                    )
+            finally:
+                api.set_guest_result_store(previous_store)
+        self._assert_private_response(response, ref, "c" * 16)
+        self.assertEqual(response.json(), {"status": "deleted", "message": _DELETED_MESSAGE})
 
     def test_header_only_delete_is_idempotent_preserves_metrics_and_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
