@@ -35,6 +35,14 @@ _DIFF_REASONS = frozenset({
     "coverage_reduced", "new_sensitive_category", "assertion_failures_increased", "schema_or_fixture_changed",
 })
 _DIFF_VERSION_FIELDS = frozenset({"schema_version_changed", "suite_version_changed", "fixture_version_changed"})
+_MANIFEST_SCHEMA_VERSION = "baseline-change-manifest/v1"
+_MANIFEST_FIELDS = frozenset({
+    "schema_version", "old_integrity", "new_integrity", "change_types", "impact_scopes",
+    "reason_code", "external_requests", "no_sensitive_data_in_manifest", "human_approval_required",
+    "approval_state", "approved_at_utc", "approved_by_role",
+})
+_MANIFEST_CHANGE_TYPES = frozenset({"schema_changed", "assertion_changed"})
+_MANIFEST_REASON_CODES = frozenset({"test_fixture_update", "policy_change", "schema_migration", "assertion_maintenance"})
 
 
 def canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
@@ -156,6 +164,74 @@ def compare_baseline(current: Mapping[str, Any], baseline: Mapping[str, Any]) ->
         "counts": counts,
         "versions": versions,
     }
+
+
+
+def validate_manifest(
+    manifest: Mapping[str, Any], old_summary: Mapping[str, Any], new_summary: Mapping[str, Any]
+) -> dict[str, str]:
+    """Validate an explicit, synthetic approval marker for a real summary change.
+
+    This only verifies fields supplied by a caller; it never approves or updates a baseline.
+    """
+    if not verify_summary(old_summary) or not verify_summary(new_summary):
+        raise ValueError("invalid summary")
+    if old_summary == new_summary:
+        raise ValueError("manifest requires a summary change")
+    try:
+        if set(manifest) != _MANIFEST_FIELDS:
+            raise ValueError("invalid manifest")
+        if manifest["schema_version"] != _MANIFEST_SCHEMA_VERSION:
+            raise ValueError("invalid manifest")
+        if not all(isinstance(manifest[key], str) and re.fullmatch(r"[0-9a-f]{64}", manifest[key])
+                   for key in ("old_integrity", "new_integrity")):
+            raise ValueError("invalid manifest")
+        if (manifest["old_integrity"] != old_summary["integrity"]["sha256"] or
+                manifest["new_integrity"] != new_summary["integrity"]["sha256"]):
+            raise ValueError("invalid manifest")
+        change_types = manifest["change_types"]
+        scopes = manifest["impact_scopes"]
+        if (not isinstance(change_types, Sequence) or isinstance(change_types, (str, bytes)) or
+                not change_types or len(set(change_types)) != len(change_types) or
+                not set(change_types) <= _MANIFEST_CHANGE_TYPES):
+            raise ValueError("invalid manifest")
+        if (not isinstance(scopes, Sequence) or isinstance(scopes, (str, bytes)) or
+                len(set(scopes)) != len(scopes) or not set(scopes) <= _SCENARIOS):
+            raise ValueError("invalid manifest")
+        if manifest["reason_code"] not in _MANIFEST_REASON_CODES:
+            raise ValueError("invalid manifest")
+        if manifest["external_requests"] != 0 or manifest["no_sensitive_data_in_manifest"] is not True:
+            raise ValueError("invalid manifest")
+        if (manifest["human_approval_required"] is not True or manifest["approval_state"] != "approved" or
+                manifest["approved_by_role"] != "maintainer"):
+            raise ValueError("invalid manifest")
+        _parse_utc(manifest["approved_at_utc"])
+        changed_scopes = {name for name in _SCENARIOS if old_summary["coverage"][name] != new_summary["coverage"][name]}
+        if set(scopes) != changed_scopes:
+            raise ValueError("invalid manifest")
+        derived_types: set[str] = set()
+        if any(old_summary[field] != new_summary[field]
+               for field in ("schema_version", "suite_version", "fixture_version")):
+            derived_types.add("schema_changed")
+        if (any(old_summary[field] != new_summary[field]
+                for field in ("passed", "failed", "sensitive_violations")) or changed_scopes):
+            derived_types.add("assertion_changed")
+        if set(change_types) != derived_types:
+            raise ValueError("invalid manifest")
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("invalid manifest") from None
+    return {"status": "validated"}
+
+
+def _parse_utc(value: object) -> None:
+    if not isinstance(value, str):
+        raise ValueError("invalid UTC time")
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        raise ValueError("invalid UTC time") from None
+    if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != value:
+        raise ValueError("invalid UTC time")
 
 
 def verify_summary(summary: Mapping[str, Any]) -> bool:

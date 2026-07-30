@@ -6,9 +6,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.compliance_summary import (
-    build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values, verify_summary,
-)
+try:
+    from tests.compliance_summary import (
+        build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values, validate_manifest, verify_summary,
+    )
+except ModuleNotFoundError:  # unittest discovery loads this module directly from tests/.
+    from compliance_summary import (  # type: ignore[no-redef]
+        build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values, validate_manifest, verify_summary,
+    )
 
 
 _COVERAGE = {
@@ -29,6 +34,24 @@ class ComplianceSummaryTests(unittest.TestCase):
         }
         values.update(overrides)
         return build_summary(**values)  # type: ignore[arg-type]
+
+    def _manifest(self, old: dict[str, object], new: dict[str, object], **overrides: object) -> dict[str, object]:
+        values: dict[str, object] = {
+            "schema_version": "baseline-change-manifest/v1",
+            "old_integrity": old["integrity"]["sha256"],
+            "new_integrity": new["integrity"]["sha256"],
+            "change_types": ["assertion_changed"],
+            "impact_scopes": [],
+            "reason_code": "assertion_maintenance",
+            "external_requests": 0,
+            "no_sensitive_data_in_manifest": True,
+            "human_approval_required": True,
+            "approval_state": "approved",
+            "approved_at_utc": _RUN_AT,
+            "approved_by_role": "maintainer",
+        }
+        values.update(overrides)
+        return values
 
     def test_canonical_summary_is_stable_and_can_be_written_only_to_tempdir(self) -> None:
         first = self._summary()
@@ -91,6 +114,83 @@ class ComplianceSummaryTests(unittest.TestCase):
         ):
             with self.subTest(run_at_utc=invalid_time), self.assertRaises(ValueError):
                 self._summary(run_at_utc=invalid_time)
+
+    def test_manifest_validates_explicit_approved_aggregate_change_without_input_mutation(self) -> None:
+        old = self._summary()
+        coverage = dict(_COVERAGE, preflight=0)
+        new = self._summary(coverage=coverage, failed=1)
+        manifest = self._manifest(old, new, impact_scopes=["preflight"])
+        old_bytes, new_bytes, manifest_bytes = map(canonical_json_bytes, (old, new, manifest))
+        self.assertEqual(validate_manifest(manifest, old, new), {"status": "validated"})
+        self.assertEqual((canonical_json_bytes(old), canonical_json_bytes(new), canonical_json_bytes(manifest)),
+                         (old_bytes, new_bytes, manifest_bytes))
+
+    def test_manifest_derives_exact_types_and_scopes(self) -> None:
+        old = self._summary()
+        assertion_only = self._summary(failed=1)
+        self.assertEqual(validate_manifest(self._manifest(old, assertion_only), old, assertion_only), {"status": "validated"})
+
+        version_only = self._summary(fixture_version="offline-fixtures/v2")
+        version_manifest = self._manifest(old, version_only, change_types=["schema_changed"])
+        self.assertEqual(validate_manifest(version_manifest, old, version_only), {"status": "validated"})
+
+        coverage = self._summary(coverage=dict(_COVERAGE, tls=0))
+        coverage_manifest = self._manifest(old, coverage, impact_scopes=["tls"])
+        self.assertEqual(validate_manifest(coverage_manifest, old, coverage), {"status": "validated"})
+
+        mixed = self._summary(coverage=dict(_COVERAGE, review=0), failed=1, fixture_version="offline-fixtures/v2")
+        mixed_manifest = self._manifest(
+            old, mixed, change_types=["schema_changed", "assertion_changed"], impact_scopes=["review"],
+        )
+        self.assertEqual(validate_manifest(mixed_manifest, old, mixed), {"status": "validated"})
+
+    def test_manifest_rejects_non_exact_types_and_scopes(self) -> None:
+        old = self._summary()
+        assertion_only = self._summary(failed=1)
+        version_only = self._summary(fixture_version="offline-fixtures/v2")
+        coverage = self._summary(coverage=dict(_COVERAGE, tls=0))
+        cases = (
+            self._manifest(old, assertion_only, change_types=["assertion_changed", "schema_changed"]),
+            self._manifest(old, version_only, change_types=["schema_changed", "assertion_changed"]),
+            self._manifest(old, assertion_only, impact_scopes=["preflight"]),
+            self._manifest(old, coverage, impact_scopes=[]),
+            self._manifest(old, coverage, impact_scopes=["preflight"]),
+            self._manifest(old, assertion_only, change_types=["fixture_added"]),
+            self._manifest(old, assertion_only, change_types=["approved_policy_change"]),
+        )
+        for manifest, new in zip(cases, (assertion_only, version_only, assertion_only, coverage, coverage, assertion_only, assertion_only)):
+            with self.subTest(manifest=manifest["change_types"]):
+                with self.assertRaisesRegex(ValueError, "invalid manifest"):
+                    validate_manifest(manifest, old, new)
+
+        old = self._summary()
+        new = self._summary(coverage=dict(_COVERAGE, tls=0), failed=1)
+        cases = (
+            self._manifest(old, new, approval_state="pending"),
+            self._manifest(old, new, old_integrity="0" * 64),
+            self._manifest(old, new, impact_scopes=["preflight"]),
+            self._manifest(old, new, approved_at_utc="2026-02-30T08:03:22Z"),
+            self._manifest(old, new, external_requests=1),
+            self._manifest(old, new, no_sensitive_data_in_manifest=False),
+            self._manifest(old, new, unknown="forbidden"),
+        )
+        for manifest in cases:
+            with self.subTest(manifest=sorted(manifest)):
+                with self.assertRaisesRegex(ValueError, "invalid manifest") as error:
+                    validate_manifest(manifest, old, new)
+                self.assertNotIn("forbidden", str(error.exception))
+
+    def test_manifest_rejects_sensitive_or_unrelated_changes_and_no_change(self) -> None:
+        old = self._summary()
+        new = self._summary(coverage=dict(_COVERAGE, review=0), failed=1)
+        with self.assertRaises(ValueError):
+            validate_manifest(self._manifest(old, new, impact_scopes=["preflight"]), old, new)
+        with self.assertRaises(ValueError):
+            validate_manifest(self._manifest(old, old), old, old)
+        sensitive = self._manifest(old, new, reason_code="https://example.invalid/?token=secret")
+        with self.assertRaisesRegex(ValueError, "invalid manifest") as error:
+            validate_manifest(sensitive, old, new)
+        self.assertNotIn("secret", str(error.exception))
 
     def test_baseline_diff_is_deterministic_and_no_regression_for_same_input(self) -> None:
         baseline = self._summary()
