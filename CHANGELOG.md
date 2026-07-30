@@ -3,6 +3,18 @@
 ## [Unreleased]
 
 ### 待发布
+- **test: 离线跨模块 guest 合规回归契约（2026-07-30）**
+  - 新增 `tests/test_guest_compliance_contract.py`，覆盖公开单作品预检与零副作用、用途双确认，以及平台拒绝/权限/超时/网络的固定分类且无重试或认证升级
+  - 覆盖真实 guest 受控传输路径保持默认 TLS 证书验证、`follow_redirects` 与受控 timeout；覆盖最小结果/review、主动删除与到期后的不可恢复行为
+  - 覆盖 A/B 匿名分流及异常安全降级；不改变业务、API、TLS、请求、重试、下载或平台访问策略
+
+### 测试结果
+- 新包：6/6 通过
+- 合规 / 分类 / 安全 / 留存 / TLS / 签名：57/57 通过
+- Python 3.12 全量 unittest：84/84 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
 - **feat: guest-preflight 本地访客质量预期安全分流（2026-07-30）**
   - 仅对 eligible 预检随机返回固定 A/B 访客能力边界文案；分流不可关联 URL、任务、用户或 token，不持久化、无公开汇总，仅保留进程内匿名展示计数
   - 随机源、文案映射、计数读写或日志任意异常均安全降级为既有 `200 eligible` 安全摘要，并省略可选 A/B 字段
