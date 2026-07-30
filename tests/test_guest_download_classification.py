@@ -53,7 +53,179 @@ class GuestDownloadClassificationTests(unittest.TestCase):
         self.client.close()
 
     def _post(self) -> object:
-        return self.client.post("/api/guest-download", json={"url": _URL, "authorized": True})
+        return self.client.post("/api/guest-download", json={"url": _URL, "authorized": True, "confirmed_visitor_terms": True})
+
+    def test_duplicate_critical_json_fields_are_rejected_before_pydantic_or_fetcher(self) -> None:
+        raw_cases = (
+            '{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret","authorized":true,"confirmed_visitor_terms":true,"confirmed_visitor_terms":false}',
+            '{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret","authorized":true,"confirmed_visitor_terms":false,"confirmed_visitor_terms":true}',
+            '{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret","authorized":true,"authorized":false,"confirmed_visitor_terms":true}',
+            '{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret","url":"https://example.invalid/private?token=other","authorized":true,"confirmed_visitor_terms":true}',
+            '{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret","authorized":true,"confirmed_visitor_terms":true,"download":false,"download":true}',
+        )
+        media_types = (
+            "application/json",
+            "application/json ; charset=utf-8",
+            "application/json; charset=utf-8",
+            "Application/JSON; charset=UTF-8",
+            "application/vnd.xhs+json; charset=utf-8",
+        )
+        for media_type in media_types:
+            for raw in raw_cases:
+                with self.subTest(content_type=media_type, raw=raw), patch(
+                    "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+                ), self.assertNoLogs("src.api", level="WARNING"):
+                    response = self.client.post(
+                        "/api/guest-download", content=raw, headers={"content-type": media_type}
+                    )
+
+                self.assertEqual(response.status_code, 422)
+                payload = response.json()
+                self.assertEqual(payload["result_type"], "invalid_request")
+                self.assertIn("访客能力边界确认", payload["message"])
+                self.assertEqual(_GuestFetcherStub.calls, 0)
+                self.assertEqual(api._guest_download_metrics, {"terms_rejected": {"count": 1, "total_elapsed_ms": 0}})
+                observed = f"{response.text} {api._guest_download_metrics!r}"
+                for secret in ("xsec_token", "secret", "example.invalid", "private", "other", "confirmed_visitor_terms"):
+                    self.assertNotIn(secret, observed)
+                api._guest_download_metrics.clear()
+
+    def test_content_type_leading_and_trailing_whitespace_is_not_a_success_bypass(self) -> None:
+        raw = ('{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret",'
+               '"authorized":true,"confirmed_visitor_terms":true,"confirmed_visitor_terms":false}')
+        for media_type in (" application/json", "application/json "):
+            with self.subTest(content_type=media_type), patch(
+                "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+            ):
+                response = self.client.post(
+                    "/api/guest-download", content=raw, headers={"content-type": media_type}
+                )
+
+            self.assertEqual(response.status_code, 422)
+            self.assertEqual(_GuestFetcherStub.calls, 0)
+            self.assertNotIn("terms_confirmed", api._guest_download_metrics)
+            api._guest_download_metrics.clear()
+
+    def test_unsupported_or_missing_content_type_is_rejected_without_terms_events(self) -> None:
+        valid_json = ('{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret",'
+                      '"authorized":true,"confirmed_visitor_terms":true}')
+        duplicate_json = valid_json[:-1] + ',"confirmed_visitor_terms":false}'
+        cases = (
+            (None, valid_json),
+            (None, duplicate_json),
+            (None, '{"url":'),
+            ("", valid_json),
+            ("text/plain", valid_json),
+            ("application/x-www-form-urlencoded", "url=https%3A%2F%2Fexample.invalid%2Fprivate&authorized=true"),
+        )
+        for media_type, content in cases:
+            headers = {} if media_type is None else {"content-type": media_type}
+            with self.subTest(content_type=media_type, content=content), patch(
+                "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+            ), self.assertNoLogs("src.api", level="WARNING"):
+                response = self.client.post("/api/guest-download", content=content, headers=headers)
+
+            self.assertEqual(response.status_code, 422)
+            self.assertEqual(response.json()["result_type"], "invalid_request")
+            self.assertEqual(_GuestFetcherStub.calls, 0)
+            self.assertEqual(api._guest_download_metrics, {})
+            observed = f"{response.text} {api._guest_download_metrics!r}"
+            for secret in ("xsec_token", "secret", "example.invalid", "private", "confirmed_visitor_terms"):
+                self.assertNotIn(secret, observed)
+
+        raw = ('{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret",'
+               '"authorized":true,"confirmed_visitor_terms":true,"confirmed_visitor_terms":false}')
+        non_json_cases = (
+            ("text/plain", raw),
+            ("application/x-www-form-urlencoded", "url=https%3A%2F%2Fexample.invalid%2Fprivate&authorized=true"),
+        )
+        for media_type, content in non_json_cases:
+            headers = {} if media_type is None else {"content-type": media_type}
+            with self.subTest(content_type=media_type), patch(
+                "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+            ), self.assertNoLogs("src.api", level="WARNING"):
+                response = self.client.post("/api/guest-download", content=content, headers=headers)
+
+            self.assertEqual(response.status_code, 422)
+            self.assertEqual(response.json()["result_type"], "invalid_request")
+            self.assertEqual(_GuestFetcherStub.calls, 0)
+            self.assertEqual(api._guest_download_metrics, {})
+            observed = f"{response.text} {api._guest_download_metrics!r}"
+            for secret in ("xsec_token", "secret", "example.invalid", "private"):
+                self.assertNotIn(secret, observed)
+
+    def test_json_terms_validation_events_are_exactly_once(self) -> None:
+        for terms in (None, False, "true", 1):
+            payload = {"url": _URL, "authorized": True}
+            if terms is not None:
+                payload["confirmed_visitor_terms"] = terms
+            with self.subTest(terms=repr(terms)), patch(
+                "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+            ):
+                response = self.client.post("/api/guest-download", json=payload)
+
+            self.assertEqual(response.status_code, 422)
+            self.assertEqual(api._guest_download_metrics, {"terms_rejected": {"count": 1, "total_elapsed_ms": 0}})
+            self.assertEqual(_GuestFetcherStub.calls, 0)
+            api._guest_download_metrics.clear()
+
+        sensitive_url = (
+            "https://www.xiaohongshu.com/explore/bbbbbbbbbbbbbbbbbbbbbbbb"
+            "?xsec_token=terms_sensitive_9876"
+        )
+        rejected = (
+            {},
+            {"confirmed_visitor_terms": False},
+            {"confirmed_visitor_terms": "true"},
+            {"confirmed_visitor_terms": 1},
+        )
+        for extra in rejected:
+            with self.subTest(value=extra.get("confirmed_visitor_terms", "missing")), patch(
+                "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+            ), self.assertNoLogs("src.api", level="WARNING"):
+                payload = {"url": sensitive_url, "authorized": True, **extra}
+                response = self.client.post("/api/guest-download", json=payload)
+
+            self.assertEqual(response.status_code, 422)
+            body = response.json()
+            self.assertEqual(body["result_type"], "invalid_request")
+            self.assertIn("用途授权或访客能力边界确认", body["message"])
+            self.assertEqual(_GuestFetcherStub.calls, 0)
+            self.assertEqual(api._guest_download_metrics["terms_rejected"]["count"], 1)
+            observed = f"{response.text} {api._guest_download_metrics!r}"
+            for secret in (sensitive_url, "terms_sensitive_9876", "bbbbbbbbbbbbbbbbbbbbbbbb"):
+                self.assertNotIn(secret, observed)
+            self.assertNotIn("confirmed_visitor_terms", repr(api._guest_download_metrics))
+            api._guest_download_metrics.clear()
+
+    def test_terms_confirmed_event_is_fixed_and_precedes_existing_safety_gate(self) -> None:
+        invalid_url = "https://example.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?token=secret"
+        with patch("src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")), self.assertNoLogs(
+            "src.api", level="WARNING"
+        ):
+            response = self.client.post(
+                "/api/guest-download",
+                json={"url": invalid_url, "authorized": True, "confirmed_visitor_terms": True},
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["result_type"], "invalid_request")
+        self.assertEqual(api._guest_download_metrics["invalid_request"]["count"], 1)
+        self.assertNotIn("terms_confirmed", api._guest_download_metrics)
+        observed = f"{response.text} {api._guest_download_metrics!r}"
+        for secret in (invalid_url, "token=secret", "aaaaaaaaaaaaaaaaaaaaaaaa"):
+            self.assertNotIn(secret, observed)
+
+    def test_confirmed_terms_records_only_fixed_aggregate_event(self) -> None:
+        _GuestFetcherStub.outcome = {"type": "image", "quality": "standard"}
+        with patch("src.guest_fetcher.GuestFetcher", _GuestFetcherStub):
+            response = self._post()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(api._guest_download_metrics["terms_confirmed"], {"count": 1, "total_elapsed_ms": 0})
+        metrics_text = repr(api._guest_download_metrics)
+        for secret in (_URL, "aaaaaaaaaaaaaaaaaaaaaaaa", "token_1234", "confirmed_visitor_terms"):
+            self.assertNotIn(secret, metrics_text)
 
     def _assert_safe_response_schema(self, payload: dict[str, object], *, task_ref: str | None) -> None:
         """The compatibility schema keeps sensitive fields present but always null in guest mode."""
@@ -87,6 +259,7 @@ class GuestDownloadClassificationTests(unittest.TestCase):
         payload = self.client.get("/api/guest-info").json()
         info_text = f"{payload['description']} {' '.join(payload['limitations'])} {payload['usage']}"
         for expected in (
+            "用途授权", "访客能力有限", "平台拒绝或要求授权时立即停止", "自动到期，也可由持有者主动删除",
             "不透明短期 bearer 结果关联号", "不是作品 ID、下载任务或媒体凭证",
             "默认最多保留 7 天", "1–365", "GUEST_RESULT_RETENTION_DAYS",
             "不记录或返回原始 URL、token、作品元数据或媒体 URL", "result_type",
@@ -140,9 +313,9 @@ class GuestDownloadClassificationTests(unittest.TestCase):
                     response = self._post()
 
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(set(api._guest_download_metrics), {"success", expected_bucket})
+                self.assertEqual(set(api._guest_download_metrics), {"success", expected_bucket, "terms_confirmed"})
                 self.assertTrue(
-                    all(key in {"success", "quality:standard", "quality:low", "quality:unknown"}
+                    all(key in {"success", "terms_confirmed", "quality:standard", "quality:low", "quality:unknown"}
                         for key in api._guest_download_metrics)
                 )
                 metrics_text = repr(api._guest_download_metrics)
@@ -175,7 +348,7 @@ class GuestDownloadClassificationTests(unittest.TestCase):
         }
         with patch("src.guest_fetcher.GuestFetcher", _GuestFetcherStub):
             response = self.client.post(
-                "/api/guest-download", json={"url": sensitive_url, "authorized": True}
+                "/api/guest-download", json={"url": sensitive_url, "authorized": True, "confirmed_visitor_terms": True}
             )
 
         # The strict safety gate rejects fragments before constructing a handler.
@@ -190,7 +363,7 @@ class GuestDownloadClassificationTests(unittest.TestCase):
             "src.api", level="WARNING"
         ):
             response = self.client.post(
-                "/api/guest-download", json={"url": allowed_url, "authorized": True}
+                "/api/guest-download", json={"url": allowed_url, "authorized": True, "confirmed_visitor_terms": True}
             )
 
         self.assertEqual(response.status_code, 200)
@@ -276,7 +449,7 @@ class GuestDownloadClassificationTests(unittest.TestCase):
         ):
             response = self.client.post(
                 "/api/guest-download",
-                json={"url": sensitive_url, "authorized": True, "download": True},
+                json={"url": sensitive_url, "authorized": True, "confirmed_visitor_terms": True, "download": True},
             )
 
         self.assertEqual(response.status_code, 200)
@@ -315,7 +488,7 @@ class GuestDownloadClassificationTests(unittest.TestCase):
                 _GuestFetcherStub.outcome = outcome
                 with patch("src.guest_fetcher.GuestFetcher", _GuestFetcherStub):
                     response = self.client.post(
-                        "/api/guest-download", json={"url": sensitive_url, "authorized": True}
+                        "/api/guest-download", json={"url": sensitive_url, "authorized": True, "confirmed_visitor_terms": True}
                     )
 
                 self.assertEqual(response.status_code, 200)
@@ -505,7 +678,7 @@ class GuestDownloadClassificationTests(unittest.TestCase):
         with patch("src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")):
             response = self.client.post(
                 "/api/guest-download",
-                json={"url": "https://example.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa", "authorized": True},
+                json={"url": "https://example.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa", "authorized": True, "confirmed_visitor_terms": True},
             )
 
         self.assertEqual(response.status_code, 422)

@@ -9,6 +9,7 @@ GET  /api/recent  → 最近下载记录列表（按下载时间倒序，默认 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -1331,6 +1332,7 @@ class GuestDownloadRequest(BaseModel):
 
     url: str
     authorized: StrictBool | None = None
+    confirmed_visitor_terms: StrictBool | None = None
     download: bool = False
 
     @field_validator("url")
@@ -1347,6 +1349,8 @@ class GuestDownloadRequest(BaseModel):
     def require_explicit_authorization(self) -> "GuestDownloadRequest":
         if self.authorized is not True:
             raise ValueError("必须明确确认已获授权后才能导入公开作品链接")
+        if self.confirmed_visitor_terms is not True:
+            raise ValueError("必须明确确认访客用途与能力边界后才能处理公开作品链接")
         return self
 
 
@@ -1393,6 +1397,89 @@ def _normalize_guest_quality(value: object) -> str:
     return value if isinstance(value, str) and value in _QUALITY_LEVELS else "unknown"
 
 
+def _record_guest_terms_event(event: Literal["terms_rejected", "terms_confirmed"]) -> None:
+    """Record one fixed aggregate confirmation event without request-derived data."""
+    bucket = _guest_download_metrics.setdefault(event, {"count": 0, "total_elapsed_ms": 0})
+    bucket["count"] += 1
+
+
+class _GuestDownloadJSONObjectPairs(list[tuple[str, Any]]):
+    """Internal JSON object marker that preserves duplicate member names."""
+
+
+_GUEST_DOWNLOAD_DUPLICATE_KEYS = frozenset({"authorized", "confirmed_visitor_terms", "url", "download"})
+
+
+def _guest_download_has_duplicate_critical_json_key(raw_body: bytes) -> bool:
+    """Inspect one JSON object without retaining its values or accepting duplicate security keys."""
+    try:
+        pairs = json.loads(raw_body, object_pairs_hook=_GuestDownloadJSONObjectPairs)
+    except (TypeError, ValueError, UnicodeDecodeError):
+        return False
+    if not isinstance(pairs, _GuestDownloadJSONObjectPairs):
+        return False
+    seen: set[str] = set()
+    for key, _value in pairs:
+        if isinstance(key, str) and key in _GUEST_DOWNLOAD_DUPLICATE_KEYS:
+            if key in seen:
+                return True
+            seen.add(key)
+    return False
+
+
+def _guest_download_json_media_type(content_type: str | None) -> bool:
+    """Match JSON media types after normalizing only the type token around parameters."""
+    media_type = (content_type or "").split(";", 1)[0].strip().lower()
+    return media_type == "application/json" or (
+        media_type.startswith("application/") and media_type.endswith("+json")
+    )
+
+
+@app.middleware("http")
+async def reject_duplicate_guest_download_json_fields(request: Request, call_next: Any) -> Response:
+    """Require a supported JSON media type and reject duplicate security fields before parsing."""
+    if request.url.path == "/api/guest-download":
+        if not _guest_download_json_media_type(request.headers.get("content-type")):
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "status": "error",
+                    "result_type": "invalid_request",
+                    "message": "请求格式、公开单作品链接、用途授权或访客能力边界确认不符合安全要求；请检查链接并明确确认。",
+                },
+            )
+        body = await request.body()
+        if _guest_download_has_duplicate_critical_json_key(body):
+            _record_guest_terms_event("terms_rejected")
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "status": "error",
+                    "result_type": "invalid_request",
+                    "message": "请求格式、公开单作品链接、用途授权或访客能力边界确认不符合安全要求；请检查链接并明确确认。",
+                },
+            )
+    return await call_next(request)
+
+
+def _guest_download_validation_rejected_terms(request: Request, exc: RequestValidationError) -> bool:
+    """Attribute only JSON validation failures caused by the terms confirmation gate."""
+    if not _guest_download_json_media_type(request.headers.get("content-type")):
+        return False
+    body = exc.body
+    if not isinstance(body, dict):
+        return False
+    errors = exc.errors()
+    if any("confirmed_visitor_terms" in error.get("loc", ()) for error in errors):
+        return True
+    # Missing/false terms are raised by the model-level validator as one body error.
+    return (
+        len(errors) == 1
+        and errors[0].get("loc") == ("body",)
+        and body.get("confirmed_visitor_terms") is not True
+    )
+
+
 @app.exception_handler(RequestValidationError)
 async def guest_download_validation_error_handler(
     request: Request, exc: RequestValidationError
@@ -1400,13 +1487,16 @@ async def guest_download_validation_error_handler(
     """Classify rejected guest-download input without invoking its handler."""
     if request.url.path != "/api/guest-download":
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
-    _record_guest_download_metric("invalid_request", 0)
+    if _guest_download_validation_rejected_terms(request, exc):
+        _record_guest_terms_event("terms_rejected")
+    elif _guest_download_json_media_type(request.headers.get("content-type")):
+        _record_guest_download_metric("invalid_request", 0)
     return JSONResponse(
         status_code=422,
         content={
             "status": "error",
             "result_type": "invalid_request",
-            "message": "请求格式或公开单作品链接不符合安全要求；请检查链接并确认授权。",
+            "message": "请求格式、公开单作品链接、用途授权或访客能力边界确认不符合安全要求；请检查链接并明确确认。",
         },
     )
 
@@ -1449,7 +1539,8 @@ async def _guest_response(
     response_model=GuestDownloadResponse,
     summary="受控探测公开单作品（访客模式）",
     description=(
-        "仅在调用方明确确认已获授权后，受控探测一条公开作品链接。"
+        "仅在调用方明确确认用途授权和访客能力边界（authorized=true、confirmed_visitor_terms=true）后，"
+        "受控探测一条公开作品链接。"
         "不会返回作品详情、作者信息或媒体 URL，也不支持本地媒体下载。"
         "仅 success 与 download=true 的 unsupported 结果返回 task_ref：它是不透明、短期的"
         "持有即查询（bearer）结果关联号，不是作品 ID、下载任务或媒体访问凭证。"
@@ -1463,7 +1554,8 @@ async def _guest_response(
     tags=["guest"],
 )
 async def api_guest_download(req: GuestDownloadRequest) -> GuestDownloadResponse:
-    """Probe one authorized public work without exposing metadata or downloading media."""
+    """Probe one authorized, terms-confirmed public work without exposing metadata or downloading media."""
+    _record_guest_terms_event("terms_confirmed")
     from .guest_fetcher import (
         GuestAuthorizationRequiredError,
         GuestFetcher,
@@ -1659,23 +1751,24 @@ async def api_guest_info() -> dict:
         "guest_mode_available": xhshow_available,
         "xhshow_version": xhshow_version,
         "description": (
-            "访客模式仅在无 XHS_COOKIE 时受控探测一条已获授权的公开作品链接；"
+            "访客模式仅在无 XHS_COOKIE 时受控探测一条已获用途授权并明确确认访客能力边界的公开作品链接；"
             "不返回作品详情或媒体 URL，也不支持本地媒体下载。"
         ),
         "limitations": [
-            "仅支持一条已获授权的公开作品链接探测，不支持主页、搜索、收藏/点赞或合集入口",
+            "仅支持一条已获用途授权且明确确认访客能力边界的公开作品链接探测，不支持主页、搜索、收藏/点赞或合集入口",
+            "访客能力有限；平台拒绝或要求授权时立即停止，不自动绕过、重试或下载媒体",
             "不返回作品 ID、标题、作者、媒体 URL 或封面 URL",
             "仅 success 与 download=true 的 unsupported 返回 task_ref；它是不透明短期 bearer 结果关联号，不是作品 ID、下载任务或媒体凭证",
             "GET 或 DELETE /api/guest-results 时仅以 X-Guest-Result-Ref: <task_ref> 请求头传递；严禁 ?task_ref=、其他 query 参数或 body，且必须对该敏感 bearer 请求头脱敏",
-            "DELETE 不可恢复，只删除最小 guest 结果记录；不删除下载文件、订阅、Cookie、数据库或匿名聚合指标",
+            "DELETE 不可恢复，只删除最小 guest 结果记录；不删除下载文件、订阅、Cookie、数据库或匿名聚合指标；结果会自动到期，也可由持有者主动删除",
             "task_ref 默认最多保留 7 天；可通过 guest.result_retention_days 或 GUEST_RESULT_RETENTION_DAYS 配置为 1–365 天",
-            "不记录或返回原始 URL、token、作品元数据或媒体 URL；请勿记录或分享 task_ref",
+            "不记录或返回原始 URL、token、作品元数据或媒体 URL；也不记录确认文案或用户身份；请勿记录或分享 task_ref",
             "HTTP 200 仅表示请求已被处理，客户端必须根据 result_type 判断业务结果",
             "风控更严格，触发风控验证（461）时无法自动通过",
         ],
         "usage": (
-            "POST /api/guest-download {\"url\": \"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa\", "
-            "\"authorized\": true}；仅在 success 或 download=true 的 unsupported 中保留 task_ref；"
+            "POST /api/guest-download 请求体须仅包含一条公开单作品链接，并显式传入 "
+            "authorized=true 与 confirmed_visitor_terms=true；仅在 success 或 download=true 的 unsupported 中保留 task_ref；"
             "查询或删除时仅以 X-Guest-Result-Ref: <task_ref> 请求头传递，再根据响应 result_type 判断业务结果"
         ),
     }

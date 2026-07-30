@@ -40,7 +40,7 @@ class PublicWorkImportSafetyGateTests(unittest.TestCase):
             with self.subTest(url=url), patch("src.guest_fetcher.GuestFetcher", _RecordingGuestFetcher):
                 response = self.client.post(
                     "/api/guest-download",
-                    json={"url": url, "authorized": True},
+                    json={"url": url, "authorized": True, "confirmed_visitor_terms": True},
                 )
 
             self.assertEqual(response.status_code, 200)
@@ -78,7 +78,7 @@ class PublicWorkImportSafetyGateTests(unittest.TestCase):
                 "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not process")
             ):
                 response = self.client.post(
-                    "/api/guest-download", json={"url": url, "authorized": True}
+                    "/api/guest-download", json={"url": url, "authorized": True, "confirmed_visitor_terms": True}
                 )
 
             self.assertEqual(response.status_code, 422)
@@ -117,7 +117,7 @@ class PublicWorkImportSafetyGateTests(unittest.TestCase):
                 "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not process")
             ):
                 response = self.client.post(
-                    "/api/guest-download", json={"url": url, "authorized": True}
+                    "/api/guest-download", json={"url": url, "authorized": True, "confirmed_visitor_terms": True}
                 )
 
             self.assertEqual(response.status_code, 422)
@@ -143,7 +143,8 @@ class PublicWorkImportSafetyGateTests(unittest.TestCase):
         response = self.client.get("/api/guest-info")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('"authorized": true', response.json()["usage"])
+        self.assertIn("authorized=true", response.json()["usage"])
+        self.assertIn("confirmed_visitor_terms=true", response.json()["usage"])
 
 
 if __name__ == "__main__":

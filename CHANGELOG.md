@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### 待发布
+- **fix: 访客用途/能力边界确认及请求解析安全（2026-07-30）**
+  - `/api/guest-download` 要求 `authorized=true` 与 `confirmed_visitor_terms=true` 双确认；不满足时在本地固定拒绝，不构造访客处理器、不签名、不下载、不外发
+  - 仅允许 `application/json` 或 `application/*+json` 请求；缺失、空或非 JSON Content-Type 在 Pydantic 前固定拒绝，且不产生确认事件
+  - 解析前拒绝 `authorized`、`confirmed_visitor_terms`、`url`、`download` 的同层重复字段，覆盖 JSON/+json、大小写、charset 和媒体类型空白变体
+  - 匿名指标仅使用固定 `terms_rejected` / `terms_confirmed` 桶；非 JSON 请求零确认事件，指标不含用户、链接、作品、任务 ID 或确认原文
+  - `/api/guest-info` 固定说明用途授权、访客能力有限、平台拒绝即止，以及结果自动到期或可主动删除；不保存确认文案、身份或自由文本
+
+### 测试结果
+- guest-download 分类 / 公开链接安全 / guest-info：27/27 通过
+- guest 结果留存/删除 + TLS 专项：21/21 通过
+- Python 3.12 全量 unittest：73/73 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
 - **fix: 加固 guest 结果提前删除并发与敏感 bearer 契约**
   - GET/DELETE 示例及 OpenAPI 明确禁止 `?task_ref=`、其他 query 参数和 body；仅通过 `X-Guest-Result-Ref` 传递，并要求日志/代理脱敏
   - 提前删除不可恢复，只作用最小 guest 结果记录，不影响下载文件、订阅、Cookie、数据库或匿名聚合指标
