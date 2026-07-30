@@ -1344,6 +1344,8 @@ class GuestPreflightResponse(BaseModel):
         "xhslink.com/short-link", "www.xhslink.com/short-link", "unavailable",
     ]
     next_step: str
+    quality_expectation_version: Literal["A", "B"] | None = None
+    quality_expectation: str | None = None
 
 
 class GuestDownloadRequest(BaseModel):
@@ -1392,6 +1394,11 @@ class GuestDownloadResponse(BaseModel):
 
 
 _guest_download_metrics: dict[str, dict[str, int]] = {}
+_guest_preflight_quality_expectation_counts: dict[str, int] = {"A": 0, "B": 0}
+_GUEST_PREFLIGHT_QUALITY_EXPECTATIONS: dict[str, str] = {
+    "A": "访客预检仅说明链接可继续受控探测，实际结果以平台返回为准。",
+    "B": "无需登录，但仅支持公开单作品；可能失败或质量有限，平台限制即停止。",
+}
 _guest_expired_result_deletions: dict[str, int] = {}
 from .guest_retention import GuestResultStore
 
@@ -1457,6 +1464,38 @@ def _guest_download_json_media_type(content_type: str | None) -> bool:
     return media_type == "application/json" or (
         media_type.startswith("application/") and media_type.endswith("+json")
     )
+
+
+def _choose_guest_preflight_quality_expectation() -> tuple[Literal["A", "B"], str] | None:
+    """Best-effort local-only message selection; preflight eligibility never depends on it."""
+    try:
+        version = secrets.choice(("A", "B"))
+        if version not in ("A", "B"):
+            return None
+        message = _GUEST_PREFLIGHT_QUALITY_EXPECTATIONS.get(version)
+        if not isinstance(message, str):
+            return None
+        counts = _guest_preflight_quality_expectation_counts
+        counts[version] = counts.get(version, 0) + 1
+        return version, message
+    except Exception:
+        try:
+            logger.warning("访客预检质量预期分流不可用，已安全跳过")
+        except Exception:
+            pass
+        return None
+
+
+def guest_preflight_quality_expectation_summary() -> dict[str, int]:
+    """Return only best-effort fixed-version totals, never assignment data or errors."""
+    try:
+        counts = _guest_preflight_quality_expectation_counts
+        return {
+            "A": max(0, int(counts.get("A", 0))),
+            "B": max(0, int(counts.get("B", 0))),
+        }
+    except Exception:
+        return {"A": 0, "B": 0}
 
 
 @app.middleware("http")
@@ -1593,6 +1632,7 @@ async def _guest_response(
 @app.post(
     "/api/guest-preflight",
     response_model=GuestPreflightResponse,
+    response_model_exclude_none=True,
     summary="本地预检公开单作品链接（零外部请求）",
     description=(
         "仅在本地复用 guest-download 的严格 canonical 公开单作品链接规则，不构造访客处理器、"
@@ -1606,6 +1646,12 @@ async def api_guest_preflight(req: GuestPreflightRequest) -> GuestPreflightRespo
     """Apply the same strict local canonical link rule as guest-download, without side effects."""
     eligible = _is_public_single_work_url(req.url)
     display = _guest_work_display(req.url) if eligible else "unavailable"
+    version: Literal["A", "B"] | None = None
+    quality_expectation: str | None = None
+    if eligible:
+        selected_expectation = _choose_guest_preflight_quality_expectation()
+        if selected_expectation is not None:
+            version, quality_expectation = selected_expectation
     return GuestPreflightResponse(
         eligible=eligible,
         reason="eligible" if eligible else "ineligible",
@@ -1614,6 +1660,8 @@ async def api_guest_preflight(req: GuestPreflightRequest) -> GuestPreflightRespo
             "预检通过后，仍须明确用途授权和访客能力边界确认后才能继续受控探测。"
             if eligible else "链接不符合公开单作品安全范围，不能继续访客探测。"
         ),
+        quality_expectation_version=version,
+        quality_expectation=quality_expectation,
     )
 
 
@@ -1915,7 +1963,7 @@ async def api_guest_info() -> dict:
             "不返回作品详情或媒体 URL，也不支持本地媒体下载。"
         ),
         "limitations": [
-            "POST /api/guest-preflight 仅在本地预检链接是否符合与 guest-download 相同的严格公开单作品规则，不发起外部请求、不持久化且不记录指标；预检通过后仍须 authorized=true 与 confirmed_visitor_terms=true",
+            "POST /api/guest-preflight 仅在本地预检链接是否符合与 guest-download 相同的严格公开单作品规则，不发起外部请求、不持久化；对预检通过链接仅随机返回固定 A/B 访客质量预期文案，分流不关联 URL、用户或任务，也不改变下载或平台访问策略；预检通过后仍须 authorized=true 与 confirmed_visitor_terms=true",
             "预检不会返回原始 URL、query、fragment、作品 ID、token、task_ref 或上游内容",
             "访客能力有限；平台拒绝或要求授权时立即停止，不自动绕过、重试或下载媒体",
             "不返回作品 ID、标题、作者、媒体 URL 或封面 URL",

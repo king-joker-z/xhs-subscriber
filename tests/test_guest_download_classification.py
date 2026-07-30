@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import ExitStack
 import logging
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -44,6 +45,7 @@ class _GuestFetcherStub:
 class GuestDownloadClassificationTests(unittest.TestCase):
     def setUp(self) -> None:
         api._guest_download_metrics.clear()
+        api._guest_preflight_quality_expectation_counts.update({"A": 0, "B": 0})
         _GuestFetcherStub.calls = 0
         _GuestFetcherStub.meta_calls = 0
         _GuestFetcherStub.urls = []
@@ -55,7 +57,30 @@ class GuestDownloadClassificationTests(unittest.TestCase):
     def _post(self) -> object:
         return self.client.post("/api/guest-download", json={"url": _URL, "authorized": True, "confirmed_visitor_terms": True})
 
-    def test_guest_preflight_reuses_canonical_rule_without_side_effects(self) -> None:
+    def test_guest_preflight_quality_expectation_is_fixed_local_and_anonymous(self) -> None:
+        expected = api._GUEST_PREFLIGHT_QUALITY_EXPECTATIONS
+        with patch("src.api.secrets.choice", side_effect=("A", "B")), patch(
+            "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+        ):
+            first = self.client.post("/api/guest-preflight", json={"url": _URL})
+            second = self.client.post("/api/guest-preflight", json={"url": "https://xhslink.com/abc123"})
+            ineligible = self.client.post("/api/guest-preflight", json={"url": "https://example.invalid/private?token=secret"})
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["quality_expectation_version"], "A")
+        self.assertEqual(first.json()["quality_expectation"], expected["A"])
+        self.assertEqual(second.json()["quality_expectation_version"], "B")
+        self.assertEqual(second.json()["quality_expectation"], expected["B"])
+        self.assertNotIn("quality_expectation_version", ineligible.json())
+        self.assertNotIn("quality_expectation", ineligible.json())
+        self.assertEqual(api.guest_preflight_quality_expectation_summary(), {"A": 1, "B": 1})
+        observed = f"{first.text} {second.text} {ineligible.text} {api.guest_preflight_quality_expectation_summary()!r}"
+        for secret in (_URL, "aaaaaaaaaaaaaaaaaaaaaaaa", "token_1234", "example.invalid", "secret"):
+            self.assertNotIn(secret, observed)
+        self.assertEqual(_GuestFetcherStub.calls, 0)
+        self.assertEqual(api._guest_download_metrics, {})
+
         matrix = (
             ("https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=token_1234", True, "www.xiaohongshu.com/public-work"),
             ("https://xhslink.com/abc123", True, "xhslink.com/short-link"),
@@ -83,6 +108,50 @@ class GuestDownloadClassificationTests(unittest.TestCase):
             self.assertEqual(api._guest_download_metrics, {})
             observed = f"{payload!r} {api._guest_download_metrics!r}"
             for secret in (url, "aaaaaaaaaaaaaaaaaaaaaaaa", "token_1234", "keyword=test", "a%2Fb"):
+                self.assertNotIn(secret, observed)
+
+    def test_guest_preflight_quality_expectation_failures_safely_omit_optional_fields(self) -> None:
+        class _BrokenMapping(dict[str, object]):
+            def get(self, key: str, default: object = None) -> object:
+                raise RuntimeError("mapping-secret")
+
+        class _BrokenCounterRead(dict[str, int]):
+            def get(self, key: str, default: object = None) -> object:
+                raise RuntimeError("counter-read-secret")
+
+        class _BrokenCounterWrite(dict[str, int]):
+            def get(self, key: str, default: object = None) -> object:
+                return 0
+
+            def __setitem__(self, key: str, value: int) -> None:
+                raise RuntimeError("counter-write-secret")
+
+        failures = (
+            ("random", patch("src.api.secrets.choice", side_effect=RuntimeError("random-secret"))),
+            ("random-and-logger", patch("src.api.secrets.choice", side_effect=RuntimeError("random-secret")), patch("src.api.logger.warning", side_effect=RuntimeError("logger-secret"))),
+            ("message", patch.object(api, "_GUEST_PREFLIGHT_QUALITY_EXPECTATIONS", _BrokenMapping())),
+            ("counter-read", patch.object(api, "_guest_preflight_quality_expectation_counts", _BrokenCounterRead())),
+            ("counter-write", patch.object(api, "_guest_preflight_quality_expectation_counts", _BrokenCounterWrite())),
+        )
+        for name, *failures_to_apply in failures:
+            with self.subTest(failure=name), ExitStack() as stack, patch(
+                "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+            ):
+                for failure in failures_to_apply:
+                    stack.enter_context(failure)
+                response = self.client.post("/api/guest-preflight", json={"url": _URL})
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertTrue(payload["eligible"])
+            self.assertEqual(payload["reason"], "eligible")
+            self.assertEqual(payload["display"], "www.xiaohongshu.com/public-work")
+            self.assertNotIn("quality_expectation_version", payload)
+            self.assertNotIn("quality_expectation", payload)
+            self.assertEqual(_GuestFetcherStub.calls, 0)
+            self.assertEqual(api._guest_download_metrics, {})
+            observed = f"{response.text} {api._guest_download_metrics!r}"
+            for secret in (_URL, "aaaaaaaaaaaaaaaaaaaaaaaa", "token_1234", "random-secret", "logger-secret", "mapping-secret", "counter-read-secret", "counter-write-secret"):
                 self.assertNotIn(secret, observed)
 
     def test_guest_preflight_ignores_unrelated_top_level_and_nested_fields(self) -> None:

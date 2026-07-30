@@ -3,6 +3,18 @@
 ## [Unreleased]
 
 ### 待发布
+- **feat: guest-preflight 本地访客质量预期安全分流（2026-07-30）**
+  - 仅对 eligible 预检随机返回固定 A/B 访客能力边界文案；分流不可关联 URL、任务、用户或 token，不持久化、无公开汇总，仅保留进程内匿名展示计数
+  - 随机源、文案映射、计数读写或日志任意异常均安全降级为既有 `200 eligible` 安全摘要，并省略可选 A/B 字段
+  - 不改变 TLS、请求、重试、下载或平台访问策略；预检通过后仍须 `authorized=true` 与 `confirmed_visitor_terms=true`
+
+### 测试结果
+- preflight / 分类 / 安全 / guest-info：30/30 通过
+- 留存 / 删除 / TLS / 签名：27/27 通过
+- Python 3.12 全量 unittest：78/78 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
 - **feat: 本地匿名分类一致性审查基础（2026-07-30）**
   - 为仍存在的最小 guest 结果新增一次性、仅内存审查样本和固定 `correct` / `needs_adjustment` / `insufficient` 三结论；不持久化任务级审查日志或关联
   - 样本仅允许严格白名单的 result_type/status；污染或非字符串记录固定不可用，不占用一次性状态、不增加样本量或聚合
