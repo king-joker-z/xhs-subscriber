@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### 待发布
+- **test: 离线 Compliance Summary Baseline Diff（2026-07-30）**
+  - 仅更新 `tests/compliance_summary.py` 与 `tests/test_compliance_summary.py` 测试辅助；纯内存、零默认 I/O/网络，不改 `src`、API、TLS 或下载
+  - 合法 Summary 强制 `external_requests=0`；非零值或篡改均在构造/完整性校验阶段拒绝
+  - Diff 仅比较两个合法摘要的 coverage 减少、新敏感类别、failed 增加及 schema/suite/fixture 变更；前三项阻断，版本变更仅提示
+  - 外部请求不是 Diff 检测能力，必须在 Summary 构造或校验阶段阻断
+
+### 测试结果
+- Summary：8/8 通过
+- 合规 / 分类 / 安全 / guest-info：36/36 通过
+- 留存 / 删除 / TLS / 签名：27/27 通过
+- Python 3.12 全量 unittest：92/92 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
 - **test: 离线 Compliance Summary 测试产物（2026-07-30）**
   - 新增 `tests/compliance_summary.py` 和 `tests/test_compliance_summary.py`；仅测试辅助，纯内存或 `TemporaryDirectory` 使用，不改 `src`、API、路由、请求、TLS 或下载策略
   - 固定白名单摘要仅含版本、注入 UTC、场景聚合、passed/failed、`external_requests=0`、敏感类别计数、status 与 canonical JSON SHA-256；不含任务、URL、token、Cookie、signature、路径、用户或日志

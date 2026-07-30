@@ -30,6 +30,11 @@ _COOKIE_ASSIGNMENT_RE = re.compile(r"(?:^|[?&;,\s])(?:cookie|session|a1)\s*=\s*[
 _SIGNATURE_ASSIGNMENT_RE = re.compile(r"(?:^|[?&;,\s])(?:signature|sign|x-s)\s*=\s*[^\s&;,]{3,}", re.IGNORECASE)
 _URL_RE = re.compile(r"(?:https?://|www\.)", re.IGNORECASE)
 _ABSOLUTE_PATH_RE = re.compile(r"(?:^/|^[A-Za-z]:[\\/]|^~[\\/])")
+_DIFF_FIELDS = frozenset({"status", "reasons", "coverage_reduced", "sensitive_categories", "counts", "versions"})
+_DIFF_REASONS = frozenset({
+    "coverage_reduced", "new_sensitive_category", "assertion_failures_increased", "schema_or_fixture_changed",
+})
+_DIFF_VERSION_FIELDS = frozenset({"schema_version_changed", "suite_version_changed", "fixture_version_changed"})
 
 
 def canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
@@ -76,6 +81,9 @@ def build_summary(
     failed: int,
     sensitive_violations: Mapping[str, object],
     external_requests: int = 0,
+    schema_version: str = _SCHEMA_VERSION,
+    suite_version: str = _SUITE_VERSION,
+    fixture_version: str = _FIXTURE_VERSION,
 ) -> dict[str, Any]:
     """Build a deterministic, aggregate-only compliance result summary."""
     if not isinstance(run_at_utc, str):
@@ -90,10 +98,12 @@ def build_summary(
         raise ValueError("invalid result counts")
     if external_requests != 0:
         raise ValueError("external requests are forbidden")
+    if not all(isinstance(value, str) and value for value in (schema_version, suite_version, fixture_version)):
+        raise ValueError("invalid summary version")
     payload: dict[str, Any] = {
-        "schema_version": _SCHEMA_VERSION,
-        "suite_version": _SUITE_VERSION,
-        "fixture_version": _FIXTURE_VERSION,
+        "schema_version": schema_version,
+        "suite_version": suite_version,
+        "fixture_version": fixture_version,
         "run_at_utc": run_at_utc,
         "coverage": _fixed_counts(coverage, _SCENARIOS, "coverage"),
         "passed": passed,
@@ -104,6 +114,48 @@ def build_summary(
     }
     payload["integrity"] = {"sha256": hashlib.sha256(canonical_json_bytes(payload)).hexdigest()}
     return payload
+
+
+
+def compare_baseline(current: Mapping[str, Any], baseline: Mapping[str, Any]) -> dict[str, Any]:
+    """Compare two validated aggregate summaries without retaining either summary."""
+    if not verify_summary(current) or not verify_summary(baseline):
+        raise ValueError("invalid summary")
+    coverage_reduced = {
+        scenario: 1
+        for scenario in sorted(_SCENARIOS)
+        if current["coverage"][scenario] < baseline["coverage"][scenario]
+    }
+    sensitive_categories = {
+        category: 1
+        for category in sorted(_VIOLATION_CATEGORIES)
+        if baseline["sensitive_violations"][category] == 0 and current["sensitive_violations"][category] > 0
+    }
+    counts = {
+        "failed_increased": 1 if current["failed"] > baseline["failed"] else 0,
+    }
+    versions = {
+        "schema_version_changed": 1 if current["schema_version"] != baseline["schema_version"] else 0,
+        "suite_version_changed": 1 if current["suite_version"] != baseline["suite_version"] else 0,
+        "fixture_version_changed": 1 if current["fixture_version"] != baseline["fixture_version"] else 0,
+    }
+    reasons: set[str] = set()
+    if coverage_reduced:
+        reasons.add("coverage_reduced")
+    if sensitive_categories:
+        reasons.add("new_sensitive_category")
+    if counts["failed_increased"]:
+        reasons.add("assertion_failures_increased")
+    if any(versions.values()):
+        reasons.add("schema_or_fixture_changed")
+    return {
+        "status": "failed" if reasons - {"schema_or_fixture_changed"} else "no_regression",
+        "reasons": sorted(reasons),
+        "coverage_reduced": coverage_reduced,
+        "sensitive_categories": sensitive_categories,
+        "counts": counts,
+        "versions": versions,
+    }
 
 
 def verify_summary(summary: Mapping[str, Any]) -> bool:
@@ -119,7 +171,8 @@ def verify_summary(summary: Mapping[str, Any]) -> bool:
         rebuilt = build_summary(
             run_at_utc=payload["run_at_utc"], coverage=payload["coverage"], passed=payload["passed"],
             failed=payload["failed"], sensitive_violations=payload["sensitive_violations"],
-            external_requests=payload["external_requests"],
+            external_requests=payload["external_requests"], schema_version=payload["schema_version"],
+            suite_version=payload["suite_version"], fixture_version=payload["fixture_version"],
         )
         return payload == {key: value for key, value in rebuilt.items() if key != "integrity"} and digest == rebuilt["integrity"]["sha256"]
     except (KeyError, TypeError, ValueError):

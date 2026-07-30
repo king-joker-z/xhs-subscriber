@@ -6,7 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.compliance_summary import build_summary, canonical_json_bytes, scan_synthetic_values, verify_summary
+from tests.compliance_summary import (
+    build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values, verify_summary,
+)
 
 
 _COVERAGE = {
@@ -48,6 +50,7 @@ class ComplianceSummaryTests(unittest.TestCase):
         })
         self.assertEqual(set(summary["coverage"]), set(_COVERAGE))
         self.assertEqual(set(summary["sensitive_violations"]), set(_EMPTY_VIOLATIONS))
+        self.assertEqual(summary["external_requests"], 0)
 
     def test_version_metadata_is_not_classified_as_sensitive(self) -> None:
         counts = scan_synthetic_values((
@@ -79,6 +82,8 @@ class ComplianceSummaryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self._summary(external_requests=1)
         with self.assertRaises(ValueError):
+            self._summary(external_requests=-1)
+        with self.assertRaises(ValueError):
             self._summary(run_at_utc="2026-07-30")
         for invalid_time in (
             "2026-02-30T08:03:22Z", "2026-07-30T24:03:22Z",
@@ -87,7 +92,72 @@ class ComplianceSummaryTests(unittest.TestCase):
             with self.subTest(run_at_utc=invalid_time), self.assertRaises(ValueError):
                 self._summary(run_at_utc=invalid_time)
 
-    def test_integrity_verification_rejects_tampering_and_unknown_top_level_fields(self) -> None:
+    def test_baseline_diff_is_deterministic_and_no_regression_for_same_input(self) -> None:
+        baseline = self._summary()
+        first = compare_baseline(baseline, baseline)
+        second = compare_baseline(self._summary(), baseline)
+        self.assertEqual(first, second)
+        self.assertEqual(first["status"], "no_regression")
+        self.assertEqual(canonical_json_bytes(first), canonical_json_bytes(second))
+        self.assertEqual(first["reasons"], [])
+
+    def test_baseline_diff_detects_aggregate_regressions_without_sensitive_values(self) -> None:
+        baseline = self._summary()
+        coverage = dict(_COVERAGE)
+        coverage["preflight"] = 0
+        coverage["tls"] = 0
+        coverage["active_delete"] = 0
+        coverage["ab_guidance"] = 0
+        violations = dict(_EMPTY_VIOLATIONS, token_like=1, cookie_like=1)
+        current = self._summary(coverage=coverage, failed=1, sensitive_violations=violations)
+        diff = compare_baseline(current, baseline)
+        self.assertEqual(diff["status"], "failed")
+        self.assertEqual(set(diff["reasons"]), {
+            "coverage_reduced", "new_sensitive_category", "assertion_failures_increased",
+        })
+        self.assertEqual(diff["coverage_reduced"], {"ab_guidance": 1, "active_delete": 1, "preflight": 1, "tls": 1})
+        self.assertEqual(diff["sensitive_categories"], {"cookie_like": 1, "token_like": 1})
+        self.assertEqual(diff["counts"], {"failed_increased": 1})
+        observed = canonical_json_bytes(diff).decode("ascii")
+        for forbidden in ("https://", "token=", "cookie=", "task", "path", "exception"):
+            self.assertNotIn(forbidden, observed)
+
+    def test_nonzero_external_requests_are_invalid_before_baseline_diff(self) -> None:
+        baseline = self._summary()
+        for count in (1, -1):
+            with self.subTest(external_requests=count), self.assertRaises(ValueError):
+                self._summary(external_requests=count)
+        forged = dict(baseline)
+        forged["external_requests"] = 1
+        forged["integrity"] = {"sha256": "0" * 64}
+        self.assertFalse(verify_summary(forged))
+        with self.assertRaises(ValueError):
+            compare_baseline(forged, baseline)
+
+        baseline = self._summary()
+        current = build_summary(
+            run_at_utc=_RUN_AT, coverage=_COVERAGE, passed=8, failed=0,
+            sensitive_violations=_EMPTY_VIOLATIONS, fixture_version="offline-fixtures/v2",
+        )
+        before = canonical_json_bytes(baseline)
+        diff = compare_baseline(current, baseline)
+        self.assertEqual(diff["status"], "no_regression")
+        self.assertEqual(diff["reasons"], ["schema_or_fixture_changed"])
+        self.assertEqual(diff["versions"], {
+            "schema_version_changed": 0, "suite_version_changed": 0, "fixture_version_changed": 1,
+        })
+        self.assertEqual(canonical_json_bytes(baseline), before)
+
+    def test_baseline_diff_rejects_tampered_unknown_and_invalid_summary_inputs(self) -> None:
+        baseline = self._summary()
+        tampered = dict(baseline)
+        tampered["passed"] = 99
+        unknown = dict(baseline)
+        unknown["raw_summary"] = "forbidden"
+        for invalid in (tampered, unknown, {"coverage": {}}):
+            with self.subTest(invalid=type(invalid).__name__), self.assertRaises(ValueError):
+                compare_baseline(baseline, invalid)
+
         summary = self._summary()
         self.assertTrue(verify_summary(summary))
         altered = dict(summary)
