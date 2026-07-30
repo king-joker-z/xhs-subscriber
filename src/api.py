@@ -26,7 +26,7 @@ from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel, StrictBool, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, field_validator, model_validator
 
 if TYPE_CHECKING:
     from .scheduler import XHSScheduler
@@ -1327,6 +1327,25 @@ def _normalize_guest_response_type(value: object) -> str:
     return value if isinstance(value, str) and value in _GUEST_RESPONSE_TYPES else "unknown"
 
 
+class GuestPreflightRequest(BaseModel):
+    """One local-only candidate URL for the exact guest canonical-link safety rule."""
+
+    model_config = ConfigDict(extra="ignore")
+    url: str
+
+
+class GuestPreflightResponse(BaseModel):
+    """Safe local preflight summary without URL-derived identifiers or upstream data."""
+
+    eligible: bool
+    reason: Literal["eligible", "ineligible"]
+    display: Literal[
+        "xiaohongshu.com/public-work", "www.xiaohongshu.com/public-work",
+        "xhslink.com/short-link", "www.xhslink.com/short-link", "unavailable",
+    ]
+    next_step: str
+
+
 class GuestDownloadRequest(BaseModel):
     """One explicitly authorized public single-work import request."""
 
@@ -1408,9 +1427,14 @@ class _GuestDownloadJSONObjectPairs(list[tuple[str, Any]]):
 
 
 _GUEST_DOWNLOAD_DUPLICATE_KEYS = frozenset({"authorized", "confirmed_visitor_terms", "url", "download"})
+_GUEST_PREFLIGHT_DUPLICATE_KEYS = frozenset({"url"})
+_GUEST_JSON_REQUEST_DUPLICATE_KEYS = {
+    "/api/guest-download": _GUEST_DOWNLOAD_DUPLICATE_KEYS,
+    "/api/guest-preflight": _GUEST_PREFLIGHT_DUPLICATE_KEYS,
+}
 
 
-def _guest_download_has_duplicate_critical_json_key(raw_body: bytes) -> bool:
+def _guest_json_has_duplicate_critical_key(raw_body: bytes, keys: frozenset[str]) -> bool:
     """Inspect one JSON object without retaining its values or accepting duplicate security keys."""
     try:
         pairs = json.loads(raw_body, object_pairs_hook=_GuestDownloadJSONObjectPairs)
@@ -1420,7 +1444,7 @@ def _guest_download_has_duplicate_critical_json_key(raw_body: bytes) -> bool:
         return False
     seen: set[str] = set()
     for key, _value in pairs:
-        if isinstance(key, str) and key in _GUEST_DOWNLOAD_DUPLICATE_KEYS:
+        if isinstance(key, str) and key in keys:
             if key in seen:
                 return True
             seen.add(key)
@@ -1437,9 +1461,20 @@ def _guest_download_json_media_type(content_type: str | None) -> bool:
 
 @app.middleware("http")
 async def reject_duplicate_guest_download_json_fields(request: Request, call_next: Any) -> Response:
-    """Require a supported JSON media type and reject duplicate security fields before parsing."""
-    if request.url.path == "/api/guest-download":
+    """Require supported JSON and reject endpoint-specific duplicate fields before parsing."""
+    duplicate_keys = _GUEST_JSON_REQUEST_DUPLICATE_KEYS.get(request.url.path)
+    if duplicate_keys is not None:
         if not _guest_download_json_media_type(request.headers.get("content-type")):
+            if request.url.path == "/api/guest-preflight":
+                return JSONResponse(
+                    status_code=422,
+                    content={
+                        "eligible": False,
+                        "reason": "ineligible",
+                        "display": "unavailable",
+                        "next_step": "链接不符合公开单作品安全范围，不能继续访客探测。",
+                    },
+                )
             return JSONResponse(
                 status_code=422,
                 content={
@@ -1449,8 +1484,19 @@ async def reject_duplicate_guest_download_json_fields(request: Request, call_nex
                 },
             )
         body = await request.body()
-        if _guest_download_has_duplicate_critical_json_key(body):
-            _record_guest_terms_event("terms_rejected")
+        if _guest_json_has_duplicate_critical_key(body, duplicate_keys):
+            if request.url.path == "/api/guest-preflight":
+                return JSONResponse(
+                    status_code=422,
+                    content={
+                        "eligible": False,
+                        "reason": "ineligible",
+                        "display": "unavailable",
+                        "next_step": "链接不符合公开单作品安全范围，不能继续访客探测。",
+                    },
+                )
+            if request.url.path == "/api/guest-download":
+                _record_guest_terms_event("terms_rejected")
             return JSONResponse(
                 status_code=422,
                 content={
@@ -1485,6 +1531,16 @@ async def guest_download_validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     """Classify rejected guest-download input without invoking its handler."""
+    if request.url.path == "/api/guest-preflight":
+        return JSONResponse(
+            status_code=422,
+            content={
+                "eligible": False,
+                "reason": "ineligible",
+                "display": "unavailable",
+                "next_step": "链接不符合公开单作品安全范围，不能继续访客探测。",
+            },
+        )
     if request.url.path != "/api/guest-download":
         return JSONResponse(status_code=422, content={"detail": jsonable_encoder(exc.errors())})
     if _guest_download_validation_rejected_terms(request, exc):
@@ -1532,6 +1588,33 @@ async def _guest_response(
     if _guest_result_store is not None and response.task_ref:
         await _guest_result_store.save(response.task_ref, result_type, response.status)
     return response
+
+
+@app.post(
+    "/api/guest-preflight",
+    response_model=GuestPreflightResponse,
+    summary="本地预检公开单作品链接（零外部请求）",
+    description=(
+        "仅在本地复用 guest-download 的严格 canonical 公开单作品链接规则，不构造访客处理器、"
+        "不签名、不下载、不发起网络请求、不持久化且不记录任务或确认指标。"
+        "预检通过后仍须以 authorized=true 和 confirmed_visitor_terms=true 调用 /api/guest-download。"
+    ),
+    response_description="仅返回固定 eligibility、reason、display 和下一步提示；不返回原始链接、query、fragment、作品 ID、token 或任务关联号。",
+    tags=["guest"],
+)
+async def api_guest_preflight(req: GuestPreflightRequest) -> GuestPreflightResponse:
+    """Apply the same strict local canonical link rule as guest-download, without side effects."""
+    eligible = _is_public_single_work_url(req.url)
+    display = _guest_work_display(req.url) if eligible else "unavailable"
+    return GuestPreflightResponse(
+        eligible=eligible,
+        reason="eligible" if eligible else "ineligible",
+        display=display,
+        next_step=(
+            "预检通过后，仍须明确用途授权和访客能力边界确认后才能继续受控探测。"
+            if eligible else "链接不符合公开单作品安全范围，不能继续访客探测。"
+        ),
+    )
 
 
 @app.post(
@@ -1755,7 +1838,8 @@ async def api_guest_info() -> dict:
             "不返回作品详情或媒体 URL，也不支持本地媒体下载。"
         ),
         "limitations": [
-            "仅支持一条已获用途授权且明确确认访客能力边界的公开作品链接探测，不支持主页、搜索、收藏/点赞或合集入口",
+            "POST /api/guest-preflight 仅在本地预检链接是否符合与 guest-download 相同的严格公开单作品规则，不发起外部请求、不持久化且不记录指标；预检通过后仍须 authorized=true 与 confirmed_visitor_terms=true",
+            "预检不会返回原始 URL、query、fragment、作品 ID、token、task_ref 或上游内容",
             "访客能力有限；平台拒绝或要求授权时立即停止，不自动绕过、重试或下载媒体",
             "不返回作品 ID、标题、作者、媒体 URL 或封面 URL",
             "仅 success 与 download=true 的 unsupported 返回 task_ref；它是不透明短期 bearer 结果关联号，不是作品 ID、下载任务或媒体凭证",
@@ -1767,7 +1851,7 @@ async def api_guest_info() -> dict:
             "风控更严格，触发风控验证（461）时无法自动通过",
         ],
         "usage": (
-            "POST /api/guest-download 请求体须仅包含一条公开单作品链接，并显式传入 "
+            "先以 POST /api/guest-preflight 本地预检一条公开单作品链接；预检通过后，POST /api/guest-download 请求体须仅包含一条公开单作品链接，并显式传入 "
             "authorized=true 与 confirmed_visitor_terms=true；仅在 success 或 download=true 的 unsupported 中保留 task_ref；"
             "查询或删除时仅以 X-Guest-Result-Ref: <task_ref> 请求头传递，再根据响应 result_type 判断业务结果"
         ),

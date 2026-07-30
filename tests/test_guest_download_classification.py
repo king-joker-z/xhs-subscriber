@@ -55,7 +55,121 @@ class GuestDownloadClassificationTests(unittest.TestCase):
     def _post(self) -> object:
         return self.client.post("/api/guest-download", json={"url": _URL, "authorized": True, "confirmed_visitor_terms": True})
 
-    def test_duplicate_critical_json_fields_are_rejected_before_pydantic_or_fetcher(self) -> None:
+    def test_guest_preflight_reuses_canonical_rule_without_side_effects(self) -> None:
+        matrix = (
+            ("https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=token_1234", True, "www.xiaohongshu.com/public-work"),
+            ("https://xhslink.com/abc123", True, "xhslink.com/short-link"),
+            ("https://www.xiaohongshu.com/user/profile/123", False, "unavailable"),
+            ("https://www.xiaohongshu.com/search_result?keyword=test", False, "unavailable"),
+            ("https://xhslink.com/favorites", False, "unavailable"),
+            ("https://example.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa", False, "unavailable"),
+            ("https://www.xiaohongshu.com:443/explore/aaaaaaaaaaaaaaaaaaaaaaaa", False, "unavailable"),
+            ("https://www.xiaohongshu.com/explore/a%2Fb", False, "unavailable"),
+            ("https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa#", False, "unavailable"),
+            ("https://xhslink.com/abc123?", False, "unavailable"),
+        )
+        for url, eligible, display in matrix:
+            with self.subTest(url=url), patch(
+                "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+            ), self.assertNoLogs("src.api", level="WARNING"):
+                response = self.client.post("/api/guest-preflight", json={"url": url})
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["eligible"], eligible)
+            self.assertEqual(payload["reason"], "eligible" if eligible else "ineligible")
+            self.assertEqual(payload["display"], display)
+            self.assertEqual(_GuestFetcherStub.calls, 0)
+            self.assertEqual(api._guest_download_metrics, {})
+            observed = f"{payload!r} {api._guest_download_metrics!r}"
+            for secret in (url, "aaaaaaaaaaaaaaaaaaaaaaaa", "token_1234", "keyword=test", "a%2Fb"):
+                self.assertNotIn(secret, observed)
+
+    def test_guest_preflight_ignores_unrelated_top_level_and_nested_fields(self) -> None:
+        url = "https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=token_1234"
+        raw = (
+            '{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=token_1234",'
+            '"ignored":"free-text-secret","nested":{"same":"first","same":"second","token":"nested-secret"}}'
+        )
+        for content, headers in (
+            ({"url": url, "ignored": "free-text-secret", "nested": {"token": "nested-secret"}}, None),
+            (raw, {"content-type": "application/json"}),
+        ):
+            with self.subTest(raw=isinstance(content, str)), patch(
+                "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+            ), self.assertNoLogs("src.api", level="WARNING"):
+                response = (
+                    self.client.post("/api/guest-preflight", content=content, headers=headers)
+                    if isinstance(content, str)
+                    else self.client.post("/api/guest-preflight", json=content)
+                )
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["eligible"], True)
+            self.assertEqual(payload["display"], "www.xiaohongshu.com/public-work")
+            self.assertEqual(_GuestFetcherStub.calls, 0)
+            self.assertEqual(api._guest_download_metrics, {})
+            observed = f"{payload!r} {api._guest_download_metrics!r}"
+            for secret in ("token_1234", "free-text-secret", "nested-secret", "first", "second"):
+                self.assertNotIn(secret, observed)
+
+    def test_guest_preflight_illegal_url_is_ineligible_while_invalid_shapes_are_rejected(self) -> None:
+        invalid_url = '{"url":"https://example.invalid/explore/aaaaaaaaaaaaaaaaaaaaaaaa","ignored":"secret"}'
+        with patch("src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")):
+            response = self.client.post(
+                "/api/guest-preflight", content=invalid_url, headers={"content-type": "application/json"}
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["eligible"], False)
+        self.assertEqual(response.json()["display"], "unavailable")
+        self.assertEqual(api._guest_download_metrics, {})
+
+        for raw in ('{"ignored":"secret"}', '{"url":123,"ignored":"secret"}', '[]', '{'):
+            with self.subTest(raw=raw), patch(
+                "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+            ):
+                response = self.client.post(
+                    "/api/guest-preflight", content=raw, headers={"content-type": "application/json"}
+                )
+
+            self.assertEqual(response.status_code, 422)
+            payload = response.json()
+            self.assertFalse(payload["eligible"])
+            self.assertEqual(payload["reason"], "ineligible")
+            self.assertEqual(payload["display"], "unavailable")
+            self.assertEqual(_GuestFetcherStub.calls, 0)
+            self.assertEqual(api._guest_download_metrics, {})
+            observed = f"{response.text} {api._guest_download_metrics!r}"
+            for secret in ("example.invalid", "aaaaaaaaaaaaaaaaaaaaaaaa", "secret"):
+                self.assertNotIn(secret, observed)
+
+        duplicate = ('{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret",'
+                     '"url":"https://example.invalid/private?token=other"}')
+        cases = (
+            ("application/json", duplicate),
+            (None, '{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret"}'),
+            ("text/plain", '{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret"}'),
+            ("application/x-www-form-urlencoded", "url=https%3A%2F%2Fexample.invalid%2Fprivate"),
+        )
+        for media_type, content in cases:
+            headers = {} if media_type is None else {"content-type": media_type}
+            with self.subTest(content_type=media_type), patch(
+                "src.guest_fetcher.GuestFetcher", side_effect=AssertionError("must not construct")
+            ), self.assertNoLogs("src.api", level="WARNING"):
+                response = self.client.post("/api/guest-preflight", content=content, headers=headers)
+
+            self.assertEqual(response.status_code, 422)
+            payload = response.json()
+            self.assertFalse(payload["eligible"])
+            self.assertEqual(payload["reason"], "ineligible")
+            self.assertEqual(payload["display"], "unavailable")
+            self.assertEqual(_GuestFetcherStub.calls, 0)
+            self.assertEqual(api._guest_download_metrics, {})
+            observed = f"{response.text} {api._guest_download_metrics!r}"
+            for secret in ("xsec_token", "secret", "example.invalid", "private", "other"):
+                self.assertNotIn(secret, observed)
+
         raw_cases = (
             '{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret","authorized":true,"confirmed_visitor_terms":true,"confirmed_visitor_terms":false}',
             '{"url":"https://www.xiaohongshu.com/explore/aaaaaaaaaaaaaaaaaaaaaaaa?xsec_token=secret","authorized":true,"confirmed_visitor_terms":false,"confirmed_visitor_terms":true}',

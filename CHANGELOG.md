@@ -3,6 +3,19 @@
 ## [Unreleased]
 
 ### 待发布
+- **feat: 本地零请求 guest 链接预检（2026-07-30）**
+  - 新增 `POST /api/guest-preflight`：复用 guest-download 严格 canonical 公开单作品规则，只返回 eligibility、固定原因、规范 host/path-kind 摘要及下一步提示
+  - 预检仅接受 JSON / `+json`；在 Pydantic 前拒绝顶层重复 `url`，缺失或非 JSON Content-Type 固定最小化拒绝
+  - 预检请求忽略无关 extra 与嵌套字段，仅按顶层 `url` 判定；不回显 URL、query、fragment、作品 ID、token、task_ref 或自由文本
+  - 零 GuestFetcher、签名、下载、网络、持久化和 terms/任务指标副作用；预检通过后仍须 `authorized=true` 与 `confirmed_visitor_terms=true` 才能受控探测
+
+### 测试结果
+- guest-preflight / 分类 / 公开链接安全 / guest-info：29/29 通过
+- guest 结果留存/删除 + TLS 专项：21/21 通过
+- Python 3.12 全量 unittest：75/75 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
 - **fix: 访客用途/能力边界确认及请求解析安全（2026-07-30）**
   - `/api/guest-download` 要求 `authorized=true` 与 `confirmed_visitor_terms=true` 双确认；不满足时在本地固定拒绝，不构造访客处理器、不签名、不下载、不外发
   - 仅允许 `application/json` 或 `application/*+json` 请求；缺失、空或非 JSON Content-Type 在 Pydantic 前固定拒绝，且不产生确认事件
