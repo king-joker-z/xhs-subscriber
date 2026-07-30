@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### 待发布
+- **feat: 本地匿名分类一致性审查基础（2026-07-30）**
+  - 为仍存在的最小 guest 结果新增一次性、仅内存审查样本和固定 `correct` / `needs_adjustment` / `insufficient` 三结论；不持久化任务级审查日志或关联
+  - 样本仅允许严格白名单的 result_type/status；污染或非字符串记录固定不可用，不占用一次性状态、不增加样本量或聚合
+  - 记录删除或到期清理后样本和结论均不可用；聚合仅包含样本量及固定结论计数
+  - 审查 API 仅使用 Header bearer，禁止 query/body，统一 no-store/no-cache；零外部请求、签名、下载和网络副作用
+
+### 测试结果
+- 审查 / guest 结果留存 / 删除：19/19 通过
+- 分类 / 公开链接安全 / 预检 / guest-info：29/29 通过
+- TLS / 签名专项：8/8 通过
+- Python 3.12 全量 unittest：77/77 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
 - **feat: 本地零请求 guest 链接预检（2026-07-30）**
   - 新增 `POST /api/guest-preflight`：复用 guest-download 严格 canonical 公开单作品规则，只返回 eligibility、固定原因、规范 host/path-kind 摘要及下一步提示
   - 预检仅接受 JSON / `+json`；在 Pydantic 前拒绝顶层重复 `url`，缺失或非 JSON Content-Type 固定最小化拒绝

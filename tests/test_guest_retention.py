@@ -70,7 +70,139 @@ class GuestRetentionTests(unittest.TestCase):
         ):
             self.assertIn(expected, text)
 
-    def test_unexpired_record_is_retained_and_only_minimal_fields_are_returned(self) -> None:
+    def test_review_sample_rejects_polluted_minimal_fields_without_state_or_aggregate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / ".guest-results"
+            now = datetime.now(timezone.utc)
+            store = self._store(root)
+            polluted_values = (
+                "https://private.invalid/?token=secret",
+                "cookie=session-secret",
+                "signature=private-sign",
+                "free text secret",
+                "x" * 1024,
+                ["https://private.invalid/?token=secret"],
+                {"cookie": "session-secret"},
+                7,
+                True,
+                None,
+            )
+            for index, polluted in enumerate(polluted_values):
+                task_id = f"{index:x}" * 16
+                ref = f"www.xiaohongshu.com/public-work:{task_id}"
+                self._write_task(root, task_id, now, status="ok", result_type="success")
+                payload = json.loads((root / task_id).read_text(encoding="utf-8"))
+                payload["result_type"] = polluted
+                (root / task_id).write_text(json.dumps(payload), encoding="utf-8")
+                with self.subTest(field="result_type", value=repr(polluted)):
+                    result = asyncio.run(store.create_review_sample(ref, now))
+                    self.assertEqual(result["status"], "unavailable")
+                    self.assertEqual(store.review_summary(), {"sample_size": 0, "correct": 0, "needs_adjustment": 0, "insufficient": 0})
+                    observed = f"{result!r} {store.review_summary()!r}"
+                    for secret in ("private.invalid", "token=secret", "session-secret", "private-sign", "free text secret", "x" * 1024):
+                        self.assertNotIn(secret, observed)
+                payload["result_type"] = "success"
+                payload["status"] = polluted
+                (root / task_id).write_text(json.dumps(payload), encoding="utf-8")
+                with self.subTest(field="status", value=repr(polluted)):
+                    result = asyncio.run(store.create_review_sample(ref, now))
+                    self.assertEqual(result["status"], "unavailable")
+                    self.assertEqual(store.review_summary(), {"sample_size": 0, "correct": 0, "needs_adjustment": 0, "insufficient": 0})
+            set_task_id = "f" * 16
+            set_ref = f"www.xiaohongshu.com/public-work:{set_task_id}"
+            self._write_task(root, set_task_id, now, status="ok", result_type="success")
+            set_payload = {
+                "task_id": set_task_id,
+                "result_type": {"signature=private-sign"},
+                "status": "ok",
+                "created_at": now.isoformat(),
+            }
+            with patch("src.guest_retention.json.loads", return_value=set_payload):
+                result = asyncio.run(store.create_review_sample(set_ref, now))
+            self.assertEqual(result["status"], "unavailable")
+            self.assertEqual(store.review_summary(), {"sample_size": 0, "correct": 0, "needs_adjustment": 0, "insufficient": 0})
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / ".guest-results"
+            now = datetime.now(timezone.utc)
+            store = self._store(root, days=1)
+            active_id, expired_id, delete_id = "1" * 16, "2" * 16, "3" * 16
+            active_ref = f"www.xiaohongshu.com/public-work:{active_id}"
+            expired_ref = f"xhslink.com/short-link:{expired_id}"
+            delete_ref = f"xhslink.com/short-link:{delete_id}"
+            self._write_task(root, active_id, now, status="ok", result_type="success")
+            self._write_task(root, expired_id, now - timedelta(days=2), status="error", result_type="unsupported")
+            self._write_task(root, delete_id, now, status="ok", result_type="success")
+
+            sample = asyncio.run(store.create_review_sample(active_ref, now))
+            self.assertEqual(sample, {"status": "available", "result_type": "success", "outcome": "ok"})
+            self.assertEqual(asyncio.run(store.create_review_sample(active_ref, now))["status"], "unavailable")
+            self.assertEqual(asyncio.run(store.submit_review_conclusion(active_ref, "correct", now)), {"status": "recorded", "conclusion": "correct"})
+            self.assertEqual(asyncio.run(store.create_review_sample(active_ref, now))["status"], "unavailable")
+            self.assertEqual(asyncio.run(store.create_review_sample(expired_ref, now))["status"], "unavailable")
+            self.assertFalse((root / expired_id).exists())
+            self.assertEqual(asyncio.run(store.create_review_sample(delete_ref, now))["status"], "available")
+            self.assertEqual(asyncio.run(store.delete(delete_ref, now))["status"], "deleted")
+            self.assertEqual(asyncio.run(store.submit_review_conclusion(delete_ref, "insufficient", now))["status"], "unavailable")
+            self.assertEqual(store.review_summary(), {"sample_size": 2, "correct": 1, "needs_adjustment": 0, "insufficient": 0})
+            observed = f"{store.review_summary()!r} {sample!r}"
+            for secret in (active_id, expired_id, delete_id, active_ref, expired_ref, delete_ref, "created_at"):
+                self.assertNotIn(secret, observed)
+
+    def test_review_http_non_hashable_pollution_stays_unavailable_and_private(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / ".guest-results"
+            now = datetime.now(timezone.utc)
+            store = self._store(root)
+            previous = api._guest_result_store
+            api.set_guest_result_store(store)
+            try:
+                for index, polluted in enumerate((["https://private.invalid/?token=secret"], {"cookie": "session-secret"})):
+                    task_id = f"{index + 8:x}" * 16
+                    ref = f"www.xiaohongshu.com/public-work:{task_id}"
+                    self._write_task(root, task_id, now, status="ok", result_type="success")
+                    payload = json.loads((root / task_id).read_text(encoding="utf-8"))
+                    payload["result_type"] = polluted
+                    (root / task_id).write_text(json.dumps(payload), encoding="utf-8")
+                    client = TestClient(api.app)
+                    response = client.post("/api/guest-results/review-sample", headers={"X-Guest-Result-Ref": ref})
+                    client.close()
+                    self._assert_private_response(response, ref, task_id, "private.invalid", "token=secret", "session-secret")
+                    self.assertEqual(response.json()["status"], "unavailable")
+                    self.assertEqual(store.review_summary(), {"sample_size": 0, "correct": 0, "needs_adjustment": 0, "insufficient": 0})
+            finally:
+                api.set_guest_result_store(previous)
+
+    def test_review_http_uses_header_bearer_and_keeps_samples_minimal(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / ".guest-results"
+            task_id = "4" * 16
+            ref = f"www.xiaohongshu.com/public-work:{task_id}"
+            self._write_task(root, task_id, datetime.now(timezone.utc), status="ok", result_type="success")
+            store = self._store(root)
+            previous = api._guest_result_store
+            api.set_guest_result_store(store)
+            try:
+                client = TestClient(api.app)
+                sample = client.post("/api/guest-results/review-sample", headers={"X-Guest-Result-Ref": ref})
+                duplicate = client.post("/api/guest-results/review-sample", headers={"X-Guest-Result-Ref": ref})
+                body = client.post("/api/guest-results/review-sample", headers={"X-Guest-Result-Ref": ref}, json={"ignored": "secret"})
+                query = client.post("/api/guest-results/review-sample?task_ref=secret", headers={"X-Guest-Result-Ref": ref})
+                conclusion = client.post("/api/guest-results/review-conclusion", headers={"X-Guest-Result-Ref": ref, "X-Guest-Review-Conclusion": "needs_adjustment"})
+                summary = client.get("/api/guest-results/review-summary")
+                client.close()
+                self._assert_private_response(sample, ref, task_id)
+                self.assertEqual(sample.json(), {"status": "available", "result_type": "success", "outcome": "ok"})
+                for response in (duplicate, body, query):
+                    self._assert_private_response(response, ref, task_id, "secret")
+                    self.assertEqual(response.json()["status"], "unavailable")
+                self._assert_private_response(conclusion, ref, task_id)
+                self.assertEqual(conclusion.json(), {"status": "recorded", "conclusion": "needs_adjustment"})
+                self._assert_private_response(summary, ref, task_id)
+                self.assertEqual(summary.json(), {"sample_size": 1, "correct": 0, "needs_adjustment": 1, "insufficient": 0})
+            finally:
+                api.set_guest_result_store(previous)
+
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / ".guest-results"
             store = self._store(root)

@@ -1734,6 +1734,16 @@ def _guest_result_header_ref(request: Request) -> str | None:
     return values[0]
 
 
+async def _guest_request_has_body(request: Request) -> bool:
+    """Detect actual or potentially streamed request bodies before storage access."""
+    content_length = request.headers.get("content-length")
+    if content_length is not None and content_length != "0":
+        return True
+    if request.headers.get("transfer-encoding") is not None:
+        return True
+    return bool(await request.body())
+
+
 async def _guest_delete_has_body(request: Request) -> bool:
     """Reject actual or potentially streamed DELETE bodies before storage access."""
     content_length = request.headers.get("content-length")
@@ -1741,7 +1751,74 @@ async def _guest_delete_has_body(request: Request) -> bool:
         return True
     if request.headers.get("transfer-encoding") is not None:
         return True
-    return bool(await request.body())
+    return await _guest_request_has_body(request)
+
+
+@app.post(
+    "/api/guest-results/review-sample",
+    summary="生成一次性本地分类审查样本",
+    description=(
+        "仅以 X-Guest-Result-Ref bearer 请求头从仍存在的最小 guest 结果记录生成一次性本地样本。"
+        "禁止 query 或 body bearer；不重试、不重新请求、不下载、不记录任务级审查日志。"
+        "仅返回固定结果类型和状态；删除或到期结果不可生成或查询。"
+    ),
+    response_description="可用样本仅含固定 result_type/outcome，或最小 unavailable。",
+    tags=["guest"],
+)
+async def api_guest_review_sample(request: Request) -> JSONResponse:
+    unavailable = {"status": "unavailable", "message": "审查样本不可用"}
+    if await _guest_request_has_body(request):
+        return _guest_result_json(unavailable)
+    task_ref = _guest_result_header_ref(request)
+    if task_ref is None or _guest_result_store is None:
+        return _guest_result_json(unavailable)
+    try:
+        payload = await _guest_result_store.create_review_sample(task_ref)
+        if payload.get("status") != "available":
+            payload = unavailable
+    except Exception:
+        payload = unavailable
+    return _guest_result_json(payload)
+
+
+@app.post(
+    "/api/guest-results/review-conclusion",
+    summary="提交本地分类审查结论",
+    description="仅接受固定 X-Guest-Review-Conclusion 请求头及一个既有 bearer 结果关联号；不重试、不请求或下载。",
+    response_description="仅返回固定 recorded/unavailable，不返回任务或内容标识。",
+    tags=["guest"],
+)
+async def api_guest_review_conclusion(request: Request) -> JSONResponse:
+    unavailable = {"status": "unavailable", "message": "审查样本不可用"}
+    if await _guest_request_has_body(request):
+        return _guest_result_json(unavailable)
+    task_ref = _guest_result_header_ref(request)
+    conclusions = request.headers.getlist("x-guest-review-conclusion")
+    if task_ref is None or _guest_result_store is None or len(conclusions) != 1:
+        return _guest_result_json(unavailable)
+    try:
+        payload = await _guest_result_store.submit_review_conclusion(task_ref, conclusions[0])
+        if payload.get("status") != "recorded":
+            payload = unavailable
+    except Exception:
+        payload = unavailable
+    return _guest_result_json(payload)
+
+
+@app.get(
+    "/api/guest-results/review-summary",
+    summary="读取本地分类审查最小聚合",
+    description="仅返回样本量和固定结论计数，不含任务级审查日志或关联数据。",
+    response_description="固定聚合计数，或零计数。",
+    tags=["guest"],
+)
+async def api_guest_review_summary(request: Request) -> JSONResponse:
+    if request.query_params or await _guest_request_has_body(request):
+        return _guest_result_json({"sample_size": 0, "correct": 0, "needs_adjustment": 0, "insufficient": 0})
+    summary = _guest_result_store.review_summary() if _guest_result_store is not None else {
+        "sample_size": 0, "correct": 0, "needs_adjustment": 0, "insufficient": 0,
+    }
+    return _guest_result_json(summary)
 
 
 @app.get(

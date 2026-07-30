@@ -16,6 +16,11 @@ _TASK_REF_RE = re.compile(
     r"^(?:xiaohongshu\.com|www\.xiaohongshu\.com)/public-work:([0-9a-f]{16})$"
     r"|^(?:xhslink\.com|www\.xhslink\.com)/short-link:([0-9a-f]{16})$"
 )
+_REVIEW_RESULT_TYPES = frozenset({
+    "success", "unsupported", "platform_rejected", "network_error",
+    "timeout", "authorization_required", "invalid_request",
+})
+_REVIEW_OUTCOMES = frozenset({"ok", "error"})
 
 
 class GuestResultStore:
@@ -30,6 +35,14 @@ class GuestResultStore:
         self._root = Path(root).expanduser().resolve()
         self._retention = timedelta(days=max(1, int(retention_days)))
         self._on_expired_cleanup = on_expired_cleanup
+        self._review_pending: dict[str, None] = {}
+        self._review_completed: set[str] = set()
+        self._review_summary: dict[str, int] = {
+            "sample_size": 0,
+            "correct": 0,
+            "needs_adjustment": 0,
+            "insufficient": 0,
+        }
 
     @property
     def root(self) -> Path:
@@ -114,12 +127,69 @@ class GuestResultStore:
             if not self._owned_regular_task_file(path):
                 return {"status": "deleted", "message": _DELETED_MESSAGE}
             path.unlink()
+            self._review_pending.pop(path.name, None)
+            self._review_completed.discard(path.name)
             return {
                 "status": "deleted",
                 "message": "结果已删除，无法恢复，仅保留不可识别聚合统计",
             }
         except (FileNotFoundError, OSError, ValueError, KeyError, json.JSONDecodeError):
             return {"status": "deleted", "message": _DELETED_MESSAGE}
+
+    async def create_review_sample(self, task_ref: str, now: datetime | None = None) -> dict[str, str]:
+        """Create one in-memory review candidate from an existing minimal unexpired record."""
+        path = self._path_for(task_ref)
+        unavailable = {"status": "unavailable", "message": _DELETED_MESSAGE}
+        if path is None or not self._owned_regular_task_file(path):
+            return unavailable
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            created_at = datetime.fromisoformat(str(payload["created_at"]))
+            current = now or datetime.now(timezone.utc)
+            if payload.get("task_id") != path.name or created_at.tzinfo is None or current - created_at >= self._retention:
+                await self.cleanup(current, record_expired_cleanup=False)
+                self._review_pending.pop(path.name, None)
+                return unavailable
+            result_type = payload.get("result_type")
+            outcome = payload.get("status")
+            if (
+                not isinstance(result_type, str)
+                or not isinstance(outcome, str)
+                or result_type not in _REVIEW_RESULT_TYPES
+                or outcome not in _REVIEW_OUTCOMES
+            ):
+                return unavailable
+            if path.name in self._review_completed or path.name in self._review_pending:
+                return unavailable
+            self._review_pending[path.name] = None
+            self._review_summary["sample_size"] += 1
+            return {
+                "status": "available",
+                "result_type": result_type,
+                "outcome": outcome,
+            }
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            return unavailable
+
+    async def submit_review_conclusion(self, task_ref: str, conclusion: str, now: datetime | None = None) -> dict[str, str]:
+        """Record one fixed conclusion only if its in-memory sample remains backed by a live record."""
+        if conclusion not in {"correct", "needs_adjustment", "insufficient"}:
+            return {"status": "unavailable", "message": _DELETED_MESSAGE}
+        path = self._path_for(task_ref)
+        if path is None or path.name not in self._review_pending:
+            return {"status": "unavailable", "message": _DELETED_MESSAGE}
+        live = await self.get(task_ref, now)
+        if live.get("status") == "deleted":
+            self._review_pending.pop(path.name, None)
+            return {"status": "unavailable", "message": _DELETED_MESSAGE}
+        self._review_pending.pop(path.name, None)
+        self._review_completed.add(path.name)
+        self._review_summary[conclusion] += 1
+        return {"status": "recorded", "conclusion": conclusion}
+
+    def review_summary(self) -> dict[str, int]:
+        """Return only aggregate sample size and fixed conclusion counts."""
+        return dict(self._review_summary)
 
     async def cleanup(self, now: datetime | None = None, *, record_expired_cleanup: bool = False) -> int:
         """Remove expired owned files; only explicit automatic runs may report aggregates."""
@@ -143,6 +213,8 @@ class GuestResultStore:
                 if created_at.tzinfo is None or current - created_at < self._retention:
                     continue
                 path.unlink()
+                self._review_pending.pop(path.name, None)
+                self._review_completed.discard(path.name)
                 deleted += 1
             except (FileNotFoundError, OSError, ValueError, KeyError, json.JSONDecodeError):
                 continue
