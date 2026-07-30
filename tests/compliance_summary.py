@@ -43,6 +43,13 @@ _MANIFEST_FIELDS = frozenset({
 })
 _MANIFEST_CHANGE_TYPES = frozenset({"schema_changed", "assertion_changed"})
 _MANIFEST_REASON_CODES = frozenset({"test_fixture_update", "policy_change", "schema_migration", "assertion_maintenance"})
+_PROVENANCE_FIELDS = frozenset({
+    "run_id", "fixture_digest", "contract_version", "summary_schema_version",
+    "baseline_before", "baseline_after",
+})
+_PROVENANCE_REASONS = frozenset({
+    "missing_artifact", "run_id_mismatch", "fixture_or_contract_mismatch", "baseline_mismatch", "schema_mismatch",
+})
 
 
 def canonical_json_bytes(value: Mapping[str, Any]) -> bytes:
@@ -221,6 +228,126 @@ def validate_manifest(
     except (KeyError, TypeError, ValueError):
         raise ValueError("invalid manifest") from None
     return {"status": "validated"}
+
+
+def validate_provenance_link(
+    summary: Mapping[str, Any],
+    diff: Mapping[str, Any],
+    manifest_or_none: Mapping[str, Any] | None,
+    envelope: Mapping[str, Any],
+    *,
+    baseline_summary: Mapping[str, Any] | None = None,
+    artifact_envelopes: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, str]:
+    """Link explicitly supplied aggregate artifacts without modifying their schemas.
+
+    Provenance values exist only in this call. They are never persisted into Summary,
+    Diff, or Manifest and do not constitute a real approval.
+    """
+    if not verify_summary(summary) or not _verify_diff(diff):
+        return {"status": "rejected", "reason": "missing_artifact"}
+    if not isinstance(envelope, Mapping) or not _valid_provenance_envelope(envelope):
+        return {"status": "rejected", "reason": "invalid_artifact"}
+    if not _valid_provenance_envelope(envelope):
+        return {"status": "rejected", "reason": "fixture_or_contract_mismatch"}
+    if envelope["summary_schema_version"] != _SCHEMA_VERSION:
+        return {"status": "rejected", "reason": "schema_mismatch"}
+    if artifact_envelopes is not None:
+        if not isinstance(artifact_envelopes, Mapping) or set(artifact_envelopes) != {"summary", "diff", "manifest"}:
+            return {"status": "rejected", "reason": "invalid_artifact"}
+        values = tuple(artifact_envelopes.values())
+        if any(not isinstance(value, Mapping) or not _valid_provenance_envelope(value) for value in values):
+            return {"status": "rejected", "reason": "invalid_artifact"}
+        if any(value != envelope for value in values):
+            return {"status": "rejected", "reason": "baseline_mismatch"}
+    if manifest_or_none is None:
+        if baseline_summary is not None or envelope["baseline_before"] or envelope["baseline_after"]:
+            return {"status": "rejected", "reason": "baseline_mismatch"}
+        return {"status": "linked"}
+    if baseline_summary is None or not verify_summary(baseline_summary):
+        return {"status": "rejected", "reason": "missing_artifact"}
+    try:
+        validate_manifest(manifest_or_none, baseline_summary, summary)
+    except ValueError:
+        return {"status": "rejected", "reason": "baseline_mismatch"}
+    if (envelope["baseline_before"] != baseline_summary["integrity"]["sha256"] or
+            envelope["baseline_after"] != summary["integrity"]["sha256"] or
+            manifest_or_none["old_integrity"] != envelope["baseline_before"] or
+            manifest_or_none["new_integrity"] != envelope["baseline_after"]):
+        return {"status": "rejected", "reason": "baseline_mismatch"}
+    expected_diff = compare_baseline(summary, baseline_summary)
+    if diff != expected_diff:
+        return {"status": "rejected", "reason": "baseline_mismatch"}
+    return {"status": "linked"}
+
+
+def _valid_provenance_envelope(envelope: Mapping[str, Any]) -> bool:
+    if not isinstance(envelope, Mapping) or set(envelope) != _PROVENANCE_FIELDS:
+        return False
+    try:
+        run_id = envelope["run_id"]
+        fixture_digest = envelope["fixture_digest"]
+        contract_version = envelope["contract_version"]
+        before = envelope["baseline_before"]
+        after = envelope["baseline_after"]
+    except (KeyError, TypeError):
+        return False
+    if not isinstance(run_id, str) or not (re.fullmatch(r"[0-9a-f]{32}", run_id) or re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}", run_id)):
+        return False
+    if not isinstance(fixture_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", fixture_digest):
+        return False
+    if not isinstance(contract_version, str) or not re.fullmatch(r"(?:v\d+|\d+\.\d+\.\d+)", contract_version):
+        return False
+    if envelope["summary_schema_version"] != _SCHEMA_VERSION:
+        return False
+    return all(isinstance(value, str) and (not value or re.fullmatch(r"[0-9a-f]{64}", value)) for value in (before, after))
+
+
+def _verify_diff(diff: Mapping[str, Any]) -> bool:
+    if not isinstance(diff, Mapping) or set(diff) != _DIFF_FIELDS:
+        return False
+    try:
+        reasons = diff["reasons"]
+        if (not isinstance(reasons, list) or len(set(reasons)) != len(reasons) or
+                not set(reasons) <= _DIFF_REASONS):
+            return False
+        coverage = diff["coverage_reduced"]
+        categories = diff["sensitive_categories"]
+        counts = diff["counts"]
+        versions = diff["versions"]
+        if not isinstance(coverage, Mapping) or not isinstance(categories, Mapping):
+            return False
+        if not set(coverage) <= _SCENARIOS or not set(categories) <= _VIOLATION_CATEGORIES:
+            return False
+        if any(value != 1 for value in coverage.values()) or any(value != 1 for value in categories.values()):
+            return False
+        if set(counts) != {"failed_increased"} or counts["failed_increased"] not in (0, 1):
+            return False
+        if set(versions) != _DIFF_VERSION_FIELDS or any(value not in (0, 1) for value in versions.values()):
+            return False
+        expected_reasons = set()
+        if coverage:
+            expected_reasons.add("coverage_reduced")
+        if categories:
+            expected_reasons.add("new_sensitive_category")
+        if counts["failed_increased"]:
+            expected_reasons.add("assertion_failures_increased")
+        if any(versions.values()):
+            expected_reasons.add("schema_or_fixture_changed")
+        return set(reasons) == expected_reasons and diff["status"] == (
+            "failed" if expected_reasons - {"schema_or_fixture_changed"} else "no_regression"
+        )
+    except (KeyError, TypeError):
+        return False
+    if not isinstance(value, str):
+        raise ValueError("invalid UTC time")
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        raise ValueError("invalid UTC time") from None
+    if parsed.strftime("%Y-%m-%dT%H:%M:%SZ") != value:
+        raise ValueError("invalid UTC time")
 
 
 def _parse_utc(value: object) -> None:

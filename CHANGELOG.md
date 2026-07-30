@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### 待发布
+- **test: 合规产物关联完整性校验（Provenance Link，2026-07-30）**
+  - 仅更新 `tests/compliance_summary.py` 与 `tests/test_compliance_summary.py` 测试辅助；纯内存、零默认 I/O/网络，不改 `src`、API、TLS 或下载
+  - 不向既有 Summary / Diff / Manifest 写入 `run_id`；以显式 envelope 关联，并严格固定 Summary schema 版本
+  - 主 envelope 与 `summary` / `diff` / `manifest` artifact 全字段绑定且完整 shape；无 Manifest 时基线字段必须为空，有 Manifest 时严格绑定 old/new Summary 与 Manifest integrity
+  - 畸形、缺字段、混配、篡改或未 approved 均固定无敏感拒绝；不自动批准或更新基线
+
+### 测试结果
+- Provenance / Summary / Diff / Manifest：15/15 通过
+- 合规 / 分类 / 安全 / guest-info：36/36 通过
+- 留存 / 删除 / TLS / 签名：27/27 通过
+- Python 3.12 全量 unittest：99/99 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
 - **test: Baseline Change Manifest 精确校验（2026-07-30）**
   - 仅更新 `tests/compliance_summary.py` 与 `tests/test_compliance_summary.py` 测试辅助；纯内存、零默认 I/O/网络，不改 `src`、API、TLS 或下载
   - `validate_manifest` 仅校验显式 `approved` 结构，不自动批准或更新基线；先验证 old/new 为合法的 `external_requests=0` Summary，并严格校验白名单、UTC 与匿名 role

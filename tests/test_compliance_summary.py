@@ -8,11 +8,13 @@ from pathlib import Path
 
 try:
     from tests.compliance_summary import (
-        build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values, validate_manifest, verify_summary,
+        build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values, validate_manifest,
+        validate_provenance_link, verify_summary,
     )
 except ModuleNotFoundError:  # unittest discovery loads this module directly from tests/.
     from compliance_summary import (  # type: ignore[no-redef]
-        build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values, validate_manifest, verify_summary,
+        build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values, validate_manifest,
+        validate_provenance_link, verify_summary,
     )
 
 
@@ -49,6 +51,18 @@ class ComplianceSummaryTests(unittest.TestCase):
             "approval_state": "approved",
             "approved_at_utc": _RUN_AT,
             "approved_by_role": "maintainer",
+        }
+        values.update(overrides)
+        return values
+
+    def _envelope(self, **overrides: object) -> dict[str, object]:
+        values: dict[str, object] = {
+            "run_id": "0123456789abcdef0123456789abcdef",
+            "fixture_digest": "a" * 64,
+            "contract_version": "v1",
+            "summary_schema_version": "compliance-summary/v1",
+            "baseline_before": "",
+            "baseline_after": "",
         }
         values.update(overrides)
         return values
@@ -114,6 +128,130 @@ class ComplianceSummaryTests(unittest.TestCase):
         ):
             with self.subTest(run_at_utc=invalid_time), self.assertRaises(ValueError):
                 self._summary(run_at_utc=invalid_time)
+
+    def test_provenance_link_accepts_explicit_non_manifest_and_manifest_relations(self) -> None:
+        summary = self._summary()
+        diff = compare_baseline(summary, summary)
+        envelope = self._envelope()
+        before = (canonical_json_bytes(summary), canonical_json_bytes(diff), canonical_json_bytes(envelope))
+        self.assertEqual(validate_provenance_link(summary, diff, None, envelope), {"status": "linked"})
+        self.assertEqual((canonical_json_bytes(summary), canonical_json_bytes(diff), canonical_json_bytes(envelope)), before)
+
+        old = self._summary()
+        new = self._summary(failed=1)
+        manifest = self._manifest(old, new)
+        linked_envelope = self._envelope(
+            baseline_before=old["integrity"]["sha256"], baseline_after=new["integrity"]["sha256"],
+        )
+        self.assertEqual(
+            validate_provenance_link(new, compare_baseline(new, old), manifest, linked_envelope, baseline_summary=old),
+            {"status": "linked"},
+        )
+
+    def test_provenance_link_rejects_historical_run_and_metadata_mixing(self) -> None:
+        summary = self._summary()
+        diff = compare_baseline(summary, summary)
+        envelope = self._envelope()
+        artifacts = {"summary": dict(envelope), "diff": dict(envelope), "manifest": dict(envelope)}
+        self.assertEqual(validate_provenance_link(summary, diff, None, envelope, artifact_envelopes=artifacts), {"status": "linked"})
+        artifacts["diff"]["run_id"] = "fedcba9876543210fedcba9876543210"
+        self.assertEqual(
+            validate_provenance_link(summary, diff, None, envelope, artifact_envelopes=artifacts),
+            {"status": "rejected", "reason": "baseline_mismatch"},
+        )
+        artifacts["diff"] = dict(envelope, fixture_digest="b" * 64)
+        self.assertEqual(
+            validate_provenance_link(summary, diff, None, envelope, artifact_envelopes=artifacts),
+            {"status": "rejected", "reason": "baseline_mismatch"},
+        )
+
+    def test_provenance_link_rejects_malformed_main_and_artifact_envelopes_safely(self) -> None:
+        summary = self._summary()
+        diff = compare_baseline(summary, summary)
+        envelope = self._envelope()
+        for key in tuple(envelope):
+            malformed = dict(envelope)
+            malformed.pop(key)
+            with self.subTest(main_missing=key):
+                self.assertEqual(
+                    validate_provenance_link(summary, diff, None, malformed),
+                    {"status": "rejected", "reason": "invalid_artifact"},
+                )
+        for malformed in (None, [], {**envelope, "unknown": "x"}, dict(envelope, run_id=1)):
+            with self.subTest(main_type=type(malformed).__name__):
+                self.assertEqual(
+                    validate_provenance_link(summary, diff, None, malformed),
+                    {"status": "rejected", "reason": "invalid_artifact"},
+                )
+        for invalid_version in ("wrong/v1", "", 1, "compliance-summary/v2"):
+            malformed = dict(envelope, summary_schema_version=invalid_version)
+            with self.subTest(main_schema_version=repr(invalid_version)):
+                self.assertEqual(
+                    validate_provenance_link(summary, diff, None, malformed),
+                    {"status": "rejected", "reason": "invalid_artifact"},
+                )
+        artifacts = {"summary": dict(envelope), "diff": dict(envelope), "manifest": dict(envelope)}
+        for artifact_name in artifacts:
+            for invalid_version in ("wrong/v1", "", 1, "compliance-summary/v2"):
+                candidate = {key: dict(value) for key, value in artifacts.items()}
+                candidate[artifact_name]["summary_schema_version"] = invalid_version
+                with self.subTest(artifact=artifact_name, schema_version=repr(invalid_version)):
+                    self.assertEqual(
+                        validate_provenance_link(summary, diff, None, envelope, artifact_envelopes=candidate),
+                        {"status": "rejected", "reason": "invalid_artifact"},
+                    )
+        missing = {key: dict(value) for key, value in artifacts.items()}
+        missing["diff"].pop("baseline_after")
+        result = validate_provenance_link(summary, diff, None, envelope, artifact_envelopes=missing)
+        self.assertEqual(result, {"status": "rejected", "reason": "invalid_artifact"})
+        self.assertNotIn("baseline_after", canonical_json_bytes(result).decode("ascii"))
+
+        old = self._summary()
+        new = self._summary(failed=1)
+        manifest = self._manifest(old, new)
+        envelope = self._envelope(baseline_before=old["integrity"]["sha256"], baseline_after=new["integrity"]["sha256"])
+        artifacts = {"summary": dict(envelope), "diff": dict(envelope), "manifest": dict(envelope)}
+        for name in artifacts:
+            for field, value in (("baseline_before", "0" * 64), ("baseline_after", "1" * 64)):
+                candidate = {key: dict(item) for key, item in artifacts.items()}
+                candidate[name][field] = value
+                with self.subTest(artifact=name, field=field):
+                    self.assertEqual(
+                        validate_provenance_link(
+                            new, compare_baseline(new, old), manifest, envelope, baseline_summary=old,
+                            artifact_envelopes=candidate,
+                        ),
+                        {"status": "rejected", "reason": "baseline_mismatch"},
+                    )
+        no_manifest = self._envelope(baseline_before="0" * 64)
+        no_manifest_artifacts = {"summary": dict(no_manifest), "diff": dict(no_manifest), "manifest": dict(no_manifest)}
+        self.assertEqual(
+            validate_provenance_link(self._summary(), compare_baseline(self._summary(), self._summary()), None, no_manifest,
+                                     artifact_envelopes=no_manifest_artifacts),
+            {"status": "rejected", "reason": "baseline_mismatch"},
+        )
+
+        old = self._summary()
+        new = self._summary(failed=1)
+        manifest = self._manifest(old, new)
+        diff = compare_baseline(new, old)
+        good = self._envelope(baseline_before=old["integrity"]["sha256"], baseline_after=new["integrity"]["sha256"])
+        cases = (
+            (new, diff, manifest, self._envelope(), old),
+            (new, diff, manifest, self._envelope(run_id="historical-run", baseline_before=old["integrity"]["sha256"], baseline_after=new["integrity"]["sha256"]), old),
+            (new, diff, manifest, self._envelope(contract_version="/private/path", baseline_before=old["integrity"]["sha256"], baseline_after=new["integrity"]["sha256"]), old),
+            (new, diff, manifest, self._envelope(summary_schema_version="wrong/v1", baseline_before=old["integrity"]["sha256"], baseline_after=new["integrity"]["sha256"]), old),
+            (new, diff, manifest, self._envelope(baseline_before="0" * 64, baseline_after=new["integrity"]["sha256"]), old),
+            (new, diff, None, good, old),
+            ({**new, "passed": 99}, diff, manifest, good, old),
+            (new, {**diff, "raw_log": "token=secret"}, manifest, good, old),
+            (new, diff, {**manifest, "approval_state": "pending"}, good, old),
+        )
+        for summary, candidate_diff, candidate_manifest, envelope, baseline in cases:
+            with self.subTest(case=type(candidate_manifest).__name__):
+                result = validate_provenance_link(summary, candidate_diff, candidate_manifest, envelope, baseline_summary=baseline)
+                self.assertEqual(result["status"], "rejected")
+                self.assertNotIn("secret", canonical_json_bytes(result).decode("ascii"))
 
     def test_manifest_validates_explicit_approved_aggregate_change_without_input_mutation(self) -> None:
         old = self._summary()
