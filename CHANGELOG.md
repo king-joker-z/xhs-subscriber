@@ -3,6 +3,19 @@
 ## [Unreleased]
 
 ### 待发布
+- **test: 离线 Compliance Summary 测试产物（2026-07-30）**
+  - 新增 `tests/compliance_summary.py` 和 `tests/test_compliance_summary.py`；仅测试辅助，纯内存或 `TemporaryDirectory` 使用，不改 `src`、API、路由、请求、TLS 或下载策略
+  - 固定白名单摘要仅含版本、注入 UTC、场景聚合、passed/failed、`external_requests=0`、敏感类别计数、status 与 canonical JSON SHA-256；不含任务、URL、token、Cookie、signature、路径、用户或日志
+  - 版本元数据不误报；严格 UTC 日历校验；篡改、未知字段/类别及非零外部请求统一拒绝
+
+### 测试结果
+- 新包：5/5 通过
+- 合规 / 分类 / 安全 / guest-info：36/36 通过
+- 留存 / 删除 / TLS / 签名：27/27 通过
+- Python 3.12 全量 unittest：89/89 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待授权 Cookie 环境验证
+
 - **test: 离线跨模块 guest 合规回归契约（2026-07-30）**
   - 新增 `tests/test_guest_compliance_contract.py`，覆盖公开单作品预检与零副作用、用途双确认，以及平台拒绝/权限/超时/网络的固定分类且无重试或认证升级
   - 覆盖真实 guest 受控传输路径保持默认 TLS 证书验证、`follow_redirects` 与受控 timeout；覆盖最小结果/review、主动删除与到期后的不可恢复行为
