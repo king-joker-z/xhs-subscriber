@@ -3,6 +3,21 @@
 ## [Unreleased]
 
 ### 待发布
+- **test: 纯测试侧裁决矩阵影响分析与默认收紧证明（2026-07-31）**
+  - 新增 `tests/governance_decision_impact.py` 与 `tests/test_governance_decision_impact.py`；纯内存、零默认 I/O/网络，不改 `src`、API、TLS、下载或既有治理 schema
+  - before/after 矩阵版本各自唯一且精确一致；外部 fixture 锚与 contract 严格匹配，终态不降级，并对 outcome 安全 shape 强制校验
+  - 动作仅允许收缩、留存仅允许最小化；新/缺 scenario 固定默认拒绝；报告仅含固定版本与匿名聚合计数，不接入运行时或真实矩阵升级
+
+### 测试结果
+- Decision Impact：5/5 通过
+- Conflict / Evidence / Rule Coverage / 治理序列 / 治理链：23/23 通过
+- Approval / Summary / Diff / Manifest / Provenance：16/16 通过
+- 合规 / 分类 / 安全 / guest-info：36/36 通过
+- 留存 / 删除 / TLS / 签名：27/27 通过
+- Python 3.12 全量 unittest：128/128 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待无授权 Cookie 环境验证
+
 - **test: 纯测试侧治理规则冲突与默认拒绝裁决（2026-07-31）**
   - 新增 `tests/governance_conflict_resolution.py` 与 `tests/test_governance_conflict_resolution.py`；纯内存、零默认 I/O/网络，不改 `src`、API、TLS、下载或既有治理 schema
   - 按严格度选取最严格 outcome，动作取交集为空则 `default_deny`，并按最少数据原则收敛留存
