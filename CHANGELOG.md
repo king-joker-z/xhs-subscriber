@@ -3,6 +3,21 @@
 ## [Unreleased]
 
 ### 待发布
+- **test: 治理规则合成证据新鲜度与可重放结果校验（2026-07-31）**
+  - 仅修改 `tests/governance_rule_coverage.py` 并新增 `tests/test_governance_rule_evidence_freshness.py`；纯内存、零默认 I/O/网络，不改 `src`、API、TLS、下载或既有 coverage schema
+  - `expected_fixture_digest` 由调用方显式提供为外部锚点；每条正反证据均须精确匹配，任一 case 替换 fixture digest 即使重算 replay/top digest 仍以 `coverage_evidence_stale` 拒绝
+  - 严格校验版本、UTC 有效期、合成重放结果、规则—断言映射与敏感结构；不执行真实测试，也不声称 fixture 来自真实运行
+
+### 测试结果
+- Evidence Freshness：4/4 通过
+- 规则覆盖 + 治理序列 + 治理链：13/13 通过
+- Approval / Summary / Diff / Manifest / Provenance：16/16 通过
+- 合规 / 分类 / 安全 / guest-info：36/36 通过
+- 留存 / 删除 / TLS / 签名：27/27 通过
+- Python 3.12 全量 unittest：117/117 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待无授权 Cookie 环境验证
+
 - **test: 治理规则—测试证据覆盖校验（2026-07-31）**
   - 新增 `tests/governance_rule_coverage.py` 与 `tests/test_governance_rule_coverage.py`；纯内存、零默认 I/O/网络，不改 `src`、API、TLS、下载或既有治理 schema
   - 五条内置 required 规则采用唯一 rule → assertion 映射；正反例恰一且必须 passed，negative reason 精确对应规则
