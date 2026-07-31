@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### 待发布
+- **test: 跨层端到端离线合规治理链契约（2026-07-31）**
+  - 新增 `tests/test_compliance_governance_chain.py`；仅使用既有测试辅助，纯内存、固定 UTC、零默认 I/O/网络，不改 `src`、API、TLS、下载或既有治理 schema
+  - 串联 old/new Summary → Diff → 显式 approved Manifest → 完整 Provenance 主 envelope / `summary`、`diff`、`manifest` artifacts → Approval freshness
+  - 验证完整绑定链路，并覆盖 coverage / 敏感 / failed 回退、Manifest 错误、Provenance 缺失或混配、Approval digest 篡改、过期及旧批准复用的拒绝；无 Provenance 旧路径仅在显式 legacy 用例允许
+
+### 测试结果
+- 新增治理链包：4/4 通过
+- Approval / Summary / Diff / Manifest / Provenance：16/16 通过
+- 合规 / 分类 / 安全 / guest-info：36/36 通过
+- 留存 / 删除 / TLS / 签名：27/27 通过
+- Python 3.12 全量 unittest：104/104 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待无授权 Cookie 环境验证
+
 - **test: Baseline Change Manifest 审批有效期与变更摘要绑定（2026-07-31）**
   - 仅更新 `tests/compliance_summary.py` 与 `tests/test_compliance_summary.py`；纯内存、零默认 I/O/网络，不改 `src`、API、TLS 或下载
   - `approved_change_digest` 绑定固定非敏感聚合与可验证 provenance 元数据；不含 `run_id`、用户、URL、token、Cookie、signature、路径或日志
