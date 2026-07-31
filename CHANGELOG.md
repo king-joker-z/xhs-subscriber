@@ -3,6 +3,22 @@
 ## [Unreleased]
 
 ### 待发布
+- **test: 治理规则—测试证据覆盖校验（2026-07-31）**
+  - 新增 `tests/governance_rule_coverage.py` 与 `tests/test_governance_rule_coverage.py`；纯内存、零默认 I/O/网络，不改 `src`、API、TLS、下载或既有治理 schema
+  - 五条内置 required 规则采用唯一 rule → assertion 映射；正反例恰一且必须 passed，negative reason 精确对应规则
+  - severity 仅允许 `required`，`info`、未知或降级均拒绝；版本、unknown/duplicate、额外敏感形态、hash 与结构畸形均固定无敏感拒绝
+  - 仅校验合成证据声明，不执行或声称执行真实测试
+
+### 测试结果
+- Rule Coverage：4/4 通过
+- 治理序列 + 治理链：9/9 通过
+- Approval / Summary / Diff / Manifest / Provenance：16/16 通过
+- 合规 / 分类 / 安全 / guest-info：36/36 通过
+- 留存 / 删除 / TLS / 签名：27/27 通过
+- Python 3.12 全量 unittest：113/113 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待无授权 Cookie 环境验证
+
 - **test: 纯测试侧离线治理事件序列契约（2026-07-31）**
   - 新增 `tests/governance_sequence.py` 与 `tests/test_governance_sequence.py`；纯内存、固定枚举与序号、零默认 I/O/网络，不改 `src`、API、TLS、下载或既有治理 schema
   - 偏序约束：purpose → result，second confirmation → allowed external action，TLS + result → success，result → policy/review/guidance，result + policy → summary，以及严格 provenance → approval → manifest
