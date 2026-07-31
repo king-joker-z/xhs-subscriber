@@ -3,6 +3,21 @@
 ## [Unreleased]
 
 ### 待发布
+- **test: 纯测试侧离线治理事件序列契约（2026-07-31）**
+  - 新增 `tests/governance_sequence.py` 与 `tests/test_governance_sequence.py`；纯内存、固定枚举与序号、零默认 I/O/网络，不改 `src`、API、TLS、下载或既有治理 schema
+  - 偏序约束：purpose → result，second confirmation → allowed external action，TLS + result → success，result → policy/review/guidance，result + policy → summary，以及严格 provenance → approval → manifest
+  - 终止事件后拒绝 success/review/guidance/summary/manifest 等后续事件；仅返回固定无敏感结果
+
+### 测试结果
+- 新增治理事件序列包：5/5 通过
+- 治理链：4/4 通过
+- Approval / Summary / Diff / Manifest / Provenance：16/16 通过
+- 合规 / 分类 / 安全 / guest-info：36/36 通过
+- 留存 / 删除 / TLS / 签名：27/27 通过
+- Python 3.12 全量 unittest：109/109 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待无授权 Cookie 环境验证
+
 - **test: 跨层端到端离线合规治理链契约（2026-07-31）**
   - 新增 `tests/test_compliance_governance_chain.py`；仅使用既有测试辅助，纯内存、固定 UTC、零默认 I/O/网络，不改 `src`、API、TLS、下载或既有治理 schema
   - 串联 old/new Summary → Diff → 显式 approved Manifest → 完整 Provenance 主 envelope / `summary`、`diff`、`manifest` artifacts → Approval freshness
