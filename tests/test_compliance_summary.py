@@ -8,12 +8,14 @@ from pathlib import Path
 
 try:
     from tests.compliance_summary import (
-        build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values, validate_manifest,
+        approval_change_digest, build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values,
+        validate_approval_freshness, validate_manifest,
         validate_provenance_link, verify_summary,
     )
 except ModuleNotFoundError:  # unittest discovery loads this module directly from tests/.
     from compliance_summary import (  # type: ignore[no-redef]
-        build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values, validate_manifest,
+        approval_change_digest, build_summary, canonical_json_bytes, compare_baseline, scan_synthetic_values,
+        validate_approval_freshness, validate_manifest,
         validate_provenance_link, verify_summary,
     )
 
@@ -50,9 +52,13 @@ class ComplianceSummaryTests(unittest.TestCase):
             "human_approval_required": True,
             "approval_state": "approved",
             "approved_at_utc": _RUN_AT,
+            "approval_valid_until_utc": "2026-07-31T08:03:22Z",
+            "approved_change_digest": "0" * 64,
             "approved_by_role": "maintainer",
         }
         values.update(overrides)
+        if values["approved_change_digest"] == "0" * 64:
+            values["approved_change_digest"] = approval_change_digest(values, old, new)
         return values
 
     def _envelope(self, **overrides: object) -> dict[str, object]:
@@ -129,7 +135,88 @@ class ComplianceSummaryTests(unittest.TestCase):
             with self.subTest(run_at_utc=invalid_time), self.assertRaises(ValueError):
                 self._summary(run_at_utc=invalid_time)
 
-    def test_provenance_link_accepts_explicit_non_manifest_and_manifest_relations(self) -> None:
+    def test_approval_freshness_binds_approved_manifest_to_time_and_change_summary(self) -> None:
+        old = self._summary()
+        new = self._summary(failed=1)
+        manifest = self._manifest(old, new)
+        self.assertEqual(
+            validate_approval_freshness(manifest, old, new, "2026-07-30T09:00:00Z"),
+            {"status": "approved_current"},
+        )
+        self.assertEqual(
+            validate_approval_freshness(manifest, old, new, "2026-07-30T08:00:00Z"),
+            {"status": "rejected", "reason": "approval_not_yet_valid"},
+        )
+        self.assertEqual(
+            validate_approval_freshness(manifest, old, new, "2026-08-01T00:00:00Z"),
+            {"status": "rejected", "reason": "approval_expired"},
+        )
+        changed = dict(manifest, approved_change_digest="f" * 64)
+        self.assertEqual(
+            validate_approval_freshness(changed, old, new, "2026-07-30T09:00:00Z"),
+            {"status": "rejected", "reason": "approval_digest_mismatch"},
+        )
+        changed_summary = self._summary(failed=2)
+        self.assertEqual(
+            validate_approval_freshness(manifest, old, changed_summary, "2026-07-30T09:00:00Z"),
+            {"status": "rejected", "reason": "reapproval_required"},
+        )
+        digest_envelope = self._envelope(
+            baseline_before=old["integrity"]["sha256"], baseline_after=new["integrity"]["sha256"],
+        )
+        self.assertEqual(
+            validate_approval_freshness(manifest, old, new, "2026-07-30T09:00:00Z", digest_envelope),
+            {"status": "rejected", "reason": "reapproval_required"},
+        )
+
+        approved_envelope = self._envelope(
+            baseline_before=old["integrity"]["sha256"], baseline_after=new["integrity"]["sha256"],
+        )
+        manifest_with_provenance = self._manifest(
+            old, new, approved_change_digest=approval_change_digest(self._manifest(old, new), old, new, approved_envelope),
+        )
+        approved_artifacts = {"summary": dict(approved_envelope), "diff": dict(approved_envelope), "manifest": dict(approved_envelope)}
+        self.assertEqual(
+            validate_approval_freshness(
+                manifest_with_provenance, old, new, "2026-07-30T09:00:00Z", approved_envelope,
+                artifact_envelopes=approved_artifacts,
+            ),
+            {"status": "approved_current"},
+        )
+        self.assertEqual(
+            validate_approval_freshness(manifest_with_provenance, old, new, "2026-07-30T09:00:00Z", approved_envelope),
+            {"status": "rejected", "reason": "reapproval_required"},
+        )
+        for field, value in (("baseline_before", ""), ("baseline_after", ""), ("baseline_before", "0" * 64), ("baseline_after", "1" * 64)):
+            stale = dict(approved_envelope, **{field: value})
+            rebound = self._manifest(
+                old, new, approved_change_digest=approval_change_digest(self._manifest(old, new), old, new, stale),
+            )
+            with self.subTest(provenance_field=field, value=value):
+                self.assertEqual(
+                    validate_approval_freshness(rebound, old, new, "2026-07-30T09:00:00Z", stale),
+                    {"status": "rejected", "reason": "reapproval_required"},
+                )
+        inverted = self._manifest(old, new, approved_at_utc="2026-08-01T00:00:00Z")
+        self.assertEqual(
+            validate_approval_freshness(inverted, old, new, "2026-07-30T09:00:00Z"),
+            {"status": "rejected", "reason": "invalid_approval"},
+        )
+
+        old = self._summary()
+        new = self._summary(failed=1)
+        manifest = self._manifest(old, new)
+        cases = (
+            {key: value for key, value in manifest.items() if key != "approval_valid_until_utc"},
+            dict(manifest, approval_valid_until_utc="2026-02-30T08:03:22Z"),
+            dict(manifest, approved_change_digest="token=secret"),
+            {**manifest, "raw_log": "token=secret"},
+        )
+        for candidate in cases:
+            result = validate_approval_freshness(candidate, old, new, "2026-07-30T09:00:00Z")
+            self.assertEqual(result, {"status": "rejected", "reason": "invalid_approval"})
+            self.assertNotIn("secret", canonical_json_bytes(result).decode("ascii"))
+
         summary = self._summary()
         diff = compare_baseline(summary, summary)
         envelope = self._envelope()
@@ -147,6 +234,31 @@ class ComplianceSummaryTests(unittest.TestCase):
             validate_provenance_link(new, compare_baseline(new, old), manifest, linked_envelope, baseline_summary=old),
             {"status": "linked"},
         )
+
+    def test_approval_freshness_requires_complete_artifacts_for_provenance(self) -> None:
+        old = self._summary()
+        new = self._summary(failed=1)
+        envelope = self._envelope(baseline_before=old["integrity"]["sha256"], baseline_after=new["integrity"]["sha256"])
+        manifest = self._manifest(old, new, approved_change_digest=approval_change_digest(self._manifest(old, new), old, new, envelope))
+        artifacts = {"summary": dict(envelope), "diff": dict(envelope), "manifest": dict(envelope)}
+        for candidate in (None, {}, {"summary": dict(envelope)}, {**artifacts, "extra": dict(envelope)}):
+            with self.subTest(kind=type(candidate).__name__):
+                self.assertEqual(
+                    validate_approval_freshness(manifest, old, new, "2026-07-30T09:00:00Z", envelope,
+                                                artifact_envelopes=candidate),
+                    {"status": "rejected", "reason": "reapproval_required"},
+                )
+        for field, value in (("run_id", "fedcba9876543210fedcba9876543210"), ("fixture_digest", "b" * 64),
+                             ("contract_version", "v2"), ("summary_schema_version", "wrong/v1"),
+                             ("baseline_before", "0" * 64), ("baseline_after", "1" * 64)):
+            candidate = {key: dict(item) for key, item in artifacts.items()}
+            candidate["diff"][field] = value
+            with self.subTest(field=field):
+                self.assertEqual(
+                    validate_approval_freshness(manifest, old, new, "2026-07-30T09:00:00Z", envelope,
+                                                artifact_envelopes=candidate),
+                    {"status": "rejected", "reason": "reapproval_required"},
+                )
 
     def test_provenance_link_rejects_historical_run_and_metadata_mixing(self) -> None:
         summary = self._summary()

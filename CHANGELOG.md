@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### 待发布
+- **test: Baseline Change Manifest 审批有效期与变更摘要绑定（2026-07-31）**
+  - 仅更新 `tests/compliance_summary.py` 与 `tests/test_compliance_summary.py`；纯内存、零默认 I/O/网络，不改 `src`、API、TLS 或下载
+  - `approved_change_digest` 绑定固定非敏感聚合与可验证 provenance 元数据；不含 `run_id`、用户、URL、token、Cookie、signature、路径或日志
+  - 时间由显式 UTC 注入；future、expired 与反向有效期窗口均拒绝；不自动批准或更新基线
+  - 传入 provenance 时必须具备完整 `summary` / `diff` / `manifest` artifact 集合并全字段绑定；空、混配、篡改或旧批准复用均以 `reapproval_required` 拒绝
+
+### 测试结果
+- 审批 + Summary / Diff / Manifest / Provenance：16/16 通过
+- 合规 / 分类 / 安全 / guest-info：36/36 通过
+- 留存 / 删除 / TLS / 签名：27/27 通过
+- Python 3.12 全量 unittest：100/100 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待无授权 Cookie 环境验证
+
 - **test: 合规产物关联完整性校验（Provenance Link，2026-07-30）**
   - 仅更新 `tests/compliance_summary.py` 与 `tests/test_compliance_summary.py` 测试辅助；纯内存、零默认 I/O/网络，不改 `src`、API、TLS 或下载
   - 不向既有 Summary / Diff / Manifest 写入 `run_id`；以显式 envelope 关联，并严格固定 Summary schema 版本

@@ -39,7 +39,7 @@ _MANIFEST_SCHEMA_VERSION = "baseline-change-manifest/v1"
 _MANIFEST_FIELDS = frozenset({
     "schema_version", "old_integrity", "new_integrity", "change_types", "impact_scopes",
     "reason_code", "external_requests", "no_sensitive_data_in_manifest", "human_approval_required",
-    "approval_state", "approved_at_utc", "approved_by_role",
+    "approval_state", "approved_at_utc", "approval_valid_until_utc", "approved_change_digest", "approved_by_role",
 })
 _MANIFEST_CHANGE_TYPES = frozenset({"schema_changed", "assertion_changed"})
 _MANIFEST_REASON_CODES = frozenset({"test_fixture_update", "policy_change", "schema_migration", "assertion_maintenance"})
@@ -213,6 +213,9 @@ def validate_manifest(
                 manifest["approved_by_role"] != "maintainer"):
             raise ValueError("invalid manifest")
         _parse_utc(manifest["approved_at_utc"])
+        _parse_utc(manifest["approval_valid_until_utc"])
+        if not isinstance(manifest["approved_change_digest"], str) or not re.fullmatch(r"[0-9a-f]{64}", manifest["approved_change_digest"]):
+            raise ValueError("invalid manifest")
         changed_scopes = {name for name in _SCENARIOS if old_summary["coverage"][name] != new_summary["coverage"][name]}
         if set(scopes) != changed_scopes:
             raise ValueError("invalid manifest")
@@ -229,6 +232,76 @@ def validate_manifest(
         raise ValueError("invalid manifest") from None
     return {"status": "validated"}
 
+
+def approval_change_digest(
+    manifest: Mapping[str, Any], old_summary: Mapping[str, Any], new_summary: Mapping[str, Any],
+    provenance_envelope: Mapping[str, Any] | None = None,
+) -> str:
+    """Compute the fixed, non-sensitive binding digest for an explicit approval."""
+    payload: dict[str, Any] = {
+        "old_integrity": old_summary["integrity"]["sha256"],
+        "new_integrity": new_summary["integrity"]["sha256"],
+        "change_types": sorted(manifest["change_types"]),
+        "impact_scopes": sorted(manifest["impact_scopes"]),
+        "reason_code": manifest["reason_code"],
+        "schema_version": new_summary["schema_version"],
+        "suite_version": new_summary["suite_version"],
+        "fixture_version": new_summary["fixture_version"],
+    }
+    if provenance_envelope is not None:
+        payload["provenance"] = {
+            key: provenance_envelope[key]
+            for key in ("fixture_digest", "contract_version", "summary_schema_version")
+        }
+    return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
+
+
+def validate_approval_freshness(
+    manifest: Mapping[str, Any], old_summary: Mapping[str, Any], new_summary: Mapping[str, Any], now_utc: str,
+    provenance_envelope: Mapping[str, Any] | None = None,
+    *,
+    artifact_envelopes: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, str]:
+    """Verify only an explicit synthetic approval's freshness and aggregate binding."""
+    try:
+        _parse_utc(now_utc)
+        if (not verify_summary(old_summary) or not verify_summary(new_summary) or
+                not isinstance(manifest, Mapping) or set(manifest) != _MANIFEST_FIELDS):
+            return {"status": "rejected", "reason": "invalid_approval"}
+        if (manifest["old_integrity"] != old_summary["integrity"]["sha256"] or
+                manifest["new_integrity"] != new_summary["integrity"]["sha256"]):
+            return {"status": "rejected", "reason": "reapproval_required"}
+        validate_manifest(manifest, old_summary, new_summary)
+        if provenance_envelope is not None:
+            if not _valid_provenance_envelope(provenance_envelope) or artifact_envelopes is None:
+                return {"status": "rejected", "reason": "reapproval_required"}
+            provenance_result = validate_provenance_link(
+                new_summary, compare_baseline(new_summary, old_summary), manifest, provenance_envelope,
+                baseline_summary=old_summary, artifact_envelopes=artifact_envelopes,
+            )
+            if provenance_result != {"status": "linked"}:
+                return {"status": "rejected", "reason": "reapproval_required"}
+            if (provenance_envelope["baseline_before"] != old_summary["integrity"]["sha256"] or
+                    provenance_envelope["baseline_after"] != new_summary["integrity"]["sha256"] or
+                    provenance_envelope["baseline_before"] != manifest["old_integrity"] or
+                    provenance_envelope["baseline_after"] != manifest["new_integrity"]):
+                return {"status": "rejected", "reason": "reapproval_required"}
+        elif artifact_envelopes is not None:
+            return {"status": "rejected", "reason": "reapproval_required"}
+        approved_at = datetime.strptime(manifest["approved_at_utc"], "%Y-%m-%dT%H:%M:%SZ")
+        valid_until = datetime.strptime(manifest["approval_valid_until_utc"], "%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.strptime(now_utc, "%Y-%m-%dT%H:%M:%SZ")
+    except (KeyError, TypeError, ValueError):
+        return {"status": "rejected", "reason": "invalid_approval"}
+    if approved_at > valid_until:
+        return {"status": "rejected", "reason": "invalid_approval"}
+    if now < approved_at:
+        return {"status": "rejected", "reason": "approval_not_yet_valid"}
+    if now > valid_until:
+        return {"status": "rejected", "reason": "approval_expired"}
+    if manifest["approved_change_digest"] != approval_change_digest(manifest, old_summary, new_summary, provenance_envelope):
+        return {"status": "rejected", "reason": "approval_digest_mismatch"}
+    return {"status": "approved_current"}
 
 def validate_provenance_link(
     summary: Mapping[str, Any],
