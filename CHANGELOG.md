@@ -3,6 +3,22 @@
 ## [Unreleased]
 
 ### 待发布
+- **test: 纯测试侧治理规则冲突与默认拒绝裁决（2026-07-31）**
+  - 新增 `tests/governance_conflict_resolution.py` 与 `tests/test_governance_conflict_resolution.py`；纯内存、零默认 I/O/网络，不改 `src`、API、TLS、下载或既有治理 schema
+  - 按严格度选取最严格 outcome，动作取交集为空则 `default_deny`，并按最少数据原则收敛留存
+  - `quality_degraded` 最终仅允许 `quality_guidance_shown` 或空，`review_required` 仅允许 `review_sample_created` 或空，`access_restricted` / `tls_failure` / `block` 强制空动作与 `none` 留存；任一 terminal 输入安全升级为 `block` / 空动作 / `none`
+  - unknown、重复、结构异常及敏感形态均固定无敏感拒绝；不接入运行时或真实测试
+
+### 测试结果
+- Conflict Resolution：6/6 通过
+- Evidence / Rule Coverage / 治理序列 / 治理链：17/17 通过
+- Approval / Summary / Diff / Manifest / Provenance：16/16 通过
+- 合规 / 分类 / 安全 / guest-info：36/36 通过
+- 留存 / 删除 / TLS / 签名：27/27 通过
+- Python 3.12 全量 unittest：123/123 通过
+- `/health`：HTTP 200（`XHS_COOKIE=test`）
+- 已知降级：当前环境缺少 `fastmcp`；完整下载仍待无授权 Cookie 环境验证
+
 - **test: 治理规则合成证据新鲜度与可重放结果校验（2026-07-31）**
   - 仅修改 `tests/governance_rule_coverage.py` 并新增 `tests/test_governance_rule_evidence_freshness.py`；纯内存、零默认 I/O/网络，不改 `src`、API、TLS、下载或既有 coverage schema
   - `expected_fixture_digest` 由调用方显式提供为外部锚点；每条正反证据均须精确匹配，任一 case 替换 fixture digest 即使重算 replay/top digest 仍以 `coverage_evidence_stale` 拒绝
